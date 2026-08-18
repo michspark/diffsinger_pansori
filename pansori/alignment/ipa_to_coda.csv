@@ -1,0 +1,109 @@
+mfa_ipa,coda,confidence,note
+b,b,clean,ㅂ 유성 변이 (모음 사이)
+bʲ,b y,needs_rule,"ㅂ 유성 변이 (모음 사이) / ʲ = 온글라이드 y 분리. 단, 뒤 모음이 i면 단순 구개음화이므로 y 생략"
+bʷ,b w,needs_rule,ㅂ 유성 변이 (모음 사이) / ʷ = 온글라이드 w 분리. 과일 = kʷ ɐ i ɭ → g w a i L
+c,g,needs_rule,ㄱ + 구개음화. 교육 = c oː j u → g y o. 뒤 모음이 i가 아니면 y 삽입
+cʰ,k,needs_rule,ㅋ + 구개음화
+cʰː,k,needs_rule,ㅋ + 구개음화 / 장자음
+c͈,kk,needs_rule,ㄲ + 구개음화
+d,d,clean,ㄷ 유성 변이
+dʑ,j,clean,ㅈ 유성 변이
+dʑʷ,j w,needs_rule,ㅈ 유성 변이 / ʷ = 온글라이드 w 분리. 과일 = kʷ ɐ i ɭ → g w a i L
+dʲ,d y,needs_rule,"ㄷ 유성 변이 / ʲ = 온글라이드 y 분리. 단, 뒤 모음이 i면 단순 구개음화이므로 y 생략"
+dʷ,d w,needs_rule,ㄷ 유성 변이 / ʷ = 온글라이드 w 분리. 과일 = kʷ ɐ i ɭ → g w a i L
+e,e,clean,ㅔ
+eː,e,clean,ㅔ / 장모음 → 길이는 ph_durs가 담당하므로 심볼에서 버림
+h,h,clean,ㅎ
+i,i,clean,ㅣ
+iː,i,clean,ㅣ / 장모음 → 길이는 ph_durs가 담당하므로 심볼에서 버림
+j,y,clean,반모음 ㅣ계. 야 = j ɐ
+k,g,clean,"ㄱ 초성 (어두 무성). MFA k = ㄱ, Coda k = ㅋ — 심볼 충돌 주의"
+kʰ,k,clean,ㅋ
+kʰː,k,clean,ㅋ / 장자음
+kʷ,g w,needs_rule,"ㄱ 초성 (어두 무성). MFA k = ㄱ, Coda k = ㅋ — 심볼 충돌 주의 / ʷ = 온글라이드 w 분리. 과일 = kʷ ɐ i ɭ → g w a i L"
+kʷː,g w,needs_rule,"ㄱ 초성 (어두 무성). MFA k = ㄱ, Coda k = ㅋ — 심볼 충돌 주의 / 장자음 / ʷ = 온글라이드 w 분리. 과일 = kʷ ɐ i ɭ → g w a i L"
+k̚,K,clean,종성 ㄱ (미파음)
+k͈,kk,clean,ㄲ
+k͈ʷ,kk w,needs_rule,ㄲ / ʷ = 온글라이드 w 분리. 과일 = kʷ ɐ i ɭ → g w a i L
+k͈ː,kk,clean,ㄲ / 장자음
+m,m|M,needs_rule,"ㅁ. 뒤에 모음이 오면 초성 m, 아니면 종성 M"
+mʲ,m|M y,needs_rule,"ㅁ. 뒤에 모음이 오면 초성 m, 아니면 종성 M / ʲ = 온글라이드 y 분리. 단, 뒤 모음이 i면 단순 구개음화이므로 y 생략"
+mʲː,m|M y,needs_rule,"ㅁ. 뒤에 모음이 오면 초성 m, 아니면 종성 M / 장자음 / ʲ = 온글라이드 y 분리. 단, 뒤 모음이 i면 단순 구개음화이므로 y 생략"
+mː,m|M,needs_rule,"ㅁ. 뒤에 모음이 오면 초성 m, 아니면 종성 M / 장자음"
+n,n|N,needs_rule,"ㄴ. 뒤에 모음이 오면 초성 n, 아니면 종성 N"
+nː,n|N,needs_rule,"ㄴ. 뒤에 모음이 오면 초성 n, 아니면 종성 N / 장자음"
+o,o,clean,ㅗ
+oː,o,clean,ㅗ / 장모음 → 길이는 ph_durs가 담당하므로 심볼에서 버림
+p,b,clean,"ㅂ 초성 (무성). MFA p = ㅂ, Coda p = ㅍ — 심볼 충돌 주의"
+pʰ,p,clean,ㅍ
+pʰː,p,clean,ㅍ / 장자음
+pʲ,b y,needs_rule,"ㅂ 초성 (무성). MFA p = ㅂ, Coda p = ㅍ — 심볼 충돌 주의 / ʲ = 온글라이드 y 분리. 단, 뒤 모음이 i면 단순 구개음화이므로 y 생략"
+pʲː,b y,needs_rule,"ㅂ 초성 (무성). MFA p = ㅂ, Coda p = ㅍ — 심볼 충돌 주의 / 장자음 / ʲ = 온글라이드 y 분리. 단, 뒤 모음이 i면 단순 구개음화이므로 y 생략"
+pʷ,b w,needs_rule,"ㅂ 초성 (무성). MFA p = ㅂ, Coda p = ㅍ — 심볼 충돌 주의 / ʷ = 온글라이드 w 분리. 과일 = kʷ ɐ i ɭ → g w a i L"
+p̚,P,clean,종성 ㅂ (미파음)
+p͈,pp,clean,ㅃ
+p͈ʲ,pp y,needs_rule,"ㅃ / ʲ = 온글라이드 y 분리. 단, 뒤 모음이 i면 단순 구개음화이므로 y 생략"
+p͈ʷ,pp w,needs_rule,ㅃ / ʷ = 온글라이드 w 분리. 과일 = kʷ ɐ i ɭ → g w a i L
+p͈ː,pp,clean,ㅃ / 장자음
+s,s,clean,ㅅ
+sʰ,s,clean,ㅅ (기식). 사랑 = sʰ ɐ ɾ ɐ ŋ
+sʰː,s,clean,ㅅ (기식). 사랑 = sʰ ɐ ɾ ɐ ŋ / 장자음
+sʷ,s w,needs_rule,ㅅ / ʷ = 온글라이드 w 분리. 과일 = kʷ ɐ i ɭ → g w a i L
+sː,s,clean,ㅅ / 장자음
+s͈,ss,clean,ㅆ
+s͈ʷ,ss w,needs_rule,ㅆ / ʷ = 온글라이드 w 분리. 과일 = kʷ ɐ i ɭ → g w a i L
+s͈ː,ss,clean,ㅆ / 장자음
+t,d,clean,"ㄷ 초성. MFA t = ㄷ, Coda t = ㅌ — 심볼 충돌 주의"
+tɕ,j,clean,ㅈ
+tɕʰ,ch,clean,ㅊ
+tɕʰː,ch,clean,ㅊ / 장자음
+tɕʷ,j w,needs_rule,ㅈ / ʷ = 온글라이드 w 분리. 과일 = kʷ ɐ i ɭ → g w a i L
+tɕʷː,j w,needs_rule,ㅈ / 장자음 / ʷ = 온글라이드 w 분리. 과일 = kʷ ɐ i ɭ → g w a i L
+tɕː,j,clean,ㅈ / 장자음
+tɕ͈,jj,clean,ㅉ
+tɕ͈ʷ,jj w,needs_rule,ㅉ / ʷ = 온글라이드 w 분리. 과일 = kʷ ɐ i ɭ → g w a i L
+tɕ͈ː,jj,clean,ㅉ / 장자음
+tʰ,t,clean,ㅌ
+tʰː,t,clean,ㅌ / 장자음
+tʲ,d y,needs_rule,"ㄷ 초성. MFA t = ㄷ, Coda t = ㅌ — 심볼 충돌 주의 / ʲ = 온글라이드 y 분리. 단, 뒤 모음이 i면 단순 구개음화이므로 y 생략"
+tʷ,d w,needs_rule,"ㄷ 초성. MFA t = ㄷ, Coda t = ㅌ — 심볼 충돌 주의 / ʷ = 온글라이드 w 분리. 과일 = kʷ ɐ i ɭ → g w a i L"
+tʷː,d w,needs_rule,"ㄷ 초성. MFA t = ㄷ, Coda t = ㅌ — 심볼 충돌 주의 / 장자음 / ʷ = 온글라이드 w 분리. 과일 = kʷ ɐ i ɭ → g w a i L"
+t̚,T,clean,종성 ㄷ/ㅅ/ㅈ류 (미파음)
+t͈,tt,clean,ㄸ
+t͈ʲ,tt y,needs_rule,"ㄸ / ʲ = 온글라이드 y 분리. 단, 뒤 모음이 i면 단순 구개음화이므로 y 생략"
+t͈ː,tt,clean,ㄸ / 장자음
+u,u,clean,ㅜ
+uː,u,clean,ㅜ / 장모음 → 길이는 ph_durs가 담당하므로 심볼에서 버림
+w,w,clean,반모음 ㅜ계. 와 = w ɐ
+x,h,clean,ㅎ 연구개 변이
+ç,h,needs_rule,ㅎ + 구개음화. 향 = ç ɐ ŋ → h y a NG. y 삽입 필요
+ŋ,NG,clean,종성 ㅇ. 한국어에서 초성으로 출현하지 않음
+ɐ,a,clean,ㅏ
+ɕʰ,s,needs_rule,"ㅅ + 구개음화 (ㅣ/반모음 앞). 시 = ɕʰ i → s i, y 없음"
+ɕ͈,ss,needs_rule,ㅆ + 구개음화
+ɛ,e,clean,ㅐ → Coda가 의도한 ㅐ/ㅔ 통합과 일치
+ɛː,e,clean,ㅐ → Coda가 의도한 ㅐ/ㅔ 통합과 일치 / 장모음 → 길이는 ph_durs가 담당하므로 심볼에서 버림
+ɟ,g,needs_rule,ㄱ 유성 + 구개음화. 시김새 = ɕʰ iː ɟ i m sʰ ɛː → 뒤가 i라 y 없음
+ɡ,g,clean,ㄱ 유성 변이 (모음 사이). 국악 = k u ɡ ɐ k̚
+ɡʷ,g w,needs_rule,ㄱ 유성 변이 (모음 사이). 국악 = k u ɡ ɐ k̚ / ʷ = 온글라이드 w 분리. 과일 = kʷ ɐ i ɭ → g w a i L
+ɣ,g,clean,ㄱ 마찰 유성 변이
+ɥ,w,clean,ㅟ의 반모음. 위 = ɥ i → w i
+ɦ,h,clean,ㅎ 유성 변이
+ɨ,eu,clean,ㅡ
+ɨː,eu,clean,ㅡ / 장모음 → 길이는 ph_durs가 담당하므로 심볼에서 버림
+ɭ,L,clean,종성 ㄹ (설측음). 강물 = k ɐ ŋ m u ɭ
+ɭː,L,clean,종성 ㄹ (설측음). 강물 = k ɐ ŋ m u ɭ / 장자음
+ɰ,eu,needs_rule,ㅢ의 활음. 의 = ɰ i → Coda는 eu i (모음 2개)로 표기
+ɲ,n|N,needs_rule,ㄴ + 구개음화. 아니리 = ɐ ɲ i(초성) vs 계면조 = ... ɲ dʑ o(종성)
+ɸ,p,clean,ㅍ 마찰 변이
+ɸʷ,p w,needs_rule,ㅍ 마찰 변이 / ʷ = 온글라이드 w 분리. 과일 = kʷ ɐ i ɭ → g w a i L
+ɾ,r,clean,초성/모음간 ㄹ (탄설음)
+ɾʲ,r y,needs_rule,"초성/모음간 ㄹ (탄설음) / ʲ = 온글라이드 y 분리. 단, 뒤 모음이 i면 단순 구개음화이므로 y 생략"
+ɾʷ,r w,needs_rule,초성/모음간 ㄹ (탄설음) / ʷ = 온글라이드 w 분리. 과일 = kʷ ɐ i ɭ → g w a i L
+ʌ,eo,clean,ㅓ
+ʌː,eo,clean,ㅓ / 장모음 → 길이는 ph_durs가 담당하므로 심볼에서 버림
+ʎ,L|r,needs_rule,구개음화된 ㄹ. 걸렸 = k ʌː ʎː ʌ t̚ 처럼 ㄹㄹ 겹침에서 출현
+ʎː,L|r,needs_rule,구개음화된 ㄹ. 걸렸 = k ʌː ʎː ʌ t̚ 처럼 ㄹㄹ 겹침에서 출현 / 장자음
+ʝ,h,needs_rule,ㅎ 유성 + 구개음화. 춘향 = tɕʰ u n ʝ ɐ ŋ
+β,b,clean,ㅂ 마찰 변이
+βʷ,b w,needs_rule,ㅂ 마찰 변이 / ʷ = 온글라이드 w 분리. 과일 = kʷ ɐ i ɭ → g w a i L

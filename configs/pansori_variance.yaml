@@ -1,0 +1,175 @@
+# 판소리 fine-tune — variance
+# 생성물: python pansori/make_configs.py  (직접 편집하지 말고 생성기를 고칠 것)
+#
+# 데이터 파이프라인과 근거는 pansori/docs/PORTING.md, pansori/alignment/VERDICT.md 참조.
+
+base_config:
+  - configs/variance.yaml
+
+dictionaries:
+  ko: dictionaries/korean-coda.txt
+extra_phonemes: []
+merged_phoneme_groups: []
+num_lang: 1
+use_lang_id: false
+
+datasets:
+  - raw_data_dir: data/pansori/unknown
+    speaker: unknown
+    spk_id: 0
+    language: ko
+    test_prefixes: []      # 발화 5,759개
+  - raw_data_dir: data/pansori/이일주
+    speaker: 이일주
+    spk_id: 1
+    language: ko
+    test_prefixes:
+      - 'c235c995'      # 발화 3,792개
+  - raw_data_dir: data/pansori/김소희
+    speaker: 김소희
+    spk_id: 2
+    language: ko
+    test_prefixes:
+      - 'd207244a'      # 발화 3,275개
+  - raw_data_dir: data/pansori/조상현
+    speaker: 조상현
+    spk_id: 3
+    language: ko
+    test_prefixes:
+      - '8b4d0824'      # 발화 2,690개
+  - raw_data_dir: data/pansori/안숙선
+    speaker: 안숙선
+    spk_id: 4
+    language: ko
+    test_prefixes: []      # 발화 1,738개
+  - raw_data_dir: data/pansori/김일구
+    speaker: 김일구
+    spk_id: 5
+    language: ko
+    test_prefixes: []      # 발화 1,624개
+  - raw_data_dir: data/pansori/박동진
+    speaker: 박동진
+    spk_id: 6
+    language: ko
+    test_prefixes:
+      - 'e719dced'      # 발화 1,512개
+  - raw_data_dir: data/pansori/박초월
+    speaker: 박초월
+    spk_id: 7
+    language: ko
+    test_prefixes:
+      - 'd7ec123c'      # 발화 1,137개
+  - raw_data_dir: data/pansori/박록주
+    speaker: 박록주
+    spk_id: 8
+    language: ko
+    test_prefixes: []      # 발화 1,005개
+  - raw_data_dir: data/pansori/성우향
+    speaker: 성우향
+    spk_id: 9
+    language: ko
+    test_prefixes: []      # 발화 717개
+  - raw_data_dir: data/pansori/오정숙
+    speaker: 오정숙
+    spk_id: 10
+    language: ko
+    test_prefixes: []      # 발화 691개
+  - raw_data_dir: data/pansori/정정렬
+    speaker: 정정렬
+    spk_id: 11
+    language: ko
+    test_prefixes: []      # 발화 598개
+  - raw_data_dir: data/pansori/김연수
+    speaker: 김연수
+    spk_id: 12
+    language: ko
+    test_prefixes: []      # 발화 405개
+  - raw_data_dir: data/pansori/신금홍
+    speaker: 신금홍
+    spk_id: 13
+    language: ko
+    test_prefixes: []      # 발화 319개
+  - raw_data_dir: data/pansori/남해성
+    speaker: 남해성
+    spk_id: 14
+    language: ko
+    test_prefixes: []      # 발화 259개
+  - raw_data_dir: data/pansori/성창순
+    speaker: 성창순
+    spk_id: 15
+    language: ko
+    test_prefixes: []      # 발화 254개
+  - raw_data_dir: data/pansori/박양덕
+    speaker: 박양덕
+    spk_id: 16
+    language: ko
+    test_prefixes: []      # 발화 245개
+  - raw_data_dir: data/pansori/김수연
+    speaker: 김수연
+    spk_id: 17
+    language: ko
+    test_prefixes: []      # 발화 240개
+  - raw_data_dir: data/pansori/안향련
+    speaker: 안향련
+    spk_id: 18
+    language: ko
+    test_prefixes: []      # 발화 228개
+  - raw_data_dir: data/pansori/정권진
+    speaker: 정권진
+    spk_id: 19
+    language: ko
+    test_prefixes: []      # 발화 226개
+  - raw_data_dir: data/pansori/김정문
+    speaker: 김정문
+    spk_id: 20
+    language: ko
+    test_prefixes: []      # 발화 148개
+  - raw_data_dir: data/pansori/이동백
+    speaker: 이동백
+    spk_id: 21
+    language: ko
+    test_prefixes: []      # 발화 47개
+  - raw_data_dir: data/pansori/김창룡
+    speaker: 김창룡
+    spk_id: 22
+    language: ko
+    test_prefixes: []      # 발화 46개
+
+binary_data_dir: data/pansori/binary_variance
+binarization_args:
+  num_workers: 4
+
+# 화자 23명 (명창 + pooled unknown). num_spk 는 최대 spk_id 보다 커야 한다.
+use_spk_id: true
+num_spk: 24
+
+# 판소리 음역. 남성 통성은 ROSVOT 노트 기준 MIDI 35 = 61.7 Hz 까지 내려가므로
+# 기본값 65 Hz 면 저음이 통째로 무성 처리된다. 측정 상한은 740 Hz.
+f0_min: 55
+f0_max: 750
+pe: rmvpe
+pe_ckpt: checkpoints/rmvpe/model.pt
+
+# ---- fine-tune ------------------------------------------------------------
+# 공개 사전학습 체크포인트를 받은 뒤 아래 두 줄을 켠다. 사전학습 모델은 중국어
+# 음소셋이라 phoneme embedding 이 통째로 어긋나므로 반드시 무시 목록에 넣는다.
+# 실제 state_dict 키는 체크포인트마다 다르므로 받은 뒤 대조할 것.
+finetune_enabled: false
+finetune_ckpt_path: null
+finetune_ignored_params:
+  - model.fs2.encoder.embed_tokens
+  - model.fs2.txt_embed
+  - model.fs2.spk_embed
+finetune_strict_shapes: false
+
+predict_dur: true
+predict_pitch: true
+predict_energy: false
+predict_breathiness: false
+predict_voicing: false
+predict_tension: false
+use_glide_embed: false
+
+max_batch_frames: 80000
+max_batch_size: 32
+pl_trainer_precision: '16-mixed'
