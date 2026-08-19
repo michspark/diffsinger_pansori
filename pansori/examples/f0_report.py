@@ -9,7 +9,7 @@ instead, so that argument does not transfer, and the question has to be re-asked
 of the new model rather than assumed.
 
 This asks it. For each utterance it takes the f0 of the original recording and
-of each generated version and reports, over commonly-voiced frames:
+of each generated version and reports:
 
   범위        p5--p95 spread in cents -- how much of the register is used
   |Δf0|       median absolute frame-to-frame motion in cents/frame -- how much
@@ -19,15 +19,22 @@ of each generated version and reports, over commonly-voiced frames:
 A model that flattens keeps the range roughly right (it lands on the notes) but
 loses the motion between them, so 진폭비 well under 1 is the signature to watch.
 
-It also writes the contours themselves so they can be plotted.
+Both models are reflow samplers, and the ratio moves a lot between draws -- one
+utterance measured 0.46 on one seed and 1.01 on another. A single sample
+therefore cannot answer the question, so --seeds N regenerates the predicted
+tracks under N seeds and reports the median and range. The default single-file
+mode is only for producing the contour that gets plotted.
 
 Usage (dsp env, from the repo root):
   PYTHONPATH=. python pansori/examples/f0_report.py --json pansori/examples/out/f0.json
+  PYTHONPATH=. python pansori/examples/f0_report.py --seeds 5
 """
 
 import argparse
 import json
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -76,10 +83,62 @@ def spread(f0, voiced):
     return float(np.percentile(v, 95) - np.percentile(v, 5)) if v.size > 10 else float('nan')
 
 
+def _infer(kind, proj, ckpt, seed, out, title, predict=None):
+    cmd = [sys.executable, 'scripts/infer.py', kind, str(proj),
+           '--exp', f'pansori_{"var" if kind == "variance" else "ac"}_v1',
+           '--ckpt', str(ckpt), '--seed', str(seed),
+           '--out', str(out), '--title', title]
+    for p in (predict or []):
+        cmd += ['--predict', p]
+    subprocess.run(cmd, cwd=REPO, check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def seeded(items, out_dir, n_seeds, hparams, pe):
+    """Regenerate the predicted tracks under n seeds and report median motion ratio."""
+    ac, dur, pitch = (int(x) for x in (out_dir / 'CKPT_STEPS').read_text().split())
+    print(f'시드 {n_seeds}회 · acoustic {ac:,} · dur {dur:,} · pitch {pitch:,}\n')
+    print(f'{"항목":22s} {"트랙":14s} {"진폭비 중앙값":>14s} {"범위":>16s}')
+    print('-' * 72)
+    results = {}
+    for item in items:
+        base = motion(*contour(out_dir / f'{item}_1_orig.wav', hparams, pe))
+        results[item] = {}
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            for track, label, ds, steps in (
+                ('2_resynth', '실제 f0', f'{item}_gt.ds', None),
+                ('3_pitch', 'f0 예측', f'{item}_dur.ds', 'pitch'),
+                ('4_full', 'dur·f0 예측', f'{item}_notes.ds', 'both'),
+            ):
+                ratios = []
+                for seed in range(1, n_seeds + 1):
+                    src = REPO / 'pansori/examples/ds' / ds
+                    if steps == 'pitch':
+                        _infer('variance', src, pitch, seed, tmp, 'v', ['pitch'])
+                        src = tmp / 'v.ds'
+                    elif steps == 'both':
+                        _infer('variance', src, dur, seed, tmp, 'd', ['dur'])
+                        _infer('variance', tmp / 'd.ds', pitch, seed, tmp, 'v', ['pitch'])
+                        src = tmp / 'v.ds'
+                    _infer('acoustic', src, ac, seed, tmp, 'a')
+                    ratios.append(motion(*contour(tmp / 'a.wav', hparams, pe)) / base)
+                r = np.array(ratios)
+                results[item][track] = {'label': label, 'median': float(np.median(r)),
+                                        'min': float(r.min()), 'max': float(r.max()),
+                                        'seeds': n_seeds}
+                print(f'{item:22s} {label:14s} {np.median(r):14.2f} '
+                      f'{f"{r.min():.2f}–{r.max():.2f}":>16s}')
+        print()
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(description='f0 평탄화 측정')
     parser.add_argument('--out', default='pansori/examples/out')
     parser.add_argument('--json')
+    parser.add_argument('--seeds', type=int, default=0,
+                        help='N회 재생성해 중앙값·범위로 판정 (0 = 기존 파일만)')
     args = parser.parse_args()
 
     from utils.hparams import set_hparams, hparams
@@ -114,6 +173,10 @@ def main():
             }
             print(f'{item:22s} {label:14s} {s:8.0f} {m:15.1f} {ratio:8.2f}')
         print()
+
+    if args.seeds:
+        print()
+        payload['seeded'] = seeded(items, out_dir, args.seeds, hparams, pe)
 
     if args.json:
         Path(args.json).write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')

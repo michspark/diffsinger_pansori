@@ -508,6 +508,20 @@ footer code { background: none; padding: 0; }
     <li><b>f0 범위를 55–750 Hz 로 넓혔다.</b> 이 코퍼스의 최저 노트는 MIDI 35(B1, 61.7 Hz)다.
       기본값 65 Hz 를 두면 남성 통성 저음이 통째로 무성으로 처리된다.</li>
   </ul>
+
+  <h3>variance 의 두 헤드는 같은 시점에 최적이 아니다</h3>
+  <p>
+    variance 는 duration 과 pitch 를 함께 학습하는데, 검증 손실을 헤드별로 갈라 보면 서로 반대
+    방향으로 간다. <code>dur_loss</code> 는 step 16k 에서 최저를 찍고 이후 계속 오르는데
+    <code>pitch_loss</code> 는 32k 까지도 내려간다. 합계인 <code>total_loss</code> 는 크기가 큰
+    duration 쪽이 지배해서 20k 를 고르는데, <b>그 체크포인트로 피치를 뽑으면 32k 짜리보다
+    f0 오차가 25% 크다.</b>
+  </p>
+  <p>
+    그래서 예시 생성기는 헤드마다 따로 고르고 variance 를 두 번 돌린다 — 1차 <code>--predict dur</code>,
+    2차는 그 산출물에 <code>--predict pitch</code>(이때 <code>ph_dur</code> 는 <span class="mono">manual</span>
+    로 읽힌다). 체크포인트 하나로 두 헤드를 다 만족시킬 수 없다면, 하나만 고를 이유도 없다.
+  </p>
 </div></div></section>
 
 <section id="examples"><div class="wrap"><div class="col">
@@ -523,6 +537,13 @@ footer code { background: none; padding: 0; }
     <code>mel L1</code> 은 모델이 실제로 최적화하는 128빈 로그-mel 공간에서의 거리다.
     둘 다 원본 녹음 기준이고, 낮을수록 가깝다.
   </p>
+  <div class="note">
+    <b>이 숫자들은 한 번의 추첨 결과다.</b> 두 모델 다 reflow 샘플러라 같은 입력에 매번 다른 답을
+    낸다. 시드만 바꿔 5회 재생성해 재보면 <code>f0 RMSE</code> 는 <b>±17%</b>,
+    <code>mel L1</code> 은 <b>±8%</b> 움직인다 (<code>seed_spread.py</code>). 아래 오디오는
+    재현을 위해 시드를 고정해 뽑은 것이고, 표의 값 하나로 두 트랙의 우열을 가리기에는
+    이 폭이 너무 크다. 아래 평탄화 측정은 그래서 5회 중앙값으로 낸다.
+  </div>
 </div></div>
 <div class="wrap"><div class="wide">
   <div class="ladder">{{LADDER}}</div>
@@ -564,23 +585,28 @@ footer code { background: none; padding: 0; }
   </p>
   <p>
     <b>그 논증은 새 모델에 그대로 옮겨오지 않는다.</b> openvpi 의 피치 예측기는 결정론적 회귀가 아니라
-    reflow 생성 모델이다. 그러니 가정할 게 아니라 다시 재야 한다. 아래는 프레임 사이 피치 이동량
-    <span class="mono">|Δf0|</span> 의 중앙값을 원본 대비 비율로 잰 것이다. 음정을 맞히면서
-    그 사이의 움직임만 잃는 것이 평탄화의 서명이므로, 이 비율이 1보다 크게 낮으면 평탄화다.
+    reflow 생성 모델이다. 그러니 가정할 게 아니라 다시 재야 한다. 재는 값은 프레임 사이 피치
+    이동량 <span class="mono">|Δf0|</span> 의 중앙값을 원본 대비 비율로 낸 것이다. 음정은 맞히면서
+    그 사이의 움직임만 잃는 것이 평탄화의 서명이므로, 이 비율이 1보다 <b>일관되게</b> 낮으면 평탄화다.
+  </p>
+  <p>
+    "일관되게"가 중요하다. 생성 모델이라 한 번 뽑은 값으로는 판정할 수 없다 — 실제로 같은 발화가
+    시드에 따라 0.46 과 1.01 을 오갔다. 그래서 트랙마다 시드를 바꿔 5회 재생성하고
+    <b>중앙값과 범위</b>로 본다.
   </p>
 </div></div>
 <div class="wrap"><div class="wide">
   <figure>
+    <div class="tablewrap"><table>
+      <thead><tr><th>발화</th><th>트랙</th><th style="text-align:right">진폭비 중앙값</th><th style="text-align:right">5회 범위</th><th style="width:34%">1.0 기준</th></tr></thead>
+      <tbody>{{F0_SEEDED_ROWS}}</tbody>
+    </table></div>
+    <figcaption>{{F0_VERDICT}}</figcaption>
+  </figure>
+  <figure>
     <div class="chartwrap">{{F0_CHART}}</div>
     <div class="legend">{{F0_LEGEND}}</div>
     <figcaption>{{F0_CAPTION}}</figcaption>
-  </figure>
-  <figure>
-    <div class="tablewrap"><table>
-      <thead><tr><th>발화</th><th>트랙</th><th style="text-align:right">범위 (센트)</th><th style="text-align:right">|Δf0| (센트/프레임)</th><th style="text-align:right">원본 대비</th></tr></thead>
-      <tbody>{{F0_ROWS}}</tbody>
-    </table></div>
-    <figcaption>{{F0_VERDICT}}</figcaption>
   </figure>
 </div></div></section>
 

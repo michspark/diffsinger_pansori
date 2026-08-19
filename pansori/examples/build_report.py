@@ -135,8 +135,8 @@ def figures():
         ('화자', f'{n_spk}<small>명창 22인 + unknown</small>'),
         ('노트 / 음소', f'{notes // 1000}k<small>노트 · 음소 {phones // 1000}k</small>'),
         ('음소 인벤토리', f'35<small>자모 34종 + SP</small>'),
-        ('학습 step', f'{int(steps[0]):,}<small>acoustic · variance {int(steps[1]):,}</small>'
-         if steps[0] != '—' else '—<small></small>'),
+        ('학습 step', f'{int(steps[0]):,}<small>acoustic · variance {int(steps[1]):,} / '
+         f'{int(steps[2]):,}</small>' if steps[0] != '—' else '—<small></small>'),
     ]
     return '\n'.join(f'<div class="figure"><dt>{k}</dt><dd>{v}</dd></div>' for k, v in items)
 
@@ -470,48 +470,70 @@ def f0_chart(f0data, item):
     legend = (f'<span><i style="border-color:var(--indigo-dim)"></i>원본 녹음</span>'
               f'<span><i style="border-color:var(--ochre)"></i>dur·f0 모두 예측</span>')
     spk = ITEM_INFO.get(item, ('', '', ''))[0]
-    cap = (f'{spk} · <span class="mono">{item}</span>. 세로축은 센트(로그 피치), '
-           f'끊긴 곳은 무성 구간이다. 음정 자체는 따라가지만 그 안의 잔 움직임이 '
-           f'얼마나 남았는지가 아래 표의 |Δf0| 다.')
+    cap = (f'{spk} · <span class="mono">{item}</span> 한 번의 추첨. 세로축은 로그 피치, '
+           f'끊긴 곳은 무성 구간이다. 음정은 대체로 따라가고 잔 움직임도 남아 있다 — '
+           f'그 움직임의 양을 정량화한 것이 위 표의 진폭비다.')
     return svg, legend, cap
 
 
-def f0_rows(f0data):
+def f0_seeded_rows(f0data):
+    """One row per (utterance, track): median ratio and the spread behind it."""
+    seeded = f0data.get('seeded', {})
     out = []
-    for item, tracks in f0data['items'].items():
+    for item, tracks in seeded.items():
         spk = ITEM_INFO.get(item, (item,))[0]
         first = True
-        for track, name in (('1_orig', '원본'), ('2_resynth', '실제 f0'),
-                            ('3_pitch', 'f0 예측'), ('4_full', 'dur·f0 예측')):
+        for track in ('2_resynth', '3_pitch', '4_full'):
             t = tracks.get(track)
             if not t:
                 continue
-            ratio = t['ratio']
-            colour = ('var(--muted)' if track == '1_orig'
-                      else 'var(--indigo)' if ratio >= .85 else 'var(--ochre)')
+            med, lo, hi = t['median'], t['min'], t['max']
+            # a bar centred on 1.0: left of centre is attenuation, right is excess
+            centre, half = 50.0, 42.0
+            x_lo, x_hi = centre + half * (min(lo, 2) - 1), centre + half * (min(hi, 2) - 1)
+            x_med = centre + half * (min(med, 2) - 1)
+            bar = (f'<span style="position:relative;display:block;height:1rem">'
+                   f'<span style="position:absolute;left:{centre:.1f}%;top:0;bottom:0;'
+                   f'width:1px;background:var(--rule)"></span>'
+                   f'<span style="position:absolute;left:{min(x_lo, x_hi):.1f}%;'
+                   f'width:{abs(x_hi - x_lo):.1f}%;top:.42rem;height:.16rem;'
+                   f'background:var(--indigo-dim);opacity:.55"></span>'
+                   f'<span style="position:absolute;left:{x_med:.1f}%;top:.2rem;'
+                   f'width:.32rem;height:.6rem;margin-left:-.16rem;border-radius:1px;'
+                   f'background:var(--{"indigo" if med >= .85 else "ochre"})"></span>'
+                   f'</span>')
+            colour = 'var(--indigo)' if med >= .85 else 'var(--ochre)'
             out.append(
                 f'<tr{" class=rule-top" if first else ""}>'
-                f'<td>{spk if first else ""}</td><td>{name}</td>'
-                f'<td class="num">{t["spread_cent"]:.0f}</td>'
-                f'<td class="num">{t["motion_cent"]:.1f}</td>'
-                f'<td class="num" style="color:{colour}">{ratio:.2f}</td></tr>'
+                f'<td>{spk if first else ""}</td><td>{t["label"]}</td>'
+                f'<td class="num" style="color:{colour}">{med:.2f}</td>'
+                f'<td class="num">{lo:.2f}–{hi:.2f}</td>'
+                f'<td>{bar}</td></tr>'
             )
             first = False
     return '\n'.join(out)
 
 
 def f0_verdict(f0data):
-    res = [t['4_full']['ratio'] for t in f0data['items'].values() if '4_full' in t]
-    rs = [t['2_resynth']['ratio'] for t in f0data['items'].values() if '2_resynth' in t]
-    if not res:
+    seeded = f0data.get('seeded', {})
+    if not seeded:
         return ''
+    res = [t['4_full']['median'] for t in seeded.values() if '4_full' in t]
+    pit = [t['3_pitch']['median'] for t in seeded.values() if '3_pitch' in t]
+    rs = [t['2_resynth']['median'] for t in seeded.values() if '2_resynth' in t]
+    n = next(iter(seeded.values()))['2_resynth']['seeds']
+    straddle = sum(1 for t in seeded.values() for k in ('3_pitch', '4_full')
+                   if k in t and t[k]['min'] <= 1.0 <= t[k]['max'])
     return (
-        f'재합성 단계의 진폭비는 {min(rs):.2f}–{max(rs):.2f} 로 <b>1 근처</b>다 — acoustic 모델과 '
-        f'보코더는 주어진 피치 움직임을 그대로 재현한다. 감쇠는 전적으로 variance 쪽에서 생긴다. '
-        f'전체 추론에서는 {min(res):.2f}–{max(res):.2f} 로, 옛 캐스케이드의 진단이었던 완전한 '
-        f'평탄화와는 다르지만 <b>움직임의 {100 - int(100 * max(res))}–{100 - int(100 * min(res))}% 가 '
-        f'깎여 나간다</b>. 이 숫자는 학습이 진행되면서 달라질 수 있으므로, contour tokenizer 같은 '
-        f'처방을 붙이기 전에 최종 체크포인트에서 다시 재는 것이 맞다.'
+        f'가는 선은 시드 {n}회의 범위, 굵은 표시는 중앙값, 세로선이 원본과 같은 1.0 이다. '
+        f'재합성만 해도 {min(rs):.2f}–{max(rs):.2f} 이므로 <b>{round(100 * (1 - max(rs)))}–'
+        f'{round(100 * (1 - min(rs)))}% 의 감쇠는 acoustic 과 보코더에서 이미 생긴다</b> — '
+        f'피치 예측기 탓이 아니다. 피치를 예측하게 하면 {min(pit):.2f}–{max(pit):.2f}, '
+        f'길이까지 맡기면 {min(res):.2f}–{max(res):.2f} 이고, 예측 트랙 6개 중 {straddle}개는 '
+        f'범위가 1.0 을 가로지른다. '
+        f'<b>옛 캐스케이드의 진단이었던 체계적 평탄화는 이 모델에서 재현되지 않는다.</b> '
+        f'시드 사이의 편차가 1.0 과의 거리보다 크므로, contour tokenizer 를 붙일 근거는 '
+        f'적어도 이 측정에는 없다.'
     )
 
 
@@ -532,7 +554,8 @@ def main():
     commit = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'],
                             cwd=REPO, capture_output=True, text=True).stdout.strip()
     footer = (f'acoustic <span class="mono">{int(steps[0]):,}</span> step · '
-              f'variance <span class="mono">{int(steps[1]):,}</span> step 체크포인트로 생성. '
+              f'variance duration <span class="mono">{int(steps[1]):,}</span> / '
+              f'pitch <span class="mono">{int(steps[2]):,}</span> step 체크포인트로 생성. '
               f'커밋 <span class="mono">{commit}</span>.')
 
     html = (EX / 'report_template.html').read_text(encoding='utf-8')
@@ -549,7 +572,7 @@ def main():
         'F0_CHART': chart,
         'F0_LEGEND': legend,
         'F0_CAPTION': caption,
-        'F0_ROWS': f0_rows(f0data),
+        'F0_SEEDED_ROWS': f0_seeded_rows(f0data),
         'F0_VERDICT': f0_verdict(f0data),
         'FOOTER_NOTE': footer,
     }.items():
