@@ -50,6 +50,9 @@ ALLOWED_PH = CODA_36 | {"SP", "AP"}
 # IPA vowel bases (diacritics stripped), for the "next phone is a vowel" tests.
 IPA_VOWEL_BASE = {"i", "e", "ɛ", "a", "ɐ", "ʌ", "o", "u", "ɨ"}
 
+# A ʷ diacritic before one of these is the vowel's own rounding, not an on-glide.
+IPA_ROUND_VOWELS = {"o", "u"}
+
 # Glides open a syllable nucleus just as a vowel does, so a consonant before one
 # is an onset, not a coda (뭐 = m ɥ/w ʌ -> m w eo, never M w eo). They are not
 # vowels for the palatalization test, hence a separate set.
@@ -103,9 +106,13 @@ def convert_phone(ipa_label: str, next_ipa: Optional[str],
                   mapping: Dict[str, str]) -> List[str]:
     """Apply the two context rules verified in FIELD_CHECK / VERDICT.
 
-    - 'A|B' (nasal/liquid position): next phone is a vowel -> A (onset) else B (coda).
-    - 'X y' / 'X w' (on-glide split): drop the glide when the next phone is 'i'
-      (plain palatalization, not an on-glide).
+    - 'A|B' (position): next phone opens a nucleus -> A (onset) else B (coda).
+    - 'X y' / 'X w' (on-glide split): keep the glide only where the following
+      vowel does not already account for the diacritic (see below).
+
+    Scored against dictionaries/korean-coda.txt by
+    alignment/check_dict_agreement.py -- change these rules only with that
+    number in hand.
     """
     coda_str = mapping.get(ipa_label)
     if coda_str is None:
@@ -118,21 +125,31 @@ def convert_phone(ipa_label: str, next_ipa: Optional[str],
     # coda alternative and emit a single bogus token "M y".
     tokens = coda_str.split()
     glide = []
-    if len(tokens) == 2 and tokens[1] in ("y", "w"):
-        glide = [tokens[1]]
-    base = tokens[0]
+    if len(tokens) >= 2 and tokens[-1] in ("y", "w"):
+        glide = [tokens[-1]]
+        tokens = tokens[:-1]
+    base = " ".join(tokens)
 
     if "|" in base:
         onset, coda = base.split("|")
         if not _opens_nucleus(next_ipa):
             # Coda position: an on-glide cannot follow a syllable-final consonant.
-            return [coda]
+            return coda.split()
+        # Either side may hold more than one token: a geminate spans two
+        # syllables and needs both (ʎː in 빨리 is 빨's coda plus 리's onset).
         base = onset
 
-    # A glide before 'i' is plain palatalization, not an on-glide.
-    if next_vowel == "i":
+    # The glide diacritics mark coarticulation, which is only sometimes a real
+    # on-glide. Drop it when the following vowel already accounts for it:
+    #   ʲ before 'i'      -> plain palatalization  (시 = ɕʰ i  -> s i,  not s y i)
+    #   ʷ before 'o'/'u'  -> plain labialization   (호 = ɸʷ o  -> h o,  not h w o)
+    # Before any other vowel the glide is contrastive and must be kept
+    # (샤 = ɕʰ ɐ -> s y a, 화 = ɸʷ ɐ -> h w a).
+    if glide == ["y"] and next_vowel == "i":
         glide = []
-    return [base] + glide
+    elif glide == ["w"] and next_vowel in IPA_ROUND_VOWELS:
+        glide = []
+    return base.split() + glide
 
 
 # ---------------------------------------------------------------- ROSVOT notes (Stage 5)
