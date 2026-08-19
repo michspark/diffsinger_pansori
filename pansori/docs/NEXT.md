@@ -22,29 +22,39 @@
 - 라벨 재생성 (04 `--skip_mfa` → 06 → 07 PASS → 08). 26,955항목 중 **3,109개(11.5%)** 변경
 - **binarize 완료** — acoustic 4.5 GB / variance 381 MB, train 27.8 h · valid 1.08 h, 23화자 전원 학습 데이터 보유
 - **spec 통계 실측 → config 반영.** 상한이 실제로 기본값을 벗어났다 (아래 참조)
-- **acoustic + variance 학습 기동** — `checkpoints/pansori_{ac,var}_v1`, 둘 다 scratch
+- **acoustic + variance 학습** — `checkpoints/pansori_{ac,var}_v1`, 둘 다 scratch
+- **추론 경로 개통** — `pansori/make_ds.py` (라벨/악보 → `.ds`) + `examples/run_examples.sh`.
+  가사→음소→variance→acoustic→wav 가 끝까지 돈다
+- **f0 평탄화 질문에 답이 나왔다** — 체계적 평탄화는 재현되지 않는다 (아래 §D)
+- **리포트 발행** — 파이프라인 전 구간 설명 + 합성 예시 15개 (`build_report.py`)
 
 ## 지금 돌고 있는 것
 
 ```sh
 tail -f logs/train_pansori_ac_v1.log
-tail -f logs/train_pansori_var_v1.log
-tensorboard --logdir checkpoints          # 둘 다 한 화면에 뜬다
+tensorboard --logdir checkpoints
+bash pansori/examples/run_examples.sh    # 예시 재생성 (최적 체크포인트 자동 선택)
 ```
 
-| | acoustic | variance |
+**variance 는 step 32,000 에서 중단했다.** `validation/total_loss` 가 20k(0.08761)를 최저로
+세 번 연속 올랐고(0.09049 → 0.09877 → 0.10423), 상승분이 전부 `dur_loss` 였다.
+`num_ckpt_keep: 8` · 4k 간격이라 80k 까지 갔으면 20k 체크포인트가 삭제됐을 것이다.
+최적 체크포인트는 `checkpoints/best/` 에 복사해 뒀다.
+
+**acoustic 은 계속 돈다.** 검증 손실이 아직 추세라기보다 진동이다.
+
+### 체크포인트는 헤드마다 따로 고른다
+
+| 지표 | 최저 step | 비고 |
 |---|---|---|
-| 첫 validation (4k step) | `val_loss` 0.196 | `val_loss` 0.200 |
-| 학습 loss 추이 | `mel_loss` 1.09 → 0.16 | `dur_loss` 88 → 0.08, `pitch_loss` 1.26 → 0.013 |
-| VRAM | 6.1 GB | 2.9 GB |
-| TensorBoard | 오디오 30 + mel 20 (보코더 확인됨) | dur/pitch 플롯 20 |
+| acoustic `validation/total_loss` | 학습 중 | `best_ckpt.py pansori_ac_v1` |
+| variance `validation/dur_loss` | **16,000** | 이후 계속 상승 |
+| variance `validation/pitch_loss` | **32,000** | 중단 시점까지 하강 중 |
+| variance `validation/total_loss` | 20,000 | dur 이 지배하는 절충값 |
 
-**GPU 한 장을 나눠 쓴다.** 합계 9.0 / 24.5 GB 라 메모리는 여유롭지만 SM 을 경합해
-acoustic 이 7 → 5 it/s 로 느려졌다 (variance 는 13 it/s). 100k step 기준 variance 약 2시간,
-acoustic 약 5.5시간이고, variance 가 끝나면 acoustic 속도는 되돌아온다.
-
-**가장 최근 체크포인트가 최선이 아니다** — 구 파이프라인에서는 56k step 부근에서 과적합이
-시작됐다. 아키텍처가 달라 수치는 이월되지 않지만 습관은 유지할 것.
+`total_loss` 로 고른 20k 로 피치를 뽑으면 32k 보다 **f0 오차가 25% 크다**. 그래서
+`run_examples.sh` 는 헤드별로 고르고 variance 를 두 번 돌린다 —
+1차 `--predict dur`, 2차는 그 산출물에 `--predict pitch` (`ph_dur` 는 manual 로 읽힌다).
 
 ## 해야 할 것
 
@@ -55,17 +65,25 @@ acoustic 약 5.5시간이고, variance 가 끝나면 acoustic 속도는 되돌�
    올릴 수 있다 — 다만 lr 은 현재 배치 기준이므로 같이 손봐야 하고, upstream 기본값과의
    비교 가능성을 잃는다
 
-### B. 추론
-3. `scripts/infer.py acoustic <ds> --exp pansori_ac_v1` 로 새 가사+노트 합성.
-   **구 파이프라인에 없던 경로** — 사전이 생겨서 가사→음소 추론이 가능해졌다.
-   variance 를 앞에 붙이면 노트만으로 dur/f0 까지 생성된다
+### B. 추론 — 개통됨
+3. `bash pansori/examples/run_examples.sh` 가 사다리 4단(원본/재합성/피치예측/전체추론)과
+   악보 합성을 만든다. 악보는 `pansori/examples/scores/*.txt` 에 `음절 노트 길이초` 형식으로
+   적으면 되고 `-` 가 시김새, `_` 가 쉼표다. 새 악보를 넣으면 자동으로 3화자 합성된다.
+   - **`--spk` 는 한글 화자명을 못 받는다** (`utils/infer_utils.py:55` 가 `[0-9A-Za-z_-]+`).
+     `make_ds.py` 가 `.ds` 의 `spk_mix` 에 직접 써서 우회한다 — upstream 은 안 건드린다
+   - **`note_slur` 가 필요하다.** ph_dur 없이 추론할 때 노트를 단어에 묶는 정보인데 라벨에
+     없어서 실측 타이밍에서 DP 로 복원한다. 악보에는 `-` 로 직접 표기된다
 
-### C. 평가 (개작 필요)
-4. `pansori/eval/resynth_ladder.py`, `f0_metrics.py` 가 아직 24 kHz/80 mel/구 추론 API 기준.
-   44.1 kHz + NsfHifiGAN + `scripts/infer.py` 로 개작
-5. `pansori/eval/midi_baseline.py` 를 새 variance 모델에 돌려 **f0 평탄화가 여전한지 재측정**.
-   구 진단("결정론적 회귀 + L1 → 조건부 중앙값 → 평탄화")의 전제가 reflow 생성 모델에는
-   그대로 적용되지 않는다. 여기 결과가 나오기 전엔 contour tokenizer 를 붙이지 말 것
+### C. 평가
+4. `pansori/eval/resynth_ladder.py`, `f0_metrics.py` 가 아직 24 kHz/80 mel/구 추론 API 기준이다.
+   다만 **`pansori/examples/` 가 그 역할을 상당 부분 대체**한다 — 사다리(`run_examples.sh`),
+   점수(`measure.py`), 평탄화(`f0_report.py --seeds N`), 샘플링 편차(`seed_spread.py`).
+   구 스크립트는 개작보다 폐기가 맞을 수 있다
+5. **f0 평탄화는 재현되지 않았다 — 이 항목은 닫는다.** 시드 5회 중앙값으로 잰 진폭비:
+   재합성 0.86–0.98, f0 예측 0.72–0.85, dur·f0 예측 0.82–1.07. 예측 트랙 6개 중 4개는
+   범위가 1.0 을 가로지른다. **감쇠의 2–14% 는 acoustic·보코더에서 이미 생기므로 피치
+   예측기 탓이 아니다.** contour tokenizer 를 붙일 근거는 적어도 이 측정에는 없다.
+   ※ acoustic 학습이 끝나면 다시 재볼 것
 
 ### D. 남은 라벨 이슈 (측정만 해둠)
 `check_dict_agreement.py --syllables N --focus <기호>` 로 언제든 다시 잴 수 있다.
@@ -101,4 +119,9 @@ acoustic 약 5.5시간이고, variance 가 끝나면 acoustic 속도는 되돌�
   낡은 tensorflow 가 tensorboard import 를 protobuf 에서 죽이고, 거기 numpy 때문에 pip 이
   요구사항을 "이미 설치됨"으로 오판한다. `dsp` env 의 `activate.d` 에 넣어 뒀다
 - **전처리는 `base` env 로 못 돌린다** (numba vs numpy 2.5 충돌). `pansori` env(3.10)를 쓸 것
+- **한 번 뽑은 결과로 모델을 판단하지 말 것.** 두 모델 다 reflow 샘플러라 시드만 바꿔도
+  f0 RMSE 가 ±17%, mel L1 이 ±8% 움직인다 (`seed_spread.py`). 트랙끼리 비교하려면
+  시드를 고정하거나 여러 번 뽑아 중앙값을 쓸 것
+- **최근 체크포인트가 최선이 아니다 — 이제 도구가 지킨다.** `best_ckpt.py` 가 검증 손실 최저
+  step 을 고르고, `num_ckpt_keep` 으로 진짜 최저가 이미 삭제됐으면 그 사실을 알린다
 - **정권진(226발화)은 홀드아웃에서 자동 해제됨** — 곡 하나가 화자 전부라 학습 데이터가 0이 됐음
