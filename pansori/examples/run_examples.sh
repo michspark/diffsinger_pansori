@@ -134,5 +134,9 @@ for score in "$EX"/scores/*.txt; do
   done
 done
 
+# 사다리 4단의 mel 을 한 장으로 — 점수가 "왜" 나쁜지는 그림에서만 보인다.
+log "스펙트로그램"
+python pansori/examples/spectrograms.py "${ITEMS[1]}" 2>&1 | quiet
+
 log "완료 — $OUT"
 ls -la "$OUT"/*.wav

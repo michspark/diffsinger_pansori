@@ -389,6 +389,24 @@ def score_names():
     return sorted(p.stem for p in (EX / 'scores').glob('*.txt'))
 
 
+def mel_figure(item):
+    """The ladder's spectrograms, if spectrograms.py has produced them."""
+    png = OUT / f'{item}_mel.png'
+    if not png.exists():
+        return '', ''
+    data = base64.b64encode(png.read_bytes()).decode('ascii')
+    spk = ITEM_INFO.get(item, ('',))[0]
+    img = (f'<img src="data:image/png;base64,{data}" alt="사다리 4단의 mel 스펙트로그램 비교" '
+           f'style="display:block;width:100%;min-width:640px;height:auto">')
+    cap = (f'{spk} · <span class="mono">{item}</span>. 네 트랙 모두 모델이 학습하는 것과 같은 '
+           f'128빈 로그-mel 이고 색 범위도 공유한다. 가로로 늘어선 밝은 띠가 배음이다. '
+           f'재합성은 원본의 배음 궤적을 거의 그대로 따라가고, 피치를 예측하면 궤적이 갈라지며, '
+           f'길이까지 맡기면 시간축도 어긋난다. 어느 트랙이든 <b>위쪽 빈이 원본보다 뭉개져 '
+           f'있는데</b>, 이것이 <code>mel L1</code> 이 재합성에서도 0 으로 내려가지 않는 이유이자 '
+           f'mel 예측 모델의 일반적인 과도한 평활화다.')
+    return img, cap
+
+
 def score_ladder():
     blocks = []
     for name in score_names():
@@ -583,6 +601,7 @@ def main():
     f0data = json.loads((OUT / 'f0.json').read_text(encoding='utf-8'))
     steps = (OUT / 'CKPT_STEPS').read_text().split()
     chart, legend, caption = f0_chart(f0data, args.chart_item)
+    mel_img, mel_cap = mel_figure(args.chart_item)
 
     commit = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'],
                             cwd=REPO, capture_output=True, text=True).stdout.strip()
@@ -600,6 +619,8 @@ def main():
         'SCHEMA_DIAGRAM': schema_diagram(),
         'MODEL_DIAGRAM': model_diagram(),
         'LADDER': ladder(metrics),
+        'MEL_FIGURE': mel_img,
+        'MEL_CAPTION': mel_cap,
         'SCORE_BLOCK': score_block(),
         'SCORE_LADDER': score_ladder(),
         'F0_CHART': chart,
