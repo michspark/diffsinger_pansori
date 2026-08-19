@@ -22,36 +22,43 @@
 - 라벨 재생성 (04 `--skip_mfa` → 06 → 07 PASS → 08). 26,955항목 중 **3,109개(11.5%)** 변경
 - **binarize 완료** — acoustic 4.5 GB / variance 381 MB, train 27.8 h · valid 1.08 h, 23화자 전원 학습 데이터 보유
 - **spec 통계 실측 → config 반영.** 상한이 실제로 기본값을 벗어났다 (아래 참조)
-- **acoustic 학습 기동** — `checkpoints/pansori_ac_v1`, scratch, 6.1 GB VRAM / 811 step per epoch
+- **acoustic + variance 학습 기동** — `checkpoints/pansori_{ac,var}_v1`, 둘 다 scratch
 
 ## 지금 돌고 있는 것
 
 ```sh
 tail -f logs/train_pansori_ac_v1.log
-tensorboard --logdir checkpoints/pansori_ac_v1
+tail -f logs/train_pansori_var_v1.log
+tensorboard --logdir checkpoints          # 둘 다 한 화면에 뜬다
 ```
 
-100 step 스모크: `mel_loss` 1.09 → 0.26, `aux_mel_loss` 0.155 → 0.043, GPU 97%.
-100k step 기준 약 4시간. **가장 최근 체크포인트가 최선이 아니다** — 구 파이프라인에서는
-56k step 부근에서 과적합이 시작됐다. 아키텍처가 달라 수치는 이월되지 않지만 습관은 유지할 것.
+| | acoustic | variance |
+|---|---|---|
+| 첫 validation (4k step) | `val_loss` 0.196 | `val_loss` 0.200 |
+| 학습 loss 추이 | `mel_loss` 1.09 → 0.16 | `dur_loss` 88 → 0.08, `pitch_loss` 1.26 → 0.013 |
+| VRAM | 6.1 GB | 2.9 GB |
+| TensorBoard | 오디오 30 + mel 20 (보코더 확인됨) | dur/pitch 플롯 20 |
+
+**GPU 한 장을 나눠 쓴다.** 합계 9.0 / 24.5 GB 라 메모리는 여유롭지만 SM 을 경합해
+acoustic 이 7 → 5 it/s 로 느려졌다 (variance 는 13 it/s). 100k step 기준 variance 약 2시간,
+acoustic 약 5.5시간이고, variance 가 끝나면 acoustic 속도는 되돌아온다.
+
+**가장 최근 체크포인트가 최선이 아니다** — 구 파이프라인에서는 56k step 부근에서 과적합이
+시작됐다. 아키텍처가 달라 수치는 이월되지 않지만 습관은 유지할 것.
 
 ## 해야 할 것
 
-### A. acoustic 확인 (진행 중)
-1. 첫 `val_check_interval`(4,000 step)에서 TensorBoard 검증 mel/오디오가 정상 생성되는지.
-   보코더 경로(`checkpoints/pc_nsf_hifigan_.../model.ckpt`)가 여기서 처음 쓰인다
-2. VRAM 이 24 GB 중 6.1 GB 뿐이다. 급하면 `make_configs.py` 의 `max_batch_frames` 를
+### A. 학습 지켜보기 (진행 중)
+1. 과적합 시작점을 TensorBoard `validation/total_loss` 로 잡을 것. 학습 loss 는 계속
+   내려가도 검증이 돌아서면 거기가 쓸 체크포인트다
+2. VRAM 이 24 GB 중 9.0 GB 뿐이다. 급하면 `make_configs.py` 의 `max_batch_frames` 를
    올릴 수 있다 — 다만 lr 은 현재 배치 기준이므로 같이 손봐야 하고, upstream 기본값과의
    비교 가능성을 잃는다
 
-### B. variance
-3. binarize 는 이미 끝났다 (`data/pansori/binary_variance`).
-   `python scripts/train.py --config configs/pansori_variance.yaml --exp_name pansori_var_v1 --reset`
-   acoustic 이 안정된 뒤에. 4090 한 장이라 동시 실행은 둘 다 느려진다
-
 ### C. 추론
 4. `scripts/infer.py acoustic <ds> --exp pansori_ac_v1` 로 새 가사+노트 합성.
-   **구 파이프라인에 없던 경로** — 사전이 생겨서 가사→음소 추론이 가능해졌다
+   **구 파이프라인에 없던 경로** — 사전이 생겨서 가사→음소 추론이 가능해졌다.
+   variance 를 앞에 붙이면 노트만으로 dur/f0 까지 생성된다
 
 ### D. 평가 (개작 필요)
 5. `pansori/eval/resynth_ladder.py`, `f0_metrics.py` 가 아직 24 kHz/80 mel/구 추론 API 기준.
