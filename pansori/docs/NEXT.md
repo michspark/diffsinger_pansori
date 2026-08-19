@@ -56,6 +56,10 @@ bash pansori/examples/run_examples.sh    # 예시 재생성 (최적 체크포인
 `run_examples.sh` 는 헤드별로 고르고 variance 를 두 번 돌린다 —
 1차 `--predict dur`, 2차는 그 산출물에 `--predict pitch` (`ph_dur` 는 manual 로 읽힌다).
 
+`num_ckpt_keep: 8` 이 오래된 것을 지우므로 위 체크포인트들은 **`checkpoints/best/`** 에
+`{exp}_step{N}.ckpt` 로 복사해 뒀다 (1.6 GB, gitignore 대상이라 저장소엔 없다).
+`run_examples.sh` 가 실행 시 실험 디렉토리에 없으면 되돌려 놓는다.
+
 ## 해야 할 것
 
 ### A. 학습 지켜보기 (진행 중)

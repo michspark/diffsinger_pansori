@@ -31,6 +31,19 @@ export PYTHONPATH="$REPO"
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 export PYTHONNOUSERSITE=1
 
+# num_ckpt_keep 은 오래된 체크포인트를 지운다. checkpoints/best/ 에 따로 복사해 둔 것이
+# 실험 디렉토리에서 사라졌으면 되돌려 놓는다 — 그러지 않으면 아래 선택기가 "진짜 최저는
+# 삭제됐다"고 알리고 차선을 고르게 된다.
+for saved in checkpoints/best/*_step*.ckpt; do
+  [ -e "$saved" ] || continue
+  base=$(basename "$saved"); exp=${base%%_step*}; step=${base##*_step}; step=${step%.ckpt}
+  dest="checkpoints/$exp/model_ckpt_steps_${step}.ckpt"
+  if [ -d "checkpoints/$exp" ] && [ ! -e "$dest" ]; then
+    echo "복원: $dest ← $saved"
+    cp "$saved" "$dest"
+  fi
+done
+
 # 가장 최근이 아니라 검증 손실이 최저인 체크포인트를 쓴다 (pansori/README.md §6).
 #
 # variance 의 두 헤드는 같은 시점에 최적이 아니다. 실측: dur_loss 는 step 16k 에서
