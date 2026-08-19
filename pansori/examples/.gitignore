@@ -1,4 +1,4 @@
-# 생성 오디오와 중간 .ds 는 추적하지 않는다 (run_examples.sh 로 언제든 재생성).
-# 악보와 스크립트는 추적한다.
+# 생성물은 추적하지 않는다 — run_examples.sh + build_report.py 로 재생성한다.
 out/
 ds/
+report.html

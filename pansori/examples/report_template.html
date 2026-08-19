@@ -1,0 +1,613 @@
+<title>판소리 DiffSinger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Sans+KR:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+:root {
+  --paper:      #ECEDEF;
+  --surface:    #FFFFFF;
+  --surface-2:  #E3E5E9;
+  --ink:        #191C22;
+  --ink-soft:   #454B57;
+  --muted:      #6C7480;
+  --rule:       #CDD1D8;
+  --indigo:     #2B4B70;
+  --indigo-dim: #7B93AF;
+  --ochre:      #8E6115;
+  --ochre-dim:  #BFA06A;
+  --shadow:     0 1px 2px rgba(25,28,34,.06), 0 8px 24px rgba(25,28,34,.05);
+
+  --display: "Gowun Batang", "Nanum Myeongjo", Georgia, serif;
+  --body:    "IBM Plex Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --mono:    "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --measure: 68ch;
+  --gutter:  clamp(1.25rem, 4vw, 3rem);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:      #12151A;
+    --surface:    #1A1E25;
+    --surface-2:  #232830;
+    --ink:        #E6E8EC;
+    --ink-soft:   #B8BEC8;
+    --muted:      #8A929E;
+    --rule:       #2E343E;
+    --indigo:     #8FB3DA;
+    --indigo-dim: #4B678A;
+    --ochre:      #D6A055;
+    --ochre-dim:  #8A6E3C;
+    --shadow:     0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"] {
+  --paper:      #12151A;
+  --surface:    #1A1E25;
+  --surface-2:  #232830;
+  --ink:        #E6E8EC;
+  --ink-soft:   #B8BEC8;
+  --muted:      #8A929E;
+  --rule:       #2E343E;
+  --indigo:     #8FB3DA;
+  --indigo-dim: #4B678A;
+  --ochre:      #D6A055;
+  --ochre-dim:  #8A6E3C;
+  --shadow:     0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-weight: 300;
+  font-size: 17px;
+  line-height: 1.68;
+  letter-spacing: -0.003em;
+}
+
+.wrap { max-width: 100%; padding: 0 var(--gutter); }
+.col  { max-width: var(--measure); margin-inline: auto; }
+.wide { max-width: 1180px; margin-inline: auto; }
+
+/* ---------- masthead ---------- */
+header.masthead {
+  border-bottom: 1px solid var(--rule);
+  padding: clamp(3rem, 9vw, 6rem) 0 2.5rem;
+}
+.eyebrow {
+  font-family: var(--mono);
+  font-size: .72rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 1.4rem;
+}
+h1 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(2.4rem, 6.5vw, 4rem);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  margin: 0 0 1.1rem;
+}
+h1 .thin { color: var(--indigo); }
+.standfirst {
+  font-size: clamp(1.02rem, 2vw, 1.18rem);
+  color: var(--ink-soft);
+  max-width: 58ch;
+  margin: 0 0 2.4rem;
+}
+
+.figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+}
+.figure { background: var(--surface); padding: 1rem 1.1rem; }
+.figure dt {
+  font-family: var(--mono);
+  font-size: .68rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 .35rem;
+}
+.figure dd {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.55rem;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.figure dd small { font-size: .72rem; font-family: var(--body); color: var(--muted); display: block; margin-top: .15rem; letter-spacing: 0; }
+
+/* ---------- sections ---------- */
+main { padding-bottom: 6rem; }
+section { padding-top: clamp(3rem, 7vw, 5rem); }
+h2 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(1.55rem, 3.4vw, 2.1rem);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+  margin: 0 0 .4rem;
+}
+h2 + .dek { color: var(--muted); margin: 0 0 2rem; font-size: .96rem; }
+h3 {
+  font-family: var(--body);
+  font-weight: 600;
+  font-size: 1.02rem;
+  letter-spacing: 0;
+  margin: 2.2rem 0 .6rem;
+}
+p { margin: 0 0 1.1rem; }
+a { color: var(--indigo); text-underline-offset: .2em; text-decoration-thickness: 1px; }
+a:focus-visible, audio:focus-visible { outline: 2px solid var(--indigo); outline-offset: 3px; border-radius: 3px; }
+strong { font-weight: 600; }
+code, .mono { font-family: var(--mono); font-size: .86em; }
+code { background: var(--surface-2); padding: .1em .35em; border-radius: 2px; }
+.gt { color: var(--indigo); font-weight: 500; }
+.pred { color: var(--ochre); font-weight: 500; }
+
+.note {
+  border-left: 2px solid var(--indigo-dim);
+  padding: .1rem 0 .1rem 1.1rem;
+  color: var(--ink-soft);
+  font-size: .95rem;
+  margin: 1.6rem 0;
+}
+.note b { color: var(--ink); font-weight: 600; }
+
+/* ---------- stage spine ---------- */
+.stages { display: flex; flex-direction: column; gap: 0; margin-top: 1rem; }
+.stage {
+  display: grid;
+  grid-template-columns: 3.2rem 1fr;
+  gap: 0 1.2rem;
+  padding: 1.35rem 0;
+  border-top: 1px solid var(--rule);
+}
+.stage:last-child { border-bottom: 1px solid var(--rule); }
+.stage-no {
+  font-family: var(--mono);
+  font-size: .82rem;
+  color: var(--indigo);
+  padding-top: .18rem;
+  font-variant-numeric: tabular-nums;
+}
+.stage-name { font-weight: 600; font-size: 1rem; margin: 0 0 .1rem; }
+.stage-io {
+  font-family: var(--mono);
+  font-size: .76rem;
+  color: var(--muted);
+  margin: 0 0 .55rem;
+  overflow-x: auto;
+  white-space: nowrap;
+  padding-bottom: .15rem;
+}
+.stage-body { margin: 0; font-size: .95rem; color: var(--ink-soft); }
+.stage-body b { color: var(--ink); font-weight: 600; }
+
+/* ---------- tables ---------- */
+.tablewrap { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .87rem; }
+th, td { padding: .5rem .8rem; text-align: left; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+thead th {
+  font-family: var(--mono);
+  font-size: .68rem;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 400;
+  background: var(--surface-2);
+  position: sticky; top: 0;
+}
+tbody tr:last-child td { border-bottom: 0; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: .82rem; }
+tr.rule-top td { border-top: 2px solid var(--rule); }
+.bar {
+  display: inline-block; height: .5rem; background: var(--indigo-dim);
+  vertical-align: middle; border-radius: 1px; min-width: 1px;
+}
+
+/* ---------- audio ladder ---------- */
+.ladder { display: flex; flex-direction: column; gap: 2.2rem; margin-top: 1.5rem; }
+.utt {
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.utt-head {
+  padding: 1rem 1.2rem .85rem;
+  border-bottom: 1px solid var(--rule);
+  display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: baseline;
+}
+.utt-head h3 { margin: 0; font-size: 1.05rem; font-family: var(--display); font-weight: 700; }
+.utt-head .meta { font-family: var(--mono); font-size: .74rem; color: var(--muted); }
+.utt-lyric {
+  padding: .7rem 1.2rem;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: .74rem;
+  color: var(--muted);
+  overflow-x: auto; white-space: nowrap;
+}
+.rungs { display: grid; grid-template-columns: 1fr; }
+.rung {
+  display: grid;
+  grid-template-columns: minmax(11rem, 15rem) 1fr minmax(9rem, 12rem);
+  gap: .5rem 1rem;
+  align-items: center;
+  padding: .85rem 1.2rem;
+  border-bottom: 1px solid var(--rule);
+}
+.rung:last-child { border-bottom: 0; }
+.rung-label { display: flex; flex-direction: column; gap: .12rem; }
+.rung-label .name { font-weight: 600; font-size: .9rem; }
+.rung-label .sub { font-family: var(--mono); font-size: .7rem; color: var(--muted); }
+.rung audio { width: 100%; height: 34px; }
+.rung-metrics { font-family: var(--mono); font-size: .72rem; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.rung-metrics span { display: inline-block; margin-left: .6rem; }
+.rung-metrics b { color: var(--ink-soft); font-weight: 500; }
+.rung.is-ref { background: var(--surface-2); }
+@media (max-width: 720px) {
+  .rung { grid-template-columns: 1fr; }
+  .rung-metrics { text-align: left; }
+  .rung-metrics span { margin-left: 0; margin-right: .8rem; }
+}
+
+/* ---------- charts ---------- */
+figure { margin: 1.6rem 0 0; }
+figcaption { font-size: .82rem; color: var(--muted); margin-top: .7rem; }
+.chartwrap { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); padding: 1rem .6rem .4rem; }
+svg { display: block; }
+/* SVG 색·글꼴은 클래스로 준다. 표현 속성에 var() 를 넣으면 사파리에서 조용히 무시된다. */
+.d-mono    { font-family: var(--mono); }
+.d-body    { font-family: var(--body); }
+.d-display { font-family: var(--display); font-weight: 700; }
+.f-ink     { fill: var(--ink); }
+.f-muted   { fill: var(--muted); }
+.f-indigo  { fill: var(--indigo); }
+.f-ochre   { fill: var(--ochre); }
+.f-surface { fill: var(--surface); }
+.s-rule     { stroke: var(--rule); }
+.s-indigo   { stroke: var(--indigo); }
+.s-indigo-d { stroke: var(--indigo-dim); }
+.s-ochre    { stroke: var(--ochre); }
+.s-none     { fill: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 1.1rem; font-size: .8rem; color: var(--muted); margin: .8rem 0 0; }
+.legend i { display: inline-block; width: 1.4rem; height: 0; border-top-width: 2px; border-top-style: solid; vertical-align: middle; margin-right: .4rem; }
+
+/* ---------- misc ---------- */
+ul.tight { margin: 0 0 1.1rem; padding-left: 1.15rem; }
+ul.tight li { margin-bottom: .45rem; }
+.pill {
+  display: inline-block; font-family: var(--mono); font-size: .68rem;
+  letter-spacing: .06em; text-transform: uppercase;
+  border: 1px solid var(--rule); border-radius: 999px;
+  padding: .12rem .55rem; color: var(--muted);
+}
+footer {
+  border-top: 1px solid var(--rule);
+  margin-top: 4rem; padding: 2rem 0 4rem;
+  font-size: .82rem; color: var(--muted);
+}
+footer code { background: none; padding: 0; }
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+</style>
+
+<header class="masthead">
+  <div class="wrap"><div class="col">
+    <p class="eyebrow">DiffSinger · 판소리 파인튜닝 · {{DATE}}</p>
+    <h1>판소리를 <span class="thin">부르는</span> 모델</h1>
+    <p class="standfirst">
+      명창 22인의 녹음 28.9시간을 음소·노트 라벨로 정렬해 openvpi/DiffSinger 를 밑바닥부터
+      학습시켰다. 이 문서는 원본 오디오에서 합성음까지 파이프라인 전 구간을 단계별로 기록하고,
+      각 단계가 결과에 얼마나 기여하는지 들을 수 있게 만든 것이다.
+    </p>
+  </div></div>
+  <div class="wrap"><div class="wide">
+    <dl class="figures">{{FIGURES}}</dl>
+  </div></div>
+</header>
+
+<main>
+
+<section id="premise"><div class="wrap"><div class="col">
+  <h2>무엇을 옮겼나</h2>
+  <p class="dek">두 저장소는 공통 조상이 없다. merge 가 아니라 port 였다.</p>
+  <p>
+    판소리 파이프라인은 원래 <b>MoonInTheRiver/DiffSinger</b> 포크 위에 있었다. 24 kHz · 80 mel ·
+    FastSpeech2 캐스케이드 구조였고, 멜로디를 음소 축에 얹는 옛 라벨 포맷을 썼다. 옮겨 간
+    <b>openvpi/DiffSinger</b> 는 44.1 kHz · 128 mel · reflow 이고 음소와 노트를 별도 축으로 다룬다.
+    레이아웃도, 샘플레이트도, 모델 구조도 겹치지 않아 <code>git merge</code> 는 성립하지 않았다.
+  </p>
+  <p>
+    옮기면서 버린 것과 지킨 것을 가르는 기준은 하나였다. <b>포맷에 관한 사실은 버리고, 이 데이터에
+    관한 사실은 지킨다.</b> 옛 체크포인트 3개는 텐서가 하나도 맞지 않아 버렸다. 반면 "발화는 6초
+    이하여야 정렬이 무너지지 않는다", "노트가 덮은 무음은 쉼이 아니라 지속음이다",
+    "f0 하한은 55 Hz 여야 남성 통성이 살아남는다" 같은 것은 아키텍처와 무관하므로 그대로 가져왔다.
+  </p>
+</div></div></section>
+
+<section id="corpus"><div class="wrap"><div class="col">
+  <h2>원본</h2>
+  <p class="dek">394곡 · 28 GB · 명창 22인 + 미상 화자</p>
+  <p>
+    출발점은 세 가지다. 곡 단위 <b>오디오 394곡</b>(44.1 kHz), 곡 안의 창 구간을 표시한
+    <b>라벨</b>, 그리고 ROSVOT 이 뽑아 둔 <b>음표 MIDI</b>. 가사 텍스트는 없었다 — 그래서
+    전사부터 해야 했다.
+  </p>
+  <p>
+    화자 분포가 극단적으로 치우쳐 있다. 이일주·김소희·조상현 세 명이 코퍼스의 36%를 차지하고,
+    이동백·김창룡은 각각 3분 남짓이다. 화자를 특정할 수 없는 구간은 버리지 않고
+    <code>unknown</code> 하나로 모아 두었다 — 6.16시간, 단일 최대 화자다.
+  </p>
+</div></div>
+<div class="wrap"><div class="wide">
+  <figure>
+    <div class="tablewrap"><table>
+      <thead><tr><th>화자</th><th style="text-align:right">발화</th><th style="text-align:right">시간</th><th style="width:40%">분포</th><th>홀드아웃</th></tr></thead>
+      <tbody>{{SPEAKER_ROWS}}</tbody>
+    </table></div>
+    <figcaption>
+      <code>spk_id</code> 는 발화 수 내림차순으로 매긴다. 홀드아웃은 곡 단위 — 8자리 uuid 접두 하나가
+      곡 하나를 통째로 학습에서 뺀다. 정권진은 홀드아웃 곡이 화자의 전부라 학습 데이터가 0이 되므로
+      생성기가 자동으로 홀드아웃을 해제했다.
+    </figcaption>
+  </figure>
+</div></div></section>
+
+<section id="pipeline"><div class="wrap"><div class="col">
+  <h2>전처리 8단계</h2>
+  <p class="dek">각 단계는 jsonl 로 이어져 있어 개별 재실행이 가능하다</p>
+  <p>
+    단계 사이를 파일로 끊어 둔 이유는 재실행 비용이 단계마다 100배씩 차이나기 때문이다.
+    MFA 정렬은 수 시간이 걸리지만 그 결과를 다시 파싱하는 데는 2분이 걸린다. 실제로 이번에
+    음소 매핑을 고쳤을 때 4단계는 <b>정렬을 다시 돌리지 않고 파싱만</b> 다시 했다.
+  </p>
+</div></div>
+<div class="wrap"><div class="col">
+  <div class="stages">{{STAGES}}</div>
+</div></div></section>
+
+<section id="schema"><div class="wrap"><div class="col">
+  <h2>라벨 스키마가 바뀐 지점</h2>
+  <p class="dek">멜로디를 음소 축에서 떼어낸 것이 이식의 핵심이다</p>
+  <p>
+    옛 포맷은 멜로디를 <b>음소 축에 얹었다</b>. <code>note_seq</code>·<code>midi_dur</code>·<code>is_slur</code>
+    가 모두 <code>ph_seq</code> 와 같은 길이여야 해서, 한 모음이 노트 N개에 걸치면 그 모음을 N번
+    복제하고 2번째부터 <code>is_slur=1</code> 로 표시했다. 판소리처럼 한 음절을 길게 굴리는 음악에서는
+    이 복제가 라벨의 상당 부분을 차지한다.
+  </p>
+  <p>
+    openvpi 는 두 축을 분리한다. 노트는 자기 duration 을 갖고 프레임에 독립적으로 정렬되고,
+    음소는 <code>ph_num</code>(단어별 음소 개수)으로만 단어에 묶인다. <b>복제도 <code>is_slur</code> 도
+    사라졌다.</b> 시김새는 "한 단어 위에 노트 여러 개"로 자연스럽게 표현된다.
+  </p>
+</div></div>
+<div class="wrap"><div class="wide">
+  <figure>
+    <div class="chartwrap">{{SCHEMA_DIAGRAM}}</div>
+    <figcaption>
+      같은 구간(뜰리 둥 · 자르뜩)의 두 표현. 위는 음소 축에 노트를 얹느라 모음을 복제하고,
+      아래는 음소·노트가 각자의 축에서 프레임에 정렬된다. 새 포맷에서 추가로 필요해진 것은
+      <code>ph_num</code> 하나뿐이고, MFA 의 <code>words</code> tier 에서 유도했다.
+    </figcaption>
+  </figure>
+</div></div>
+<div class="wrap"><div class="col">
+  <div class="note">
+    <b>유지한 것 — 이 데이터에 관한 사실이라서.</b> korean_mfa 는 말소리로 학습돼 긴 지속음을 무음으로
+    라벨한다. 실측하면 코퍼스 시간의 <b>52.2%(15.11시간)</b> 가 "MFA 는 무음, ROSVOT 은 노래"인
+    구간이고, 그 구간의 노트 커버율 중앙값은 <b>1.00</b> 이다. 그대로 두면 노래하는 구간에서 모델에게
+    조용히 하라고 가르치게 된다. 그래서 노트가 덮은 무음은 앞 모음으로 흡수하고,
+    노트가 없는 무음(0.74시간)만 <code>SP</code> 로 남긴다.
+  </div>
+</div></div></section>
+
+<section id="phonemes"><div class="wrap"><div class="col">
+  <h2>음소 매핑을 고친 방법</h2>
+  <p class="dek">추측이 아니라 사전 대조 점수로 판정했다</p>
+  <p>
+    MFA 의 korean_mfa 모델은 IPA 108종을 낸다. 우리가 쓰는 인벤토리는 한글 자모 기반 34종이라
+    그 사이에 손으로 만든 매핑표가 하나 있고, 문맥 규칙이 두 종류 붙는다 — 자음이 초성인지 종성인지,
+    그리고 활음(y·w)을 살릴지 뺄지.
+  </p>
+  <p>
+    이 표는 손으로 만든 것이라 고칠 때마다 추측이었다. 그래서 <b>채점기</b>부터 만들었다.
+    <code>dictionaries/korean-coda.txt</code> 는 자모 표에서 기계적으로 생성돼 매핑표와 독립이므로
+    정답지 역할을 할 수 있다. TextGrid 의 원본 IPA 를 같은 문맥 규칙으로 변환해 사전과 대조하면
+    변경의 옳고 그름이 숫자로 나온다.
+  </p>
+</div></div>
+<div class="wrap"><div class="wide">
+  <figure>
+    <div class="tablewrap"><table>
+      <thead><tr><th>결함</th><th>증상</th><th>조치</th><th style="text-align:right">기호별 일치율</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>구개음화 활음 미반영</td>
+          <td class="mono">냐 → n a</td>
+          <td class="mono">c cʰ c͈ ç ɲ ɟ ʝ ɕʰ ɕ͈ 에 ` y` 추가</td>
+          <td class="num">ç 22.8 → <b>74.1%</b><br>ɲ 61.0 → <b>84.5%</b></td>
+        </tr>
+        <tr>
+          <td>ɸ 를 ㅍ 으로 매핑</td>
+          <td class="mono">후 → p w u</td>
+          <td class="mono">ɸ→h, 그리고 ʷ 가 o/u 앞이면 활음 생략</td>
+          <td class="num">ɸ 0 → <b>96.9%</b><br>ʷ 전체 <b>93.9%</b></td>
+        </tr>
+        <tr>
+          <td>ʎ 가 모든 위치에서 오답</td>
+          <td class="mono">빨리 → pp a L i</td>
+          <td class="mono">L r|L y — ㄹㄹ 겹침은 두 토큰</td>
+          <td class="num">ʎ 0 → <b>84.5%</b></td>
+        </tr>
+        <tr class="rule-top">
+          <td colspan="3"><b>전체 일치율</b> (1음절 어절 89,303개)</td>
+          <td class="num"><b>87.92 → 89.59%</b></td>
+        </tr>
+      </tbody>
+    </table></div>
+    <figcaption>
+      세 번째 결함 때문에 변환 함수가 위치 대안에 여러 토큰을 담을 수 있게 바뀌었다. ㄹㄹ 겹침은
+      앞 음절의 종성과 뒤 음절의 초성이 한 음으로 이어진 것이라 토큰 하나로는 표현이 안 된다
+      (빨리 = <span class="mono">pp a · L r · i</span>).
+    </figcaption>
+  </figure>
+</div></div>
+<div class="wrap"><div class="col">
+  <div class="note">
+    <b>일치율 100% 는 목표가 아니다.</b> 남은 불일치의 다수는 정상적인 연음이다
+    (은 → <span class="mono">eu n</span>, 좋 → <span class="mono">j o</span>). 문맥 없는 음절 사전으로는
+    재현할 수 없는 것이 맞다. 이 숫자는 절대 평가가 아니라 <b>변경 전후의 차분</b>으로 쓴다.
+  </div>
+</div></div></section>
+
+<section id="models"><div class="wrap"><div class="col">
+  <h2>모델 두 개</h2>
+  <p class="dek">노트에서 타이밍과 피치를 만드는 쪽, 그것을 소리로 만드는 쪽</p>
+  <p>
+    openvpi 는 합성을 두 모델로 나눈다. <b>variance</b> 는 가사·노트를 받아 음소별 길이와 f0 곡선을
+    만들고, <b>acoustic</b> 은 거기에 화자를 얹어 mel 스펙트로그램을 만든다. 파형은 학습하지 않은
+    보코더(NSF-HiFiGAN)가 담당한다. 둘 다 <b>reflow</b> 기반 생성 모델이고 euler 20 step 으로 샘플링한다.
+  </p>
+</div></div>
+<div class="wrap"><div class="wide">
+  <figure>
+    <div class="chartwrap">{{MODEL_DIAGRAM}}</div>
+    <figcaption>
+      실선은 이번 예시에서 실제로 흐른 경로다. 점선으로 표시한 두 지점 — 실제 <code>ph_dur</code> 와
+      실제 <code>f0</code> 를 주입하는 곳 — 이 아래 사다리에서 한 칸씩 끊어 보는 자리다.
+    </figcaption>
+  </figure>
+</div></div>
+<div class="wrap"><div class="col">
+  <h3>학습 중에 드러난 것</h3>
+  <ul class="tight">
+    <li><b><code>AP</code>(들숨)는 음소셋에 하드코딩돼 있다.</b> 그리고 binarize 는 셋의 모든 항목이
+      코퍼스에 실제로 나타나야 통과시킨다. 우리 라벨에는 들숨 구분이 없어서 <code>SP</code> 와 한
+      인덱스로 합쳤다. 없는 구분을 지어내는 것보다 라벨이 말하는 대로 두는 쪽이 맞다.</li>
+    <li><b>mel 상한 기본값이 이 코퍼스에 맞지 않는다.</b> openvpi 기본값은 <code>spec_max: [0]</code>
+      인데 실측 상한은 <b>+2.838</b> 이다. 그대로 두면 정규화 후 diffusion 타깃이 [-1, 1] 을 벗어난다.
+      하한은 반대로 안전하다 — STFT 가 <code>log(clamp(x, 1e-5))</code> 로 압축해 -11.513 아래가
+      존재할 수 없다.</li>
+    <li><b>f0 범위를 55–750 Hz 로 넓혔다.</b> 이 코퍼스의 최저 노트는 MIDI 35(B1, 61.7 Hz)다.
+      기본값 65 Hz 를 두면 남성 통성 저음이 통째로 무성으로 처리된다.</li>
+  </ul>
+</div></div></section>
+
+<section id="examples"><div class="wrap"><div class="col">
+  <h2>들어보기</h2>
+  <p class="dek">학습에 쓰이지 않은 홀드아웃 곡에서, 한 단계씩 벗겨가며</p>
+  <p>
+    합성이 나빴을 때 어느 단계 탓인지 알 수 없으면 고칠 수가 없다. 그래서 예시를 한 덩어리로
+    내지 않고 <b>사다리</b>로 만들었다. 위에서 아래로 갈수록 모델이 스스로 만들어야 하는 것이 늘어난다 —
+    <span class="gt">실측값</span>을 하나씩 빼고 <span class="pred">예측값</span>으로 바꾼다.
+  </p>
+  <p>
+    <code>f0 RMSE</code> 는 양쪽 다 유성으로 판정한 프레임에서 잰 센트 단위 오차(100센트 = 반음),
+    <code>mel L1</code> 은 모델이 실제로 최적화하는 128빈 로그-mel 공간에서의 거리다.
+    둘 다 원본 녹음 기준이고, 낮을수록 가깝다.
+  </p>
+</div></div>
+<div class="wrap"><div class="wide">
+  <div class="ladder">{{LADDER}}</div>
+</div></div></section>
+
+<section id="score"><div class="wrap"><div class="col">
+  <h2>녹음이 없는 노래</h2>
+  <p class="dek">가사와 멜로디만 주고 부르게 하기</p>
+  <p>
+    위의 예시들은 모두 원본 녹음이 뒤에 있다. 이번엔 없다. 춘향가 &lt;사랑가&gt; 첫 구절을
+    악보로 적고, 가사를 사전으로 음소로 바꾸고, 나머지는 전부 모델이 만들었다.
+  </p>
+  <p>
+    <b>이 경로는 구 파이프라인에 없었다.</b> 옛 코드에는 음소 인벤토리가 하드코딩돼 있었을 뿐
+    가사에서 음소를 뽑는 길이 없었고, 그래서 학습 데이터에 있는 발화만 재합성할 수 있었다.
+    이번에 한글 11,172음절 사전을 만들면서 그 길이 열렸다.
+  </p>
+</div></div>
+<div class="wrap"><div class="wide">
+  <figure>
+    <div class="chartwrap">{{SCORE_BLOCK}}</div>
+    <figcaption>
+      악보 표기에서 <span class="mono">-</span> 는 앞 음절이 이어진다는 뜻(시김새·melisma),
+      <span class="mono">_</span> 는 쉼표다. 같은 악보를 화자만 바꿔 세 번 합성했다.
+    </figcaption>
+  </figure>
+</div></div>
+<div class="wrap"><div class="wide">
+  <div class="ladder">{{SCORE_LADDER}}</div>
+</div></div></section>
+
+<section id="f0"><div class="wrap"><div class="col">
+  <h2>시김새는 살아남았나</h2>
+  <p class="dek">구 파이프라인의 진단을 새 모델에 다시 물었다</p>
+  <p>
+    옛 캐스케이드 모델의 진단은 <b>피치 평탄화</b>였다. 결정론적 회귀에 L1 손실을 걸면 조건부
+    중앙값으로 수렴하고, 그러면 시김새 — 이 음악에서 표현의 대부분을 지고 있는 장식음 — 가
+    평균으로 뭉개진다는 것이었다.
+  </p>
+  <p>
+    <b>그 논증은 새 모델에 그대로 옮겨오지 않는다.</b> openvpi 의 피치 예측기는 결정론적 회귀가 아니라
+    reflow 생성 모델이다. 그러니 가정할 게 아니라 다시 재야 한다. 아래는 프레임 사이 피치 이동량
+    <span class="mono">|Δf0|</span> 의 중앙값을 원본 대비 비율로 잰 것이다. 음정을 맞히면서
+    그 사이의 움직임만 잃는 것이 평탄화의 서명이므로, 이 비율이 1보다 크게 낮으면 평탄화다.
+  </p>
+</div></div>
+<div class="wrap"><div class="wide">
+  <figure>
+    <div class="chartwrap">{{F0_CHART}}</div>
+    <div class="legend">{{F0_LEGEND}}</div>
+    <figcaption>{{F0_CAPTION}}</figcaption>
+  </figure>
+  <figure>
+    <div class="tablewrap"><table>
+      <thead><tr><th>발화</th><th>트랙</th><th style="text-align:right">범위 (센트)</th><th style="text-align:right">|Δf0| (센트/프레임)</th><th style="text-align:right">원본 대비</th></tr></thead>
+      <tbody>{{F0_ROWS}}</tbody>
+    </table></div>
+    <figcaption>{{F0_VERDICT}}</figcaption>
+  </figure>
+</div></div></section>
+
+<section id="open"><div class="wrap"><div class="col">
+  <h2>아직 열려 있는 것</h2>
+  <p class="dek">측정만 해두고 손대지 않은 것들</p>
+  <ul class="tight">
+    <li><b>사전 쪽 결함.</b> 죠는 실제로 [tɕo] 로 발음되어 MFA 는 <span class="mono">j o</span> 를 내는데
+      사전은 <span class="mono">j y o</span> 를 낸다. 한국어에서 죠와 조는 동음이므로 이건 매핑이 아니라
+      사전 문제다 — 매핑에 <span class="mono">y</span> 를 붙이면 훨씬 흔한 조까지 망가진다.</li>
+    <li><b>MFA 오인식.</b> 내·나·니·너의 ㄴ 이 <span class="mono">d</span> 로 나오는 경우가 700건 넘는다.
+      매핑으로는 못 고친다.</li>
+    <li><b>무음 흡수 임계.</b> 지금은 50 ms 만 겹쳐도 무음 전체를 흡수한다. 커버율 50% 미만인 흡수
+      구간이 6.2%(3,772개) 있다.</li>
+    <li><b>들숨(AP) 라벨링.</b> 판소리는 들숨이 크게 들리므로 <code>SP</code> 와 나눌 값어치가 있을 수
+      있다. 하려면 병합 단계에 에너지 기반 판정을 넣고 다시 binarize 해야 한다.</li>
+    <li><b>contour tokenizer.</b> 위의 평탄화 측정 결과가 나오기 전에는 붙이지 않기로 했다.
+      전제가 달라진 상태에서 옛 처방을 그대로 쓰는 것은 순서가 틀렸다.</li>
+  </ul>
+</div></div></section>
+
+</main>
+
+<footer><div class="wrap"><div class="col">
+  <p>
+    <span class="pill">재현</span>
+    <code>bash pansori/examples/run_examples.sh</code> 가 이 페이지의 오디오를 전부 다시 만들고,
+    <code>pansori/examples/measure.py</code> 와 <code>f0_report.py</code> 가 표의 숫자를 다시 잰다.
+    브랜치 <code>feat/pansori</code>.
+  </p>
+  <p>{{FOOTER_NOTE}}</p>
+</div></div></footer>
