@@ -26,18 +26,34 @@ HOLDOUT = {
     '김소희': 'd207244a',   # 춘향가 이도령 이별
 }
 
+# 이 코퍼스의 mel 포락선. openvpi 기본값 spec_max:[0] 은 판소리에 맞지 않는다 —
+# 실측 상한이 +2.84 라 정규화 후 diffusion 타깃이 [-1, 1] 밖으로 나간다.
+# pansori/compute_spec_stats.py 가 binarize 결과에서 생성한다. 부트스트랩 순서는
+# binarize(기본값) → compute_spec_stats.py → make_configs.py → 학습 이고,
+# spec_min/max 는 학습 시점에만 쓰이므로 재-binarize 는 필요 없다.
+# variance 는 mel 을 만들지 않으므로 acoustic 에만 붙인다.
+EXTRA_BASE = {'acoustic': '\n  - configs/pansori_spec_stats.yaml'}
+
 HEADER = """# 판소리 fine-tune — {kind}
 # 생성물: python pansori/make_configs.py  (직접 편집하지 말고 생성기를 고칠 것)
 #
 # 데이터 파이프라인과 근거는 pansori/docs/PORTING.md, pansori/alignment/VERDICT.md 참조.
 
 base_config:
-  - configs/{kind}.yaml
+  - configs/{kind}.yaml{extra_base}
 
 dictionaries:
   ko: dictionaries/korean-coda.txt
 extra_phonemes: []
-merged_phoneme_groups: []
+
+# openvpi 는 'SP'(무음) 와 'AP'(들숨) 를 음소셋에 항상 넣고
+# (utils/phoneme_utils.py:18), binarize 는 셋의 모든 항목이 코퍼스에 실제로
+# 나타나야 통과시킨다. 우리 라벨에는 들숨 구분이 없다 — 06_merge.py 는 노트가
+# 덮지 않은 무음을 전부 SP 로 만든다. 그래서 둘을 한 인덱스로 합친다.
+# 없는 구분을 지어내는 것보다 라벨이 말하는 대로 두는 쪽이 맞다.
+# 나중에 들숨을 따로 라벨하려면 이 줄을 지우고 재-binarize 하면 된다.
+merged_phoneme_groups:
+  - [SP, AP]
 num_lang: 1
 use_lang_id: false
 """
@@ -82,8 +98,8 @@ augmentation_args:
   random_time_stretching:
     enabled: false
 
-# spec_min/spec_max 는 binarize 후 pansori/compute_spec_stats.py 로 실측해 덮어쓴다.
-# Opencpop 기본값을 그대로 두면 정규화 후 mel 이 +1 을 넘긴다 (구 파이프라인 실측 1.257).
+# spec_min/spec_max 는 위 base_config 의 pansori_spec_stats.yaml 에서 온다.
+# 코퍼스를 다시 만들면 compute_spec_stats.py 로 다시 재고 이 스크립트를 다시 돌릴 것.
 
 max_batch_frames: 50000
 max_batch_size: 32
@@ -150,7 +166,7 @@ def main() -> None:
 
     for kind, tail in (('acoustic', ACOUSTIC), ('variance', VARIANCE)):
         ignored = '\n'.join(f'  - {p}' for p in IGNORED[kind])
-        text = (HEADER.format(kind=kind) + block
+        text = (HEADER.format(kind=kind, extra_base=EXTRA_BASE.get(kind, '')) + block
                 + COMMON.format(data=args.data, kind=kind, n_spk=n_spk,
                                 num_spk=n_spk + 1, ignored=ignored)
                 + tail)

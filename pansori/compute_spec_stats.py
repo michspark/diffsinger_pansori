@@ -1,24 +1,35 @@
 #!/usr/bin/env python3
 """Measure this corpus's per-bin mel envelope and write it as a config fragment.
 
-GaussianDiffusion normalises its target with spec_min/spec_max
-(usr/diff/shallow_diffusion_tts.py:278):
+The diffusion target is normalised with spec_min/spec_max
+(modules/core/*, via hparams):
 
     norm = (mel - spec_min) / (spec_max - spec_min) * 2 - 1
 
-so those two vectors decide whether the diffusion target actually lands in
-[-1, 1]. The pansori config inherited Opencpop's numbers, and pansori mel is
-louder in the low bins: measured on the current training set, 72 of 80 bins go
-past +1, peaking at +1.174. The model then has to spend capacity reproducing
-out-of-range values instead of detail.
+so those two decide whether the target actually lands in [-1, 1]. Anything
+outside costs the model capacity reproducing out-of-range values instead of
+detail.
+
+openvpi's configs/acoustic.yaml ships `spec_min: [-12]` / `spec_max: [0]` --
+single values broadcast over all 128 bins, with `mel_base: 'e'` (natural log).
+The floor is safe by construction: modules/nsf_hifigan/nvSTFT.py compresses with
+`log(clamp(x, min=1e-5))`, so no mel value can fall below log(1e-5) = -11.513.
+Only the ceiling is an empirical question -- a filterbank output above linear
+1.0 logs to a positive number and would escape spec_max.
+
+So unlike the old 24 kHz/80-bin pipeline (which inherited Opencpop's per-bin
+numbers and overflowed to +1.174), **measuring and finding nothing to change is
+the expected outcome here.** Only override the config if the measured envelope
+actually escapes [-12, 0]; a per-bin table that merely hugs the data more
+tightly buys nothing and makes the config harder to reuse.
 
 Sampling does not settle this -- the envelope is an extreme-value statistic and
-kept growing between a 600- and a 3000-item sample (min moved 0.52). So this
-reads every item by default.
+kept growing between a 600- and a 3000-item sample on the old corpus (min moved
+0.52). So this reads every item by default.
 
-Usage (diffsinger env, from the repo root, PYTHONPATH=.):
-  python pansori/compute_spec_stats.py --binary_data_dir data/binary/pansori_v2 \
-      --out usr/configs/midi/cascade/pansori/pansori_statis.yaml
+Usage (dsp env, from the repo root):
+  PYTHONPATH=. python pansori/compute_spec_stats.py
+  PYTHONPATH=. python pansori/compute_spec_stats.py --limit 2000   # 빠른 확인
 """
 
 import argparse
@@ -31,12 +42,13 @@ from utils.indexed_datasets import IndexedDataset
 # normalises inside [-1, 1] instead of just past it.
 MARGIN = 0.05
 
-# Mel floor: wav2spec clamps there, so there is nothing below to represent.
-MEL_FLOOR = -6.0
+# openvpi's default envelope (configs/acoustic.yaml). Measured values inside
+# this need no config change.
+DEFAULT_MIN, DEFAULT_MAX = -12.0, 0.0
 
 
 def envelope(binary_data_dir, prefix, limit):
-    ds = IndexedDataset(f'{binary_data_dir}/{prefix}')
+    ds = IndexedDataset(binary_data_dir, prefix)
     idx = (np.linspace(0, len(ds) - 1, limit).astype(int) if limit
            else np.arange(len(ds)))
     n_bins = np.asarray(ds[int(idx[0])]['mel']).shape[1]
@@ -58,31 +70,29 @@ def as_yaml_block(name, values, per_line=8):
 
 def main():
     parser = argparse.ArgumentParser(description='판소리 mel 통계 측정')
-    parser.add_argument('--binary_data_dir', default='data/binary/pansori_v2')
+    parser.add_argument('--binary_data_dir', default='data/pansori/binary_acoustic')
     parser.add_argument('--prefix', default='train')
     parser.add_argument('--limit', type=int, default=0,
                         help='표본 수 (0 = 전체, 권장)')
-    parser.add_argument('--out',
-                        default='usr/configs/midi/cascade/pansori/pansori_statis.yaml')
+    parser.add_argument('--out', default='configs/pansori_spec_stats.yaml')
     args = parser.parse_args()
 
     lo, hi, n = envelope(args.binary_data_dir, args.prefix, args.limit)
-    spec_min = np.maximum(lo - MARGIN, MEL_FLOOR)
+    spec_min = lo - MARGIN
     spec_max = hi + MARGIN
 
+    inside = spec_min.min() >= DEFAULT_MIN and spec_max.max() <= DEFAULT_MAX
     header = (
         '# 판소리 mel 통계 — pansori/compute_spec_stats.py 로 생성 (직접 수정하지 말 것)\n'
-        f'# 출처: {args.binary_data_dir}/{args.prefix}, {n:,} 발화 전수 측정, 여유 {MARGIN}\n'
+        f'# 출처: {args.binary_data_dir}/{args.prefix}, {n:,} 발화, 여유 {MARGIN}\n'
         '#\n'
-        '# Opencpop 값(usr/configs/midi/cascade/opencs/opencpop_statis.yaml)을 쓰면\n'
-        '# 판소리 mel 저역이 상한을 넘어 정규화 후 +1.174까지 나간다 (80 bin 중 72개 초과).\n'
-        '\n')
+        f'# openvpi 기본값 spec_min:[{DEFAULT_MIN:g}] / spec_max:[{DEFAULT_MAX:g}] 대비 '
+        + ('안쪽 → 이 파일은 참고용이고 config 는 그대로 두면 된다.\n'
+           if inside else
+           '바깥으로 벗어남 → 아래 값을 config 에 반영할 것.\n')
+        + '\n')
     footer = (
-        '\n# 아래 세 값은 Opencpop 것을 그대로 쓴다 — 플롯 범위와 wav2spec 상수라\n'
-        '# 코퍼스와 무관하다.\n'
-        'mel_vmin: -6.\n'
-        'mel_vmax: 1.5\n'
-        'wav2spec_eps: 1e-6\n')
+        '\n# mel_vmin/mel_vmax 는 플롯 범위일 뿐 코퍼스와 무관하므로 건드리지 않는다.\n')
 
     with open(args.out, 'w') as f:
         f.write(header)
@@ -94,6 +104,8 @@ def main():
     print(f'\n{n:,} 발화 측정 → {args.out}')
     print(f'spec_min  {spec_min.min():.3f} ~ {spec_min.max():.3f}')
     print(f'spec_max  {spec_max.min():.3f} ~ {spec_max.max():.3f}')
+    print('기본값 [-12, 0] 안쪽 — config 변경 불필요' if inside else
+          '⚠ 기본값 [-12, 0] 을 벗어남 — make_configs.py 에 반영할 것')
 
 
 if __name__ == '__main__':

@@ -7,3 +7,7 @@ data/
 review/
 
 __pycache__/
+
+# 루트 .gitignore 의 `*.sh` 가 서버 러너까지 삼킨다. 3e8d541 은 README 만 담고
+# run.sh 를 빠뜨렸다 — 상위 규칙을 여기서 되돌린다 (루트 .gitignore 는 upstream).
+!server/*.sh
