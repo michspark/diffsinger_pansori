@@ -95,8 +95,11 @@ def main():
                 bbox=dict(facecolor='black', alpha=.45, edgecolor='none', pad=2.2))
         for spine in ax.spines.values():
             spine.set_visible(False)
-    axes[-1].set_xlabel('초', fontsize=9)
-    axes[-1].tick_params(labelsize=8)
+    # 배경이 투명해 라이트/다크 어느 쪽에도 얹힌다. 축 글자를 검정으로 두면 다크에서
+    # 사라지므로 두 바탕 모두에서 읽히는 중간 회색으로 그린다.
+    AXIS = '#8A929E'
+    axes[-1].set_xlabel('초', fontsize=9, color=AXIS)
+    axes[-1].tick_params(labelsize=8, colors=AXIS)
 
     out = Path(args.out) if args.out else out_dir / f'{args.item}_mel.png'
     fig.savefig(out, dpi=args.dpi, bbox_inches='tight',
