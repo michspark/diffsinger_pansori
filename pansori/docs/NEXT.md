@@ -22,34 +22,32 @@
 - 라벨 재생성 (04 `--skip_mfa` → 06 → 07 PASS → 08). 26,955항목 중 **3,109개(11.5%)** 변경
 - **binarize 완료** — acoustic 4.5 GB / variance 381 MB, train 27.8 h · valid 1.08 h, 23화자 전원 학습 데이터 보유
 - **spec 통계 실측 → config 반영.** 상한이 실제로 기본값을 벗어났다 (아래 참조)
-- **acoustic + variance 학습** — `checkpoints/pansori_{ac,var}_v1`, 둘 다 scratch
+- **acoustic + variance 학습 완료** — `checkpoints/pansori_{ac,var}_v1`, 둘 다 scratch
 - **추론 경로 개통** — `pansori/make_ds.py` (라벨/악보 → `.ds`) + `examples/run_examples.sh`.
   가사→음소→variance→acoustic→wav 가 끝까지 돈다
 - **f0 평탄화 질문에 답이 나왔다** — 체계적 평탄화는 재현되지 않는다 (아래 §D)
 - **리포트 발행** — 파이프라인 전 구간 설명 + 합성 예시 15개 (`build_report.py`)
 
-## 지금 돌고 있는 것
+## 학습 결과
 
-```sh
-tail -f logs/train_pansori_ac_v1.log
-tensorboard --logdir checkpoints
-bash pansori/examples/run_examples.sh    # 예시 재생성 (최적 체크포인트 자동 선택)
-```
+두 모델 다 학습이 끝났다. **가장 최근 체크포인트는 둘 다 최선이 아니다.**
 
-**variance 는 step 32,000 에서 중단했다.** `validation/total_loss` 가 20k(0.08761)를 최저로
-세 번 연속 올랐고(0.09049 → 0.09877 → 0.10423), 상승분이 전부 `dur_loss` 였다.
-`num_ckpt_keep: 8` · 4k 간격이라 80k 까지 갔으면 20k 체크포인트가 삭제됐을 것이다.
-최적 체크포인트는 `checkpoints/best/` 에 복사해 뒀다.
+| | 돌린 step | 최저 검증 | 마지막 | 상태 |
+|---|---|---|---|---|
+| acoustic | 100,000 (설정대로 완주) | **0.17800 @ 28,000** | 0.18834 | 28k 이후 72k step 동안 0.178–0.203 진동만 |
+| variance | 32,000 (중단) | **0.08761 @ 20,000** | 0.10423 | `dur_loss` 3회 연속 상승해 중단 |
 
-**acoustic 은 계속 돈다.** 검증 손실이 아직 추세라기보다 진동이다.
+acoustic 은 필요보다 3.5배 오래 돌았고, 끝났을 때 **28,000 step 체크포인트는 `num_ckpt_keep: 8`
+로 이미 삭제돼 있었다.** `checkpoints/best/` 에 복사해 두지 않았다면 남은 것 중 최저인
+76,000(0.18335)으로 조용히 내려앉았을 것이다. `run_examples.sh` 가 실행 전에 복원한다.
 
 ### 체크포인트는 헤드마다 따로 고른다
 
 | 지표 | 최저 step | 비고 |
 |---|---|---|
-| acoustic `validation/total_loss` | 학습 중 | `best_ckpt.py pansori_ac_v1` |
-| variance `validation/dur_loss` | **16,000** | 이후 계속 상승 |
-| variance `validation/pitch_loss` | **32,000** | 중단 시점까지 하강 중 |
+| acoustic `validation/total_loss` | **28,000** | 0.17800 |
+| variance `validation/dur_loss` | **16,000** | 0.07797, 이후 계속 상승 |
+| variance `validation/pitch_loss` | **32,000** | 0.00861, 중단 시점까지 하강 중 |
 | variance `validation/total_loss` | 20,000 | dur 이 지배하는 절충값 |
 
 `total_loss` 로 고른 20k 로 피치를 뽑으면 32k 보다 **f0 오차가 25% 크다**. 그래서
@@ -58,16 +56,22 @@ bash pansori/examples/run_examples.sh    # 예시 재생성 (최적 체크포인
 
 `num_ckpt_keep: 8` 이 오래된 것을 지우므로 위 체크포인트들은 **`checkpoints/best/`** 에
 `{exp}_step{N}.ckpt` 로 복사해 뒀다 (1.6 GB, gitignore 대상이라 저장소엔 없다).
-`run_examples.sh` 가 실행 시 실험 디렉토리에 없으면 되돌려 놓는다.
+
+```sh
+bash pansori/examples/run_examples.sh    # 예시 재생성 (복원 + 최적 선택 자동)
+tensorboard --logdir checkpoints
+```
 
 ## 해야 할 것
 
-### A. 학습 지켜보기 (진행 중)
-1. 과적합 시작점을 TensorBoard `validation/total_loss` 로 잡을 것. 학습 loss 는 계속
-   내려가도 검증이 돌아서면 거기가 쓸 체크포인트다
-2. VRAM 이 24 GB 중 9.0 GB 뿐이다. 급하면 `make_configs.py` 의 `max_batch_frames` 를
-   올릴 수 있다 — 다만 lr 은 현재 배치 기준이므로 같이 손봐야 하고, upstream 기본값과의
-   비교 가능성을 잃는다
+### A. 다음 학습 때
+1. **`max_updates` 를 줄이거나 조기 종료를 붙일 것.** acoustic 은 28k 에서 이미 최선이었고
+   나머지 72k step 은 GPU 3시간을 태웠을 뿐이다. `num_ckpt_keep` 도 같이 올릴 것 —
+   지금 값(8)이면 최적 체크포인트가 남지 않는다
+2. VRAM 이 24 GB 중 6.1 GB 뿐이었다. `make_configs.py` 의 `max_batch_frames` 를 올릴 수
+   있지만 lr 은 현재 배치 기준이라 같이 손봐야 하고, upstream 기본값과의 비교 가능성을 잃는다
+3. **증강은 아직 안 켰다.** `use_key_shift_embed`/`use_speed_embed` + `augmentation_args`.
+   화자 편중이 심하므로(상위 3명이 36%) 소수 화자에는 도움이 될 수 있다
 
 ### B. 추론 — 개통됨
 3. `bash pansori/examples/run_examples.sh` 가 사다리 4단(원본/재합성/피치예측/전체추론)과
@@ -127,5 +131,6 @@ bash pansori/examples/run_examples.sh    # 예시 재생성 (최적 체크포인
   f0 RMSE 가 ±17%, mel L1 이 ±8% 움직인다 (`seed_spread.py`). 트랙끼리 비교하려면
   시드를 고정하거나 여러 번 뽑아 중앙값을 쓸 것
 - **최근 체크포인트가 최선이 아니다 — 이제 도구가 지킨다.** `best_ckpt.py` 가 검증 손실 최저
-  step 을 고르고, `num_ckpt_keep` 으로 진짜 최저가 이미 삭제됐으면 그 사실을 알린다
+  step 을 고르고, `run_examples.sh` 가 `checkpoints/best/` 에서 삭제된 것을 되돌려 놓는다.
+  이번에 실제로 발동했다 — acoustic 최적(28k)이 학습 종료 시점에 이미 지워져 있었다
 - **정권진(226발화)은 홀드아웃에서 자동 해제됨** — 곡 하나가 화자 전부라 학습 데이터가 0이 됐음
