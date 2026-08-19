@@ -79,7 +79,7 @@ def b64_audio(path):
 
 
 def audio_tag(mp3_path):
-    return (f'<audio controls preload="none" '
+    return (f'<audio controls preload="metadata" '
             f'src="data:audio/mpeg;base64,{b64_audio(mp3_path)}"></audio>')
 
 
@@ -154,76 +154,117 @@ def stages():
 # ---------------------------------------------------------------- diagrams
 
 
+SCHEMA_ITEM = '01ed19bb_0003'
+
+
+def _label_row(item):
+    for r in csv.DictReader(open(REPO / 'pansori/data/full/transcriptions.csv', encoding='utf-8')):
+        if r['name'] == item:
+            return r
+    raise SystemExit(f'{item} 없음')
+
+
 def schema_diagram():
-    """Old (melody on the phoneme axis) vs new (two independent axes)."""
-    phones = ['tt', 'eo', 'L', 'r', 'i', 'd', 'u', 'NG']
-    old_ph = ['tt', 'eo', 'L', 'r', 'i', 'i', 'd', 'u', 'NG', 'NG']
-    old_slur = [0, 0, 0, 0, 0, 1, 0, 0, 0, 1]
-    W, x0, cw = 1100, 118, 88
+    """Both label formats for one real utterance, not an invented example.
+
+    The old row is reconstructed from the same labels: whenever a phone spans
+    more than one note the old format had to repeat it, once per note, flagging
+    every repeat with is_slur. Deriving it rather than drawing a sketch keeps
+    the comparison honest about how much of the old row was duplication.
+    """
+    row = _label_row(SCHEMA_ITEM)
+    phones = row['ph_seq'].split()
+    ph_dur = [float(x) for x in row['ph_dur'].split()]
+    counts = [int(x) for x in row['ph_num'].split()]
+    notes = row['note_seq'].split()
+    note_dur = [float(x) for x in row['note_dur'].split()]
+
+    ph_start, at = [], 0.0
+    for d in ph_dur:
+        ph_start.append(at)
+        at += d
+    nt_start, at = [], 0.0
+    for d in note_dur:
+        nt_start.append(at)
+        at += d
+
+    # old format: one row entry per (phone, overlapping note)
+    old = []
+    for i, p in enumerate(phones):
+        lo, hi = ph_start[i], ph_start[i] + ph_dur[i]
+        hits = [j for j in range(len(notes))
+                if nt_start[j] < hi - 1e-6 and nt_start[j] + note_dur[j] > lo + 1e-6] or [0]
+        for k, j in enumerate(hits):
+            old.append((p, notes[j], 1 if k else 0))
+
+    words, at = [], 0
+    for n in counts:
+        words.append((at, n))
+        at += n
+
+    W = max(1180, 70 * len(old) + 150)
+    x0 = 118
     rows = []
 
-    def box(x, y, w, h, label, cls, small=False):
-        fs = 12 if small else 13.5
-        return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="2" '
+    def box(x, y, w, h, label, cls, fs=12.5):
+        return (f'<rect x="{x:.1f}" y="{y}" width="{w:.1f}" height="{h}" rx="2" '
                 f'class="f-surface s-{cls}" stroke-width="1.2"/>'
-                f'<text x="{x + w / 2}" y="{y + h / 2 + 4.5}" text-anchor="middle" '
+                f'<text x="{x + w / 2:.1f}" y="{y + h / 2 + 4.5}" text-anchor="middle" '
                 f'class="d-mono f-ink" font-size="{fs}">{label}</text>')
 
     def lab(y, text, sub=''):
-        return (f'<text x="8" y="{y}" class="d-mono f-muted" font-size="11">{text}</text>'
-                + (f'<text x="8" y="{y + 14}" class="d-mono f-muted" font-size="9.5">'
-                   f'{sub}</text>' if sub else ''))
+        out = f'<text x="8" y="{y}" class="d-mono f-muted" font-size="11">{text}</text>'
+        if sub:
+            out += (f'<text x="8" y="{y + 14}" class="d-mono f-muted" font-size="9.5">'
+                    f'{sub}</text>')
+        return out
 
-    # --- old ---
+    cw = (W - x0 - 20) / len(old)
     rows.append('<text x="8" y="20" class="d-display f-ochre" font-size="15">'
                 '옛 포맷 — 멜로디가 음소 축 위에</text>')
     rows.append(lab(56, 'ph_seq'))
-    for i, p in enumerate(old_ph):
-        dup = old_slur[i] == 1
-        rows.append(box(x0 + i * cw, 40, cw - 6, 26, p, 'ochre' if dup else 'rule'))
+    for i, (p, n, sl) in enumerate(old):
+        rows.append(box(x0 + i * cw, 40, cw - 5, 26, p, 'ochre' if sl else 'rule'))
     rows.append(lab(92, 'note_seq'))
-    old_notes = ['C4', 'C4', 'C4', 'C4', 'C4', 'D4', 'E4', 'E4', 'E4', 'F4']
-    for i, n in enumerate(old_notes):
-        rows.append(box(x0 + i * cw, 76, cw - 6, 26, n, 'rule', True))
+    for i, (p, n, sl) in enumerate(old):
+        rows.append(box(x0 + i * cw, 76, cw - 5, 26, n, 'rule', 11))
     rows.append(lab(128, 'is_slur'))
-    for i, s in enumerate(old_slur):
-        rows.append(box(x0 + i * cw, 112, cw - 6, 26, str(s),
-                        'ochre' if s else 'rule', True))
+    for i, (p, n, sl) in enumerate(old):
+        rows.append(box(x0 + i * cw, 112, cw - 5, 26, str(sl),
+                        'ochre' if sl else 'rule', 11))
+    dup = sum(1 for _, _, sl in old if sl)
     rows.append(f'<text x="{x0}" y="162" class="d-body f-ochre" font-size="12">'
-                f'세 열이 같은 길이여야 해서 모음을 복제한다 (i·NG 이 두 번씩)</text>')
+                f'세 열이 같은 길이여야 해서 음소를 복제한다 — 음소 {len(phones)}개가 '
+                f'{len(old)}칸이 되고 그 중 {dup}칸이 복제다</text>')
 
-    # --- new ---
     y = 200
     rows.append(f'<line x1="8" y1="{y - 24}" x2="{W - 8}" y2="{y - 24}" '
                 f'class="s-rule" stroke-width="1"/>')
     rows.append(f'<text x="8" y="{y}" class="d-display f-indigo" font-size="15">'
                 f'openvpi — 두 축이 분리</text>')
+
+    span = W - x0 - 20
+    total_dur = sum(ph_dur)
     rows.append(lab(y + 36, 'ph_seq', 'ph_num'))
-    ncw = 106
     for i, p in enumerate(phones):
-        rows.append(box(x0 + i * ncw, y + 20, ncw - 6, 26, p, 'rule'))
-    # word brackets from ph_num 3 2 3
-    groups, at = [(3, '뜰'), (2, '리'), (3, '둥')], 0
-    for n, name in groups:
-        gx, gw = x0 + at * ncw, n * ncw - 6
-        rows.append(f'<path d="M{gx} {y + 52} v6 h{gw} v-6" class="s-none s-indigo" '
+        x = x0 + span * ph_start[i] / total_dur
+        w = span * ph_dur[i] / total_dur
+        rows.append(box(x, y + 20, max(w - 4, 10), 26, p, 'rule', 11.5))
+    for at, n in words:
+        gx = x0 + span * ph_start[at] / total_dur
+        gw = span * sum(ph_dur[at:at + n]) / total_dur - 4
+        rows.append(f'<path d="M{gx:.1f} {y + 52} v6 h{gw:.1f} v-6" class="s-none s-indigo" '
                     f'stroke-width="1.2"/>')
-        rows.append(f'<text x="{gx + gw / 2}" y="{y + 76}" text-anchor="middle" '
-                    f'class="d-body f-indigo" font-size="12.5">'
-                    f'{name} <tspan class="d-mono" font-size="10.5">({n})</tspan></text>')
-        at += n
+        rows.append(f'<text x="{gx + gw / 2:.1f}" y="{y + 76}" text-anchor="middle" '
+                    f'class="d-mono f-indigo" font-size="11">{n}</text>')
     rows.append(lab(y + 108, 'note_seq', 'note_dur'))
-    new_notes = [('C4', 1.6), ('D4', .9), ('E4', 1.9), ('F4', 1.0), ('E4', 1.1), ('C4', 1.5)]
-    total = sum(w for _, w in new_notes)
-    span = len(phones) * ncw - 6
-    nx = x0
-    for n, w in new_notes:
-        bw = span * w / total
-        rows.append(box(nx, y + 92, bw - 5, 26, n, 'indigo', True))
-        nx += bw
+    for j, n in enumerate(notes):
+        x = x0 + span * nt_start[j] / total_dur
+        w = span * note_dur[j] / total_dur
+        rows.append(box(x, y + 92, max(w - 4, 10), 26, n, 'indigo', 11))
     rows.append(f'<text x="{x0}" y="{y + 146}" class="d-body f-indigo" font-size="12">'
-                f'노트는 자기 길이를 갖고 프레임에 따로 정렬된다 — 복제도 is_slur 도 없다. '
-                f'새로 필요한 것은 ph_num 뿐</text>')
+                f'음소 {len(phones)}칸 · 노트 {len(notes)}칸이 각자 자기 길이로 프레임에 정렬된다 — '
+                f'복제도 is_slur 도 없다. 새로 필요한 것은 ph_num 뿐</text>')
 
     return (f'<svg viewBox="0 0 {W} 370" width="{W}" height="370" '
             f'role="img" aria-label="옛 라벨 포맷과 openvpi 포맷 비교">'
@@ -400,7 +441,7 @@ def f0_chart(f0data, item):
             if v is None:
                 pen = False
                 continue
-            x = pad + (W - 2 * pad) * i / max(n - 1, 1)
+            x = pad + 34 + (W - 2 * pad - 34) * i / max(n - 1, 1)
             c = 1200 * math.log2(v / 55)
             y = H - pad - (H - 2 * pad) * (c - lo_c) / span
             d.append(('M' if not pen else 'L') + f'{x:.1f} {y:.1f}')
@@ -411,10 +452,15 @@ def f0_chart(f0data, item):
     grid = []
     for k in range(5):
         y = pad + (H - 2 * pad) * k / 4
-        grid.append(f'<line x1="{pad}" y1="{y}" x2="{W - pad}" y2="{y}" '
+        grid.append(f'<line x1="{pad + 34}" y1="{y}" x2="{W - pad}" y2="{y}" '
                     f'class="s-rule" stroke-width="1"/>')
+        hz = 55 * 2 ** ((hi_c - span * k / 4) / 1200)
+        grid.append(f'<text x="{pad + 28}" y="{y + 3.5}" text-anchor="end" '
+                    f'class="d-mono f-muted" font-size="9.5">{hz:.0f}</text>')
+    grid.append(f'<text x="{pad + 28}" y="{pad - 12}" text-anchor="end" '
+                f'class="d-mono f-muted" font-size="9">Hz</text>')
     for k in range(0, int(n * step) + 1):
-        x = pad + (W - 2 * pad) * (k / step) / max(n - 1, 1)
+        x = pad + 34 + (W - 2 * pad - 34) * (k / step) / max(n - 1, 1)
         if x <= W - pad:
             grid.append(f'<text x="{x:.0f}" y="{H - 10}" text-anchor="middle" '
                         f'class="d-mono f-muted" font-size="10">{k}s</text>')

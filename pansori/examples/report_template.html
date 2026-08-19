@@ -400,9 +400,11 @@ footer code { background: none; padding: 0; }
   <figure>
     <div class="chartwrap">{{SCHEMA_DIAGRAM}}</div>
     <figcaption>
-      같은 구간(뜰리 둥 · 자르뜩)의 두 표현. 위는 음소 축에 노트를 얹느라 모음을 복제하고,
-      아래는 음소·노트가 각자의 축에서 프레임에 정렬된다. 새 포맷에서 추가로 필요해진 것은
-      <code>ph_num</code> 하나뿐이고, MFA 의 <code>words</code> tier 에서 유도했다.
+      실제 발화 하나(<span class="mono">01ed19bb_0003</span> · 뜰리 둥 자르뜩)를 두 포맷으로
+      그린 것이다. 위쪽 옛 포맷 행은 스케치가 아니라 <b>같은 라벨에서 재구성</b>했다 — 음소가 노트
+      경계를 넘을 때마다 복제되므로 음소 16개가 24칸이 되고 그 중 8칸이 복제다. 아래쪽은 음소와
+      노트가 각자 자기 길이로 프레임에 정렬된다. 새로 필요해진 것은 <code>ph_num</code> 하나뿐이고,
+      MFA 의 <code>words</code> tier 에서 유도했다.
     </figcaption>
   </figure>
 </div></div>
@@ -439,19 +441,19 @@ footer code { background: none; padding: 0; }
         <tr>
           <td>구개음화 활음 미반영</td>
           <td class="mono">냐 → n a</td>
-          <td class="mono">c cʰ c͈ ç ɲ ɟ ʝ ɕʰ ɕ͈ 에 ` y` 추가</td>
+          <td><span class="mono">c cʰ c͈ ç ɲ ɟ ʝ ɕʰ ɕ͈</span> 에 활음 <span class="mono">y</span> 추가</td>
           <td class="num">ç 22.8 → <b>74.1%</b><br>ɲ 61.0 → <b>84.5%</b></td>
         </tr>
         <tr>
           <td>ɸ 를 ㅍ 으로 매핑</td>
           <td class="mono">후 → p w u</td>
-          <td class="mono">ɸ→h, 그리고 ʷ 가 o/u 앞이면 활음 생략</td>
+          <td><span class="mono">ɸ→h</span>, 그리고 <span class="mono">ʷ</span> 가 o/u 앞이면 활음 생략</td>
           <td class="num">ɸ 0 → <b>96.9%</b><br>ʷ 전체 <b>93.9%</b></td>
         </tr>
         <tr>
           <td>ʎ 가 모든 위치에서 오답</td>
           <td class="mono">빨리 → pp a L i</td>
-          <td class="mono">L r|L y — ㄹㄹ 겹침은 두 토큰</td>
+          <td><span class="mono">L r|L y</span> — ㄹㄹ 겹침은 두 토큰</td>
           <td class="num">ʎ 0 → <b>84.5%</b></td>
         </tr>
         <tr class="rule-top">
