@@ -19,11 +19,20 @@ pansori/
 │   ├── VERDICT.md         ★ 왜 6초인가 — 세그멘테이션을 바꾸기 전에 읽을 것
 │   ├── ipa_to_coda.csv    korean_mfa IPA (108) → Coda (34)
 │   └── check_dict_agreement.py  ★ 매핑을 고치기 전후로 반드시 돌릴 채점기
+├── examples/              ★ 추론·평가. 학습 후 여기서부터 돈다 (§5)
+│   ├── run_examples.sh    사다리 4단 + 악보 합성 일괄 생성
+│   ├── scores/*.txt       악보 (음절 노트 길이초). 파일을 넣으면 자동으로 합성된다
+│   ├── measure.py         f0 RMSE · mel L1 · 유무성 일치
+│   ├── f0_report.py       시김새 평탄화 측정 (--seeds N 으로 중앙값 판정)
+│   ├── seed_spread.py     같은 입력의 시드별 편차 — 수치를 믿기 전에 볼 것
+│   ├── best_ckpt.py       검증 손실 최저 체크포인트 선택
+│   └── build_report.py    설명 + 오디오를 한 페이지로 렌더링
 ├── experiments/           세그멘테이션 알고리즘 시뮬레이션 (01 의 근거)
 ├── eval/                  resynth_ladder.py / f0_metrics.py / midi_baseline.py
-│                          ※ 아직 24 kHz 기준. 44.1 kHz + NsfHifiGAN 으로 개작 필요
+│                          ※ 24 kHz 기준 구 스크립트. examples/ 가 대체하므로 폐기 검토
 ├── docs/                  PORTING.md, VIBRATO_VERDICT.md, SIGIMSAE_PLAN.md
 ├── build_dictionary.py    한글 11,172음절 → Coda 34음소 사전 생성
+├── make_ds.py             라벨 또는 악보 → .ds (추론 입력)
 ├── make_configs.py        화자 목록을 읽어 configs/pansori_*.yaml 렌더링
 └── compute_spec_stats.py  이 코퍼스의 mel 포락선 실측 → spec_min/spec_max
 ```
@@ -125,7 +134,46 @@ python scripts/train.py --config configs/pansori_variance.yaml --exp_name pansor
 
 ---
 
-## 5. 알아둘 것
+## 5. 추론과 평가
+
+```sh
+bash pansori/examples/run_examples.sh          # 사다리 + 악보 합성 → examples/out/
+python pansori/examples/measure.py             # 원본 대비 점수
+python pansori/examples/f0_report.py --seeds 5 # 평탄화 판정
+python pansori/examples/build_report.py        # 설명 + 오디오 한 페이지
+```
+
+`run_examples.sh` 는 홀드아웃 발화마다 **사다리 4단**을 만든다. 위에서 아래로 갈수록 모델이
+스스로 만들어야 하는 것이 늘어나므로, 결과가 나쁠 때 어느 단계 탓인지 가를 수 있다.
+
+| | 준 것 | 모델이 만든 것 |
+|---|---|---|
+| `1_orig` | — | — (원본 녹음) |
+| `2_resynth` | `ph_dur` + `f0` | mel |
+| `3_pitch` | `ph_dur` | `f0` + mel |
+| `4_full` | 노트 + 가사 | `ph_dur` + `f0` + mel |
+
+새 노래를 부르게 하려면 `examples/scores/` 에 파일 하나를 넣으면 된다:
+
+```
+_   rest  0.30      # '_' 는 쉼표 → SP
+춘  A4    0.45
+향  G4    0.40
+-   F4    0.55      # '-' 는 앞 음절이 이어짐 (시김새·melisma)
+```
+
+### 수치를 믿기 전에
+
+- **두 모델 다 reflow 샘플러다.** 시드만 바꿔도 `f0 RMSE` 가 ±17%, `mel L1` 이 ±8% 움직인다
+  (`seed_spread.py`). 트랙끼리 비교하려면 시드를 고정하거나 여러 번 뽑아 중앙값을 쓸 것.
+- **체크포인트는 헤드마다 다르다.** variance 의 `dur_loss` 와 `pitch_loss` 는 서로 다른
+  step 에서 최저다. `run_examples.sh` 가 헤드별로 골라 variance 를 두 번 돌린다.
+- **`--spk` 는 한글 화자명을 못 받는다** (`utils/infer_utils.py:55`). `make_ds.py` 가
+  `.ds` 의 `spk_mix` 에 직접 써서 우회한다.
+
+---
+
+## 6. 알아둘 것
 
 - **화자는 `datasets:` 항목 단위로 지정된다.** 23명(명창 22 + pooled `unknown`)이 각각 자기
   디렉토리를 갖는다. `make_configs.py` 가 발화 수 내림차순으로 `spk_id` 를 매긴다.
