@@ -55,37 +55,37 @@ acoustic 약 5.5시간이고, variance 가 끝나면 acoustic 속도는 되돌�
    올릴 수 있다 — 다만 lr 은 현재 배치 기준이므로 같이 손봐야 하고, upstream 기본값과의
    비교 가능성을 잃는다
 
-### C. 추론
-4. `scripts/infer.py acoustic <ds> --exp pansori_ac_v1` 로 새 가사+노트 합성.
+### B. 추론
+3. `scripts/infer.py acoustic <ds> --exp pansori_ac_v1` 로 새 가사+노트 합성.
    **구 파이프라인에 없던 경로** — 사전이 생겨서 가사→음소 추론이 가능해졌다.
    variance 를 앞에 붙이면 노트만으로 dur/f0 까지 생성된다
 
-### D. 평가 (개작 필요)
-5. `pansori/eval/resynth_ladder.py`, `f0_metrics.py` 가 아직 24 kHz/80 mel/구 추론 API 기준.
+### C. 평가 (개작 필요)
+4. `pansori/eval/resynth_ladder.py`, `f0_metrics.py` 가 아직 24 kHz/80 mel/구 추론 API 기준.
    44.1 kHz + NsfHifiGAN + `scripts/infer.py` 로 개작
-6. `pansori/eval/midi_baseline.py` 를 새 variance 모델에 돌려 **f0 평탄화가 여전한지 재측정**.
+5. `pansori/eval/midi_baseline.py` 를 새 variance 모델에 돌려 **f0 평탄화가 여전한지 재측정**.
    구 진단("결정론적 회귀 + L1 → 조건부 중앙값 → 평탄화")의 전제가 reflow 생성 모델에는
    그대로 적용되지 않는다. 여기 결과가 나오기 전엔 contour tokenizer 를 붙이지 말 것
 
-### E. 남은 라벨 이슈 (측정만 해둠)
+### D. 남은 라벨 이슈 (측정만 해둠)
 `check_dict_agreement.py --syllables N --focus <기호>` 로 언제든 다시 잴 수 있다.
 고치면 04(`--skip_mfa`) → 06 → 07 이 2분, 08 재커팅이 20분이다. **MFA 재실행은 불필요.**
 
-7. **ㅈ/ㅉ/ㅊ + 활음** (96건+): 죠는 [tɕo] 라 MFA 는 `j o`, 사전은 `j y o`.
+6. **ㅈ/ㅉ/ㅊ + 활음** (96건+): 죠는 [tɕo] 라 MFA 는 `j o`, 사전은 `j y o`.
    한국어에서 죠/조는 동음이므로 이건 **사전 쪽 문제**다 — `ipa_to_coda.csv` 에 `y` 를 붙이면
    훨씬 흔한 조까지 `j y o` 가 된다. 고치려면 `build_dictionary.py` 를 손대야 한다
-8. **요 → `y eo` vs 사전 `y o`** (156건): 모음 쪽 이슈. 아직 안 봤다
-9. **ㄴ 이 `d` 로** (내/나/니/너, 합계 700건+): MFA 오인식이지 매핑 문제가 아니다.
+7. **요 → `y eo` vs 사전 `y o`** (156건): 모음 쪽 이슈. 아직 안 봤다
+8. **ㄴ 이 `d` 로** (내/나/니/너, 합계 700건+): MFA 오인식이지 매핑 문제가 아니다.
    매핑으로는 못 고친다
-10. **무음 흡수 임계**: 50 ms 만 겹쳐도 무음 전체를 흡수. 커버율 50% 미만인 흡수 구간이
+9. **무음 흡수 임계**: 50 ms 만 겹쳐도 무음 전체를 흡수. 커버율 50% 미만인 흡수 구간이
     6.2%(3,772개)
-11. 잔여 불일치의 다수는 **정상적인 연음**이다 (은 → `eu n`, 좋 → `j o`). 문맥 없는 음절
+10. 잔여 불일치의 다수는 **정상적인 연음**이다 (은 → `eu n`, 좋 → `j o`). 문맥 없는 음절
     사전으로는 재현할 수 없는 것이 맞다 — 일치율 100% 는 목표가 아니다
 
-### F. 정리 / 결정
-12. `~/Desktop/DiffSinger_moonInRiver` 를 origin 에 push 할지 (로컬 커밋만 되어 있음)
-13. 정리 대상: 구 24 kHz `wavs/`(5.5 GB), 구 `data/binary/pansori*`(16 GB) — 검증 후
-14. **들숨(AP) 라벨링**: 지금은 `merged_phoneme_groups: [[SP, AP]]` 로 무음과 합쳐 뒀다.
+### E. 정리 / 결정
+11. `~/Desktop/DiffSinger_moonInRiver` 를 origin 에 push 할지 (로컬 커밋만 되어 있음)
+12. 정리 대상: 구 24 kHz `wavs/`(5.5 GB), 구 `data/binary/pansori*`(16 GB) — 검증 후
+13. **들숨(AP) 라벨링**: 지금은 `merged_phoneme_groups: [[SP, AP]]` 로 무음과 합쳐 뒀다.
     판소리는 들숨이 크게 들리므로 따로 라벨할 값어치가 있을 수 있다. 하려면 06 에
     에너지 기반 판정을 넣고 재-binarize
 
