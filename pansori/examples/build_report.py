@@ -379,43 +379,73 @@ def ladder(metrics):
     return '\n'.join(blocks)
 
 
+SCORE_INFO = {
+    'sarangga': ('사랑가', '춘향가 첫 구절'),
+    'sigimsae': ('시김새', '한 음절을 여러 노트에 굴리는 판소리의 핵심 기법'),
+}
+
+
+def score_names():
+    return sorted(p.stem for p in (EX / 'scores').glob('*.txt'))
+
+
 def score_ladder():
-    rungs = []
-    for mp3 in sorted(OUT.glob('5_score_*.mp3')):
-        spk = mp3.stem.rsplit('_', 1)[-1]
-        rungs.append(
-            f'<div class="rung">'
-            f'<div class="rung-label"><span class="name pred">{spk}</span>'
-            f'<span class="sub">같은 악보 · 화자만 교체</span></div>'
-            f'{audio_tag(mp3)}'
-            f'<div class="rung-metrics"><span>원본 없음</span></div></div>'
+    blocks = []
+    for name in score_names():
+        rungs = []
+        for mp3 in sorted(OUT.glob(f'5_score_{name}_*.mp3')):
+            spk = mp3.stem.rsplit('_', 1)[-1]
+            rungs.append(
+                f'<div class="rung">'
+                f'<div class="rung-label"><span class="name pred">{spk}</span>'
+                f'<span class="sub">같은 악보 · 화자만 교체</span></div>'
+                f'{audio_tag(mp3)}'
+                f'<div class="rung-metrics"><span>원본 없음</span></div></div>'
+            )
+        if not rungs:
+            continue
+        title, sub = SCORE_INFO.get(name, (name, '새 악보'))
+        blocks.append(
+            f'<div class="utt"><div class="utt-head"><h3>{title}</h3>'
+            f'<span class="meta">{sub} · 녹음 없음</span></div>'
+            f'<div class="rungs">{"".join(rungs)}</div></div>'
         )
-    if not rungs:
-        return ''
-    return (f'<div class="utt"><div class="utt-head"><h3>사랑가</h3>'
-            f'<span class="meta">춘향가 · 새 악보 · 녹음 없음</span></div>'
-            f'<div class="rungs">{"".join(rungs)}</div></div>')
+    return '\n'.join(blocks)
 
 
 def score_block():
-    src = EX / 'scores' / 'sarangga.txt'
-    if not src.exists():
-        return ''
-    lines = [l for l in src.read_text(encoding='utf-8').splitlines()
-             if l.strip() and not l.strip().startswith('#')]
-    ds = EX / 'ds' / 'sarangga_김소희.ds'
-    phon = ''
-    if ds.exists():
-        seg = json.loads(ds.read_text(encoding='utf-8'))[0]
-        phon = (f'<div style="margin-top:.9rem;font-family:var(--mono);font-size:.78rem;'
-                f'color:var(--muted);overflow-x:auto;white-space:nowrap">'
-                f'<span style="color:var(--indigo)">ph_seq</span>&nbsp; {seg["ph_seq"]}<br>'
-                f'<span style="color:var(--indigo)">ph_num</span>&nbsp; {seg["ph_num"]}</div>')
-    cols = '<br>'.join(
-        '&nbsp;'.join(f'<span style="display:inline-block;min-width:2.2rem">{p}</span>'
-                      for p in l.split()) for l in lines)
-    return (f'<div style="font-family:var(--mono);font-size:.78rem;line-height:1.5;'
-            f'columns:3;column-gap:2rem">{cols}</div>{phon}')
+    """Each score next to the phoneme sequence the dictionary produced from it."""
+    out = []
+    for name in score_names():
+        src = EX / 'scores' / f'{name}.txt'
+        lines = [l for l in src.read_text(encoding='utf-8').splitlines()
+                 if l.strip() and not l.strip().startswith('#')]
+        ds = next(iter(sorted((EX / 'ds').glob(f'{name}_*.ds'))), None)
+        title, _ = SCORE_INFO.get(name, (name, ''))
+        stats = phon = ''
+        if ds and ds.exists():
+            seg = json.loads(ds.read_text(encoding='utf-8'))[0]
+            n_ph = len(seg['ph_seq'].split())
+            n_note = len(seg['note_seq'].split())
+            stats = (f'<span class="mono" style="color:var(--muted);font-size:.74rem">'
+                     f'음소 {n_ph} · 노트 {n_note}</span>')
+            phon = (f'<div style="margin-top:.8rem;font-family:var(--mono);font-size:.76rem;'
+                    f'color:var(--muted);overflow-x:auto;white-space:nowrap">'
+                    f'<span style="color:var(--indigo)">ph_seq</span>&nbsp; {seg["ph_seq"]}<br>'
+                    f'<span style="color:var(--indigo)">ph_num</span>&nbsp; {seg["ph_num"]}<br>'
+                    f'<span style="color:var(--indigo)">note_slur</span>&nbsp; {seg["note_slur"]}'
+                    f'</div>')
+        cols = '<br>'.join(
+            '&nbsp;'.join(f'<span style="display:inline-block;min-width:2.2rem">{p}</span>'
+                          for p in l.split()) for l in lines)
+        out.append(
+            f'<div style="padding:.2rem 0 1.4rem">'
+            f'<div style="display:flex;gap:1rem;align-items:baseline;margin-bottom:.7rem">'
+            f'<b style="font-family:var(--display);font-size:1rem">{title}</b>{stats}</div>'
+            f'<div style="font-family:var(--mono);font-size:.76rem;line-height:1.5;'
+            f'columns:3;column-gap:2rem">{cols}</div>{phon}</div>'
+        )
+    return '<hr style="border:0;border-top:1px solid var(--rule);margin:1.2rem 0">'.join(out)
 
 
 # ---------------------------------------------------------------- f0
