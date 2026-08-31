@@ -8,6 +8,9 @@ pansori_lib.convert_phone. Silence is kept as a 'sil' placeholder here;
 Stage 6 decides (using ROSVOT notes) whether it is a held vowel or a real SP.
 
 Input : data/{set}/segments.jsonl + lyrics.jsonl + wavs/*.wav
+        (--lyrics picks another lyrics file, e.g. 03b's lyrics_snapped.jsonl;
+         --suffix keeps a second run's corpus/aligned/phones side by side so
+         two lyric sources can be aligned and compared)
 Output: data/{set}/phones.jsonl   {item_name, phones:[[coda,start,end],...],
                                    words:[[syllable,start,end],...]}
         (+ data/{set}/mfa_corpus/, data/{set}/aligned/ as intermediates)
@@ -31,9 +34,9 @@ DICTIONARY = "korean_mfa"
 MIN_HANGUL = 2  # skip utterances with too little text to align
 
 
-def build_corpus(out_dir: Path, segments, lyrics) -> Path:
-    """Create mfa_corpus/{item}.wav (symlink) + {item}.lab (normalized text)."""
-    corpus = out_dir / "mfa_corpus"
+def build_corpus(out_dir: Path, segments, lyrics, suffix: str = "") -> Path:
+    """Create mfa_corpus{suffix}/{item}.wav (symlink) + {item}.lab (text)."""
+    corpus = out_dir / f"mfa_corpus{suffix}"
     corpus.mkdir(exist_ok=True)
     text_by_item = {r["item_name"]: r["text"] for r in lyrics}
 
@@ -105,15 +108,26 @@ def main() -> None:
     parser.add_argument("--set", default="pilot_6s")
     parser.add_argument("--skip_mfa", action="store_true",
                         help="reuse an existing aligned/ dir, only re-parse")
+    parser.add_argument("--lyrics", default="lyrics.jsonl",
+                        help="which lyrics file under data/{set} to align")
+    parser.add_argument("--suffix", default="",
+                        help="tag mfa_corpus/aligned/phones so runs can coexist")
+    parser.add_argument("--items", default="",
+                        help="file of item_names to align, one per line")
     args = parser.parse_args()
 
     out_dir = set_dir(args.set)
     segments = read_jsonl(out_dir / "segments.jsonl")
-    lyrics = read_jsonl(out_dir / "lyrics.jsonl")
-    aligned = out_dir / "aligned"
+    lyrics = read_jsonl(out_dir / args.lyrics)
+    aligned = out_dir / f"aligned{args.suffix}"
+
+    if args.items:
+        wanted = set(Path(args.items).read_text(encoding="utf-8").split())
+        segments = [r for r in segments if r["item_name"] in wanted]
+        lyrics = [r for r in lyrics if r["item_name"] in wanted]
 
     if not args.skip_mfa:
-        corpus = build_corpus(out_dir, segments, lyrics)
+        corpus = build_corpus(out_dir, segments, lyrics, args.suffix)
         run_mfa(corpus, aligned)
 
     mapping = load_ipa_to_coda()
@@ -122,10 +136,10 @@ def main() -> None:
         parsed = textgrid_to_coda(tg_path, mapping)
         rows.append({"item_name": tg_path.stem, **parsed})
 
-    write_jsonl(out_dir / "phones.jsonl", rows)
+    write_jsonl(out_dir / f"phones{args.suffix}.jsonl", rows)
     aligned_n = len(rows)
     oov = sorted({p[0] for r in rows for p in r["phones"] if p[0].startswith("<OOV")})
-    print(f"정렬 완료 {aligned_n}/{len(segments)} → phones.jsonl")
+    print(f"정렬 완료 {aligned_n}/{len(segments)} → phones{args.suffix}.jsonl")
     if oov:
         print(f"⚠ OOV 발생: {oov}")
 

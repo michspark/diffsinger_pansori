@@ -49,6 +49,36 @@ def load_speakers(out_dir: Path, drop_unknown: bool):
     return item2spk
 
 
+def link_wavs(out_root: Path, link_root: Path, songs, by_song, item2spk):
+    """Point each speaker's wavs/ at an existing corpus instead of cutting again.
+
+    The lyrics A/B (whisper vs 창본-snapped) changes only the labels -- the audio is
+    cut from the same source at the same sample boundaries, so re-cutting 14 GB to
+    get a byte-identical copy is pure waste. One symlink per speaker instead.
+
+    A speaker's wavs/ holds every item that speaker ever had, so the link can carry
+    items this variant dropped; that is harmless, because the binarizer walks
+    transcriptions.csv and looks wavs up by name (preprocessing/acoustic_binarizer.py:74-79).
+    Counting is still per item, not per link, so the printed totals mean the same
+    thing they do after a real cut.
+    """
+    written = collections.Counter()
+    missing = []
+    for stem in songs:
+        for name in by_song[stem]:
+            speaker = item2spk[name]
+            if not (link_root / speaker / "wavs" / f"{name}.wav").exists():
+                missing.append(name)
+                continue
+            dest = out_root / speaker / "wavs"
+            if not dest.exists():
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.symlink_to((link_root / speaker / "wavs").resolve())
+            written[speaker] += 1
+    print(f"오디오 링크: {link_root} → {out_root}  ({len(written)}명)")
+    return written, missing
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Stage 8: 44.1 kHz export, per speaker")
     parser.add_argument("--set", default="full")
@@ -56,6 +86,9 @@ def main() -> None:
                         help="repo-relative output root")
     parser.add_argument("--drop_unknown", action="store_true",
                         help="exclude the pooled 'unknown' speaker")
+    parser.add_argument("--wavs_from", default="",
+                        help="symlink each speaker's wavs/ to this corpus instead "
+                             "of re-cutting the audio (the A/B variants share it)")
     parser.add_argument("--limit", type=int, default=0,
                         help="stop after N songs (smoke test)")
     args = parser.parse_args()
@@ -81,6 +114,10 @@ def main() -> None:
 
     written = collections.Counter()
     missing_audio = []
+    if args.wavs_from:
+        written, missing_audio = link_wavs(
+            out_root, repo_root / args.wavs_from, songs, by_song, item2spk)
+        songs = []                        # nothing left to cut
     for stem in tqdm(songs, desc="songs"):
         wav_path = AUDIO_DIR / f"{stem}.wav"
         if not wav_path.exists():
@@ -131,7 +168,8 @@ def main() -> None:
     for speaker, count in written.most_common():
         print(f"  {speaker:12s} {count:6,d}")
     if missing_audio:
-        print(f"\n⚠ 원본 오디오 없음: {len(missing_audio)}곡  예) {missing_audio[:3]}")
+        unit = "발화" if args.wavs_from else "곡"
+        print(f"\n⚠ 오디오 없음: {len(missing_audio)}{unit}  예) {missing_audio[:3]}")
     print(f"\ndatasets 블록: {out_root / 'datasets.yaml'}")
 
 

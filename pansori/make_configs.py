@@ -6,7 +6,7 @@ The `datasets:` list is one entry per speaker and has to agree with what
 Everything else is a thin layer over configs/acoustic.yaml and configs/variance.yaml;
 only the keys that pansori actually needs to differ are set here.
 
-Usage: python pansori/make_configs.py [--data data/pansori]
+Usage: python pansori/make_configs.py [--data data/pansori] [--name pansori]
 """
 
 import argparse
@@ -107,6 +107,16 @@ pl_trainer_precision: '16-mixed'
 """
 
 VARIANCE = """
+# upstream VarianceTask + 부류별 음소 길이 지표. upstream 파일은 그대로 두고
+# task_cls 만 바꿔 끼운다 — 근거와 무엇이 더 붙는지는 pansori/variance_task.py 머리말.
+# 기존 rhythm_corr / ph_dur_acc 도 그대로 나온다 (이전 런과의 비교선 유지).
+task_cls: pansori.variance_task.PansoriVarianceTask
+
+# 새 지표를 몇 발화까지 재는가. 0 = 검증셋 전체.
+# upstream 의 rhythm_corr / ph_dur_acc 는 num_valid_plots(10) 에 묶여 있어 앞 10발화만
+# 채점한다. duration 추론은 conv 하나라 사실상 공짜이므로 전체로 돌린다.
+num_valid_metric_items: 0
+
 predict_dur: true
 predict_pitch: true
 predict_energy: false
@@ -158,6 +168,10 @@ def datasets_block(data_root: Path, rel: str) -> tuple:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--data', default='data/pansori')
+    parser.add_argument('--name', default='pansori',
+                        help='출력 파일 이름 앞부분 → configs/{name}_{kind}.yaml. '
+                             '가사 A/B 처럼 코퍼스가 둘일 때 baseline config 를 '
+                             '덮어쓰지 않게 한다')
     args = parser.parse_args()
 
     repo = Path(__file__).resolve().parent.parent
@@ -170,7 +184,7 @@ def main() -> None:
                 + COMMON.format(data=args.data, kind=kind, n_spk=n_spk,
                                 num_spk=n_spk + 1, ignored=ignored)
                 + tail)
-        out = repo / 'configs' / f'pansori_{kind}.yaml'
+        out = repo / 'configs' / f'{args.name}_{kind}.yaml'
         out.write_text(text, encoding='utf-8')
         print(f'{out}  (화자 {n_spk}명)')
 
