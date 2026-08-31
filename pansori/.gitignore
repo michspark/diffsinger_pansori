@@ -12,3 +12,13 @@ __pycache__/
 # server/run.sh 를, 그 뒤 커밋은 examples/run_examples.sh 를 조용히 빠뜨렸다 —
 # `git add` 가 경고 없이 넘어가므로 눈치채기 어렵다. 하위 전체에서 되돌린다.
 !**/*.sh
+
+# 계측 산출물 (jsonl, HTML, MFA 작업 디렉토리)
+eval/out/
+
+# understand-anything 이 만든 지식 그래프 — 코드에서 재생성되는 산출물이다.
+.ua/
+
+# 창본 전문. 출판된 사설집을 옮긴 것이라 추적하지 않는다. 원본 Lyrics/ 가 있으면
+# build_corpus.py 로 재생성되고, VERDICT.md 가 그 수치를 들고 있다.
+lyricbook/corpus.jsonl

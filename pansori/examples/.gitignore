@@ -2,3 +2,9 @@
 out/
 ds/
 report.html
+listening_test.html
+
+# 가사 A/B 의 두 번째 팔과 ab_ladder.py 의 렌더 (§7)
+out_snap/
+ds_snap/
+ab_out/
