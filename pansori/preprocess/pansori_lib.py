@@ -11,6 +11,7 @@ them, so this module imports cleanly in every conda env the stages run under
 import csv
 import json
 import re
+import unicodedata
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -47,6 +48,44 @@ CODA_36 = {
 # Legal ph_seq tokens = Coda-36 plus the two non-speech markers.
 ALLOWED_PH = CODA_36 | {"SP", "AP"}
 
+# Glides open a nucleus like a vowel does, but they are neither vowel nor
+# consonant for the purpose of measuring durations -- they ride on the vowel.
+CODA_GLIDES = {"y", "w"}
+
+# Coda consonants are spelled uppercase by convention (convert_phone's 'A|B'
+# rule), so the split is mechanical rather than a second hand-kept list.
+CODA_CODAS = {p for p in CODA_36 if p.isupper()}
+CODA_ONSETS = CODA_36 - CODA_VOWELS - CODA_GLIDES - CODA_CODAS
+
+# The order the report and the training metrics both iterate in. Onsets first
+# because that is where the duration floor concentrates.
+PHONE_CLASSES = ("onset", "coda", "vowel", "glide", "sp")
+
+
+def phone_class(phone: str) -> str:
+    """Which duration-behaviour group a ph_seq token belongs to.
+
+    Onset and coda are split apart rather than lumped as 'consonant' because
+    they behave completely differently under forced alignment: in this corpus
+    onsets sit at MFA's 30 ms floor ~40% of the time while codas do so ~12%.
+    A single 'consonant' number averages that distinction away, which is the
+    whole thing worth seeing.
+
+    Unknown tokens return 'other' rather than raising -- a metric must never be
+    the reason a training run dies.
+    """
+    if phone in ("SP", "AP"):
+        return "sp"
+    if phone in CODA_VOWELS:
+        return "vowel"
+    if phone in CODA_GLIDES:
+        return "glide"
+    if phone in CODA_CODAS:
+        return "coda"
+    if phone in CODA_ONSETS:
+        return "onset"
+    return "other"
+
 # IPA vowel bases (diacritics stripped), for the "next phone is a vowel" tests.
 IPA_VOWEL_BASE = {"i", "e", "ɛ", "a", "ɐ", "ʌ", "o", "u", "ɨ"}
 
@@ -72,6 +111,22 @@ def normalize_repeats(text: str) -> str:
     text = re.sub(r"([가-힣])(\.\.\.\s*\1){2,}", r"\1", text)
     text = re.sub(r"\.{2,}", " ", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+def hangul_only(text: str) -> str:
+    """Drop everything that is not a Hangul syllable. Used for text matching."""
+    return "".join(ch for ch in text if "\uac00" <= ch <= "\ud7a3")
+
+
+def to_jamo(text: str) -> str:
+    """Hangul syllables -> their NFD jamo, non-Hangul dropped.
+
+    Matching Whisper's pansori output against a 창본 syllable-by-syllable fails:
+    '굴러' and '군로' share no syllable at all. In jamo they are ㄱㅜㄹㄹㅓ vs
+    ㄱㅜㄴㄹㅗ, which overlaps most of the way -- Whisper's errors are usually one
+    jamo off, not one syllable off, so the finer unit is what carries the signal.
+    """
+    return unicodedata.normalize("NFD", hangul_only(text))
 
 
 # ---------------------------------------------------------------- IPA -> Coda (Stage 4)
