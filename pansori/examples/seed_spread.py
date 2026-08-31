@@ -41,16 +41,21 @@ def main():
     parser.add_argument('--ac-ckpt', type=int)
     parser.add_argument('--dur-ckpt', type=int)
     parser.add_argument('--pitch-ckpt', type=int)
+    # 가사 A/B 는 같은 발화를 두 모델로 재므로 실험 이름과 산출물 경로가 둘이다.
+    parser.add_argument('--ac-exp', default='pansori_ac_v1')
+    parser.add_argument('--var-exp', default='pansori_var_v1')
+    parser.add_argument('--out-dir', default='pansori/examples/out')
+    parser.add_argument('--ds-dir', default='pansori/examples/ds')
     args = parser.parse_args()
 
-    steps_file = REPO / 'pansori/examples/out/CKPT_STEPS'
+    steps_file = REPO / args.out_dir / 'CKPT_STEPS'
     steps = steps_file.read_text().split() if steps_file.exists() else []
     ac = args.ac_ckpt or int(steps[0])
     dur = args.dur_ckpt or int(steps[1])
     pitch = args.pitch_ckpt or int(steps[2] if len(steps) > 2 else steps[1])
 
-    notes_ds = REPO / f'pansori/examples/ds/{args.item}_notes.ds'
-    orig = REPO / f'pansori/examples/out/{args.item}_1_orig.wav'
+    notes_ds = REPO / args.ds_dir / f'{args.item}_notes.ds'
+    orig = REPO / args.out_dir / f'{args.item}_1_orig.wav'
     for p in (notes_ds, orig):
         if not p.exists():
             sys.exit(f'{p} 없음 — run_examples.sh 를 먼저 돌릴 것')
@@ -63,15 +68,15 @@ def main():
     sr = hparams['audio_sample_rate']
     ref = M.load_wav(orig, sr)
 
-    print(f'{args.item} · acoustic {ac:,} · dur {dur:,} · pitch {pitch:,}')
+    print(f'{args.item} · {args.ac_exp} {ac:,} · {args.var_exp} dur {dur:,} / pitch {pitch:,}')
     print(f'{"seed":>6s} {"f0 RMSE ¢":>10s} {"mel L1":>8s} {"유무성":>8s}')
     rows = []
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         for seed in range(1, args.seeds + 1):
-            infer('variance', notes_ds, 'pansori_var_v1', dur, seed, tmp, 'd', ['dur'])
-            infer('variance', tmp / 'd.ds', 'pansori_var_v1', pitch, seed, tmp, 'p', ['pitch'])
-            infer('acoustic', tmp / 'p.ds', 'pansori_ac_v1', ac, seed, tmp, 'a')
+            infer('variance', notes_ds, args.var_exp, dur, seed, tmp, 'd', ['dur'])
+            infer('variance', tmp / 'd.ds', args.var_exp, pitch, seed, tmp, 'p', ['pitch'])
+            infer('acoustic', tmp / 'p.ds', args.ac_exp, ac, seed, tmp, 'a')
             r = M.compare(ref, M.load_wav(tmp / 'a.wav', sr), hparams, pe)
             rows.append(r)
             print(f'{seed:6d} {r["f0_rmse_cent"]:10.0f} {r["mel_l1"]:8.3f} '

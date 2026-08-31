@@ -27,6 +27,8 @@ def main():
     parser = argparse.ArgumentParser(description='사다리 mel 비교 그림')
     parser.add_argument('item')
     parser.add_argument('--out', default=None)
+    parser.add_argument('--wav-dir', default='pansori/examples/out',
+                        help='사다리 wav 이 있는 곳 (가사 A/B 는 변종마다 다르다)')
     parser.add_argument('--dpi', type=int, default=110)
     args = parser.parse_args()
 
@@ -54,7 +56,7 @@ def main():
     set_hparams(config=str(REPO / 'configs/pansori_acoustic.yaml'), print_hparams=False)
     from utils.binarizer_utils import get_mel_torch
 
-    out_dir = REPO / 'pansori/examples/out'
+    out_dir = REPO / args.wav_dir
     sr = hparams['audio_sample_rate']
     mels, labels = [], []
     for track, label in TRACKS:

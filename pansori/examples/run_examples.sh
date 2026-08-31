@@ -3,6 +3,18 @@
 #
 #   bash pansori/examples/run_examples.sh [AC_CKPT] [DUR_CKPT] [PITCH_CKPT]
 #
+# 어느 모델을 어느 코퍼스로 돌릴지는 환경변수로 정한다. 기본값은 whisper 라벨로
+# 학습한 v1 이고, 가사 A/B 의 다른 쪽은 이렇게 부른다:
+#
+#   AC_EXP=pansori_ac_snap VAR_EXP=pansori_var_snap DATA=data/pansori_snap \
+#   DS_DIR=pansori/examples/ds_snap OUT_DIR=pansori/examples/out_snap \
+#     bash pansori/examples/run_examples.sh
+#
+#   AC_EXP / VAR_EXP  체크포인트 디렉토리 이름
+#   DATA              라벨 코퍼스 (ph_dur·노트가 여기서 온다). 오디오는 어느 쪽을
+#                     가리켜도 같은 파일이다 — 08_export.py --wavs_from 이 링크한다
+#   DS_DIR / OUT_DIR  중간 .ds 와 결과 wav. 두 변종이 서로를 덮어쓰지 않게 나눈다
+#
 # 인수를 주지 않으면 검증 손실이 최저인 체크포인트를 고른다 (마지막이 아니다).
 # variance 는 헤드마다 최적 시점이 다르므로 duration 과 pitch 를 따로 고르고
 # 두 번에 나눠 돌린다 — 자세한 근거는 아래 주석 참고.
@@ -20,8 +32,11 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO"
 
 EX="pansori/examples"
-DS="$EX/ds"
-OUT="$EX/out"
+AC_EXP="${AC_EXP:-pansori_ac_v1}"
+VAR_EXP="${VAR_EXP:-pansori_var_v1}"
+DATA="${DATA:-data/pansori}"
+DS="${DS_DIR:-$EX/ds}"
+OUT="${OUT_DIR:-$EX/out}"
 mkdir -p "$DS" "$OUT"
 
 # shellcheck disable=SC1091
@@ -51,9 +66,9 @@ done
 # dur 이 지배해서 20k 를 고르는데, 그 체크포인트로 피치를 뽑으면 32k 보다 f0 오차가
 # 25% 크다. 그래서 헤드마다 따로 고르고 variance 를 두 번 돌린다 —
 # 1차는 --predict dur, 2차는 그 산출물에 --predict pitch (ph_dur 는 manual 로 읽힌다).
-AC_CKPT="${1:-$(python pansori/examples/best_ckpt.py pansori_ac_v1)}"
-DUR_CKPT="${2:-$(python pansori/examples/best_ckpt.py pansori_var_v1 --metric validation/dur_loss)}"
-PITCH_CKPT="${3:-$(python pansori/examples/best_ckpt.py pansori_var_v1 --metric validation/pitch_loss)}"
+AC_CKPT="${1:-$(python pansori/examples/best_ckpt.py "$AC_EXP")}"
+DUR_CKPT="${2:-$(python pansori/examples/best_ckpt.py "$VAR_EXP" --metric validation/dur_loss)}"
+PITCH_CKPT="${3:-$(python pansori/examples/best_ckpt.py "$VAR_EXP" --metric validation/pitch_loss)}"
 : "${AC_CKPT:?acoustic 체크포인트가 없다}"
 : "${DUR_CKPT:?variance 체크포인트가 없다}"
 : "${PITCH_CKPT:?variance 체크포인트가 없다}"
@@ -80,37 +95,39 @@ for item in "${ITEMS[@]}"; do
   log "$item"
 
   # --- 1. 원본 --------------------------------------------------------------
-  wav=$(find data/pansori -name "$item.wav" | head -1)
+  # -L: 가사 A/B 의 두 번째 코퍼스는 wavs/ 가 첫 번째를 가리키는 심볼릭 링크다
+  # (08_export.py --wavs_from). find 는 기본적으로 링크된 디렉토리로 내려가지 않는다.
+  wav=$(find -L "$DATA" -name "$item.wav" | head -1)
   cp "$wav" "$OUT/${item}_1_orig.wav"
 
   # --- 2. 재합성: 실제 dur + 실제 f0 ---------------------------------------
-  python pansori/make_ds.py from-label "$item" --with-dur --with-f0 \
+  python pansori/make_ds.py from-label "$item" --data "$DATA" --with-dur --with-f0 \
     --out "$DS/${item}_gt.ds" 2>&1 | quiet
   python scripts/infer.py acoustic "$DS/${item}_gt.ds" \
-    --exp pansori_ac_v1 --ckpt "$AC_CKPT" --seed "$SEED" --out "$OUT" \
+    --exp "$AC_EXP" --ckpt "$AC_CKPT" --seed "$SEED" --out "$OUT" \
     --title "${item}_2_resynth" 2>&1 | quiet
 
   # --- 3. 실제 dur, f0 만 예측 ----------------------------------------------
-  python pansori/make_ds.py from-label "$item" --with-dur \
+  python pansori/make_ds.py from-label "$item" --data "$DATA" --with-dur \
     --out "$DS/${item}_dur.ds" 2>&1 | quiet
   python scripts/infer.py variance "$DS/${item}_dur.ds" \
-    --exp pansori_var_v1 --ckpt "$PITCH_CKPT" --predict pitch \
+    --exp "$VAR_EXP" --ckpt "$PITCH_CKPT" --predict pitch \
     --seed "$SEED" --out "$DS" --title "${item}_dur_var" 2>&1 | quiet
   python scripts/infer.py acoustic "$DS/${item}_dur_var.ds" \
-    --exp pansori_ac_v1 --ckpt "$AC_CKPT" --seed "$SEED" --out "$OUT" \
+    --exp "$AC_EXP" --ckpt "$AC_CKPT" --seed "$SEED" --out "$OUT" \
     --title "${item}_3_pitch" 2>&1 | quiet
 
   # --- 4. 전체 추론: 노트와 가사만 ------------------------------------------
-  python pansori/make_ds.py from-label "$item" \
+  python pansori/make_ds.py from-label "$item" --data "$DATA" \
     --out "$DS/${item}_notes.ds" 2>&1 | quiet
   python scripts/infer.py variance "$DS/${item}_notes.ds" \
-    --exp pansori_var_v1 --ckpt "$DUR_CKPT" --predict dur \
+    --exp "$VAR_EXP" --ckpt "$DUR_CKPT" --predict dur \
     --seed "$SEED" --out "$DS" --title "${item}_notes_dur" 2>&1 | quiet
   python scripts/infer.py variance "$DS/${item}_notes_dur.ds" \
-    --exp pansori_var_v1 --ckpt "$PITCH_CKPT" --predict pitch \
+    --exp "$VAR_EXP" --ckpt "$PITCH_CKPT" --predict pitch \
     --seed "$SEED" --out "$DS" --title "${item}_notes_var" 2>&1 | quiet
   python scripts/infer.py acoustic "$DS/${item}_notes_var.ds" \
-    --exp pansori_ac_v1 --ckpt "$AC_CKPT" --seed "$SEED" --out "$OUT" \
+    --exp "$AC_EXP" --ckpt "$AC_CKPT" --seed "$SEED" --out "$OUT" \
     --title "${item}_4_full" 2>&1 | quiet
 done
 
@@ -123,20 +140,20 @@ for score in "$EX"/scores/*.txt; do
     python pansori/make_ds.py from-score "$score" --spk "$spk" \
       --out "$DS/${name}_${spk}.ds" 2>&1 | quiet
     python scripts/infer.py variance "$DS/${name}_${spk}.ds" \
-      --exp pansori_var_v1 --ckpt "$DUR_CKPT" --predict dur \
+      --exp "$VAR_EXP" --ckpt "$DUR_CKPT" --predict dur \
       --seed "$SEED" --out "$DS" --title "${name}_${spk}_dur" 2>&1 | quiet
     python scripts/infer.py variance "$DS/${name}_${spk}_dur.ds" \
-      --exp pansori_var_v1 --ckpt "$PITCH_CKPT" --predict pitch \
+      --exp "$VAR_EXP" --ckpt "$PITCH_CKPT" --predict pitch \
       --seed "$SEED" --out "$DS" --title "${name}_${spk}_var" 2>&1 | quiet
     python scripts/infer.py acoustic "$DS/${name}_${spk}_var.ds" \
-      --exp pansori_ac_v1 --ckpt "$AC_CKPT" --seed "$SEED" --out "$OUT" \
+      --exp "$AC_EXP" --ckpt "$AC_CKPT" --seed "$SEED" --out "$OUT" \
       --title "5_score_${name}_${spk}" 2>&1 | quiet
   done
 done
 
 # 사다리 4단의 mel 을 한 장으로 — 점수가 "왜" 나쁜지는 그림에서만 보인다.
 log "스펙트로그램"
-python pansori/examples/spectrograms.py "${ITEMS[1]}" 2>&1 | quiet
+python pansori/examples/spectrograms.py "${ITEMS[1]}" --wav-dir "$OUT" 2>&1 | quiet
 
 log "완료 — $OUT"
 ls -la "$OUT"/*.wav
