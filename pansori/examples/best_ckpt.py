@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Print the checkpoint step with the lowest validation loss, not the latest one.
 
-pansori/README.md's standing rule is that the most recent checkpoint is not the
+docs/GOTCHAS.md's standing rule is that the most recent checkpoint is not the
 best one -- the old pipeline started overfitting around 56k steps. Picking by
 hand means reading TensorBoard every time, so the example runner asks this
 instead.

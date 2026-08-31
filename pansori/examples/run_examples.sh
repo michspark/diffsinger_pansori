@@ -59,7 +59,7 @@ for saved in checkpoints/best/*_step*.ckpt; do
   fi
 done
 
-# 가장 최근이 아니라 검증 손실이 최저인 체크포인트를 쓴다 (pansori/README.md §6).
+# 가장 최근이 아니라 검증 손실이 최저인 체크포인트를 쓴다 (pansori/docs/GOTCHAS.md).
 #
 # variance 의 두 헤드는 같은 시점에 최적이 아니다. 실측: dur_loss 는 step 16k 에서
 # 최저를 찍고 이후 계속 오르는데 pitch_loss 는 32k 까지도 내려간다. total_loss 는
