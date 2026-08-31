@@ -15,7 +15,7 @@ Everything else mirrors scripts/train.py exactly. set_hparams() parses with
 parse_known_args (utils/hparams.py:47), so the --wandb-* flags below pass through it
 untouched.
 
-    PYTHONPATH=. python pansori/train.py --config configs/pansori_snap_acoustic.yaml \
+    PYTHONPATH=. python pansori/train.py --config configs/exp/ac_snap.yaml \
       --exp_name pansori_ac_snap --reset \
       --hparams max_updates=50000,num_ckpt_keep=12 \
       --lyrics-source snapped --wandb-group lyrics-ab

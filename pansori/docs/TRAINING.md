@@ -52,7 +52,7 @@
 ## 1. `train.py` 를 치면 — 시작 전 준비
 
 ```sh
-python scripts/train.py --config configs/pansori_acoustic.yaml --exp_name pansori_ac_v1 --reset
+python scripts/train.py --config configs/exp/ac_v1.yaml --exp_name pansori_ac_v1 --reset
 ```
 
 ### 1-1. config 를 겹쳐 쌓는다
@@ -61,7 +61,8 @@ python scripts/train.py --config configs/pansori_acoustic.yaml --exp_name pansor
 
 ```
 | Hparams chains: ['configs/base.yaml', 'configs/acoustic.yaml',
-                   'configs/pansori_spec_stats.yaml', 'configs/pansori_acoustic.yaml']
+                   'configs/pansori/spec_stats.yaml', 'configs/pansori/acoustic.yaml',
+                   'configs/pansori/data_pansori.yaml', 'configs/exp/ac_v1.yaml']
 ```
 
 **뒤에 오는 것이 이긴다.** `f0_min` 이 base 에서 65 였다가 pansori 에서 55 로 덮이는 식이다.

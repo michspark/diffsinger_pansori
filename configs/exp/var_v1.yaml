@@ -1,0 +1,9 @@
+# variance · whisper 라벨 (baseline)
+#
+# 실측 최적: dur 16,000 · pitch 32,000. 헤드마다 다르므로 체크포인트도 따로 고른다.
+
+base_config:
+  - configs/pansori/variance.yaml
+  - configs/pansori/data_pansori.yaml
+
+binary_data_dir: data/pansori/binary_variance

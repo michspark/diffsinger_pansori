@@ -1,0 +1,10 @@
+# acoustic · whisper 라벨 (baseline)
+#
+# 실측: 검증 최저는 28,000 (0.17800). 남은 72,000 스텝은 0.178~0.203 을 오갔고
+# 마지막(0.18834)은 최적보다 6% 나쁘다. 다시 돌린다면 max_updates 를 줄일 것.
+
+base_config:
+  - configs/pansori/acoustic.yaml
+  - configs/pansori/data_pansori.yaml
+
+binary_data_dir: data/pansori/binary_acoustic

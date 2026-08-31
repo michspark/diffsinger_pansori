@@ -113,7 +113,7 @@ openvpi 는 두 축을 분리한다 (`preprocessing/variance_binarizer.py`). 노
   `merged_phoneme_groups: [[SP, AP]]` 로 한 인덱스에 합쳤다. 없는 구분을 지어내는 것보다
   라벨이 말하는 대로 두는 쪽이 맞다.
 - **`spec_max` 기본값 `[0]` 은 이 코퍼스에 맞지 않는다.** 실측 상한이 **+2.838** 이라
-  정규화 후 diffusion 타깃이 [-1, 1] 을 벗어난다. `configs/pansori_spec_stats.yaml` 을
+  정규화 후 diffusion 타깃이 [-1, 1] 을 벗어난다. `configs/pansori/spec_stats.yaml` 을
   `base_config` 에 얹었다. 반대로 하한은 안전하다 — `nvSTFT` 가 `log(clamp(x, 1e-5))` 로
   압축하므로 -11.513 아래가 존재할 수 없고, 실측 하한도 -11.563(여유 0.05 포함)이다.
   **spec 값은 학습 시점에만 쓰이므로 재-binarize 는 필요 없다.**

@@ -74,7 +74,7 @@ def main():
     parser.add_argument('--prefix', default='train')
     parser.add_argument('--limit', type=int, default=0,
                         help='표본 수 (0 = 전체, 권장)')
-    parser.add_argument('--out', default='configs/pansori_spec_stats.yaml')
+    parser.add_argument('--out', default='configs/pansori/spec_stats.yaml')
     args = parser.parse_args()
 
     lo, hi, n = envelope(args.binary_data_dir, args.prefix, args.limit)

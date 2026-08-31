@@ -1,12 +1,26 @@
 #!/usr/bin/env python3
-"""Render configs/pansori_{acoustic,variance}.yaml from the exported corpus.
+"""Render the generated layers of configs/pansori/.
 
-The `datasets:` list is one entry per speaker and has to agree with what
-08_export.py actually wrote to disk, so it is generated rather than hand-kept.
-Everything else is a thin layer over configs/acoustic.yaml and configs/variance.yaml;
-only the keys that pansori actually needs to differ are set here.
+The old generator wrote one 191-line file per (corpus, kind). Of those lines 122
+were the `datasets:` block, and the whisper/snapped pair differed in nothing but
+a path -- so a second corpus cost a second 191-line copy, and a run's actual
+conditions (max_updates, num_ckpt_keep) lived only in a `--hparams` string in
+somebody's shell history.
 
-Usage: python pansori/make_configs.py [--data data/pansori] [--name pansori]
+So the config is split along the three axes that actually vary, and upstream's
+own `base_config` chain puts them back together (utils/hparams.py:64-82 loads the
+list in order, then lets the file's own keys win):
+
+    configs/pansori/{acoustic,variance}.yaml   kind. 코퍼스를 모른다.
+    configs/pansori/data_{name}.yaml           코퍼스. datasets + num_spk.
+    configs/exp/*.yaml                         실험. 손으로 쓴다, git 에 남는다.
+
+`binary_data_dir` is the one key that depends on both axes, so the experiment
+file states it. That is not a workaround -- which binarized corpus a run reads is
+the single most important fact about it, and it belongs where a reader looks.
+
+    python pansori/make_configs.py                                   # data/pansori
+    python pansori/make_configs.py --data data/pansori_snap --name snap
 """
 
 import argparse
@@ -32,12 +46,13 @@ HOLDOUT = {
 # binarize(기본값) → compute_spec_stats.py → make_configs.py → 학습 이고,
 # spec_min/max 는 학습 시점에만 쓰이므로 재-binarize 는 필요 없다.
 # variance 는 mel 을 만들지 않으므로 acoustic 에만 붙인다.
-EXTRA_BASE = {'acoustic': '\n  - configs/pansori_spec_stats.yaml'}
+EXTRA_BASE = {'acoustic': '\n  - configs/pansori/spec_stats.yaml'}
 
-HEADER = """# 판소리 fine-tune — {kind}
-# 생성물: python pansori/make_configs.py  (직접 편집하지 말고 생성기를 고칠 것)
+KIND_HEADER = """# 판소리 fine-tune — {kind} 공통층 (생성물)
+# python pansori/make_configs.py 로 생성한다. 직접 편집하지 말고 생성기를 고칠 것.
 #
-# 데이터 파이프라인과 근거는 pansori/docs/PORTING.md, pansori/alignment/VERDICT.md 참조.
+# 이 파일은 **코퍼스를 모른다.** 실험 파일이 data_*.yaml 과 함께 base_config 에 얹고
+# binary_data_dir 을 정한다 — configs/exp/ 참조.
 
 base_config:
   - configs/{kind}.yaml{extra_base}
@@ -56,16 +71,10 @@ merged_phoneme_groups:
   - [SP, AP]
 num_lang: 1
 use_lang_id: false
-"""
 
-COMMON = """
-binary_data_dir: {data}/binary_{kind}
 binarization_args:
   num_workers: 4
-
-# 화자 {n_spk}명 (명창 + pooled unknown). num_spk 는 최대 spk_id 보다 커야 한다.
 use_spk_id: true
-num_spk: {num_spk}
 
 # 판소리 음역. 남성 통성은 ROSVOT 노트 기준 MIDI 35 = 61.7 Hz 까지 내려가므로
 # 기본값 65 Hz 면 저음이 통째로 무성 처리된다. 측정 상한은 740 Hz.
@@ -98,7 +107,7 @@ augmentation_args:
   random_time_stretching:
     enabled: false
 
-# spec_min/spec_max 는 위 base_config 의 pansori_spec_stats.yaml 에서 온다.
+# spec_min/spec_max 는 위 base_config 의 spec_stats.yaml 에서 온다.
 # 코퍼스를 다시 만들면 compute_spec_stats.py 로 다시 재고 이 스크립트를 다시 돌릴 것.
 
 max_batch_frames: 50000
@@ -130,10 +139,15 @@ max_batch_size: 32
 pl_trainer_precision: '16-mixed'
 """
 
-IGNORED = {
-    'acoustic': ['model.fs2.encoder.embed_tokens', 'model.fs2.txt_embed', 'model.fs2.spk_embed'],
-    'variance': ['model.fs2.encoder.embed_tokens', 'model.fs2.txt_embed', 'model.fs2.spk_embed'],
-}
+DATA_HEADER = """# 판소리 코퍼스 — {data} (생성물)
+# python pansori/make_configs.py --data {data} --name {name} 로 생성한다.
+#
+# 화자 목록은 08_export.py 가 실제로 디스크에 쓴 것과 일치해야 하므로 손으로
+# 관리하지 않는다. 여기에는 **코퍼스에만 달린 것**을 둔다 — kind 마다 다른
+# binary_data_dir 은 실험 파일이 정한다 (configs/exp/).
+"""
+
+IGNORED = ['model.fs2.encoder.embed_tokens', 'model.fs2.txt_embed', 'model.fs2.spk_embed']
 
 
 def datasets_block(data_root: Path, rel: str) -> tuple:
@@ -169,24 +183,30 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--data', default='data/pansori')
     parser.add_argument('--name', default='pansori',
-                        help='출력 파일 이름 앞부분 → configs/{name}_{kind}.yaml. '
-                             '가사 A/B 처럼 코퍼스가 둘일 때 baseline config 를 '
-                             '덮어쓰지 않게 한다')
+                        help='코퍼스 층의 이름 → configs/pansori/data_{name}.yaml')
     args = parser.parse_args()
 
     repo = Path(__file__).resolve().parent.parent
+    out_dir = repo / 'configs' / 'pansori'
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    ignored = '\n'.join(f'  - {p}' for p in IGNORED)
+    for kind, tail in (('acoustic', ACOUSTIC), ('variance', VARIANCE)):
+        out = out_dir / f'{kind}.yaml'
+        out.write_text(
+            KIND_HEADER.format(kind=kind, extra_base=EXTRA_BASE.get(kind, ''), ignored=ignored) + tail,
+            encoding='utf-8')
+        print(f'{out.relative_to(repo)}')
+
     data_root = repo / args.data
     block, n_spk, dropped = datasets_block(data_root, args.data)
-
-    for kind, tail in (('acoustic', ACOUSTIC), ('variance', VARIANCE)):
-        ignored = '\n'.join(f'  - {p}' for p in IGNORED[kind])
-        text = (HEADER.format(kind=kind, extra_base=EXTRA_BASE.get(kind, '')) + block
-                + COMMON.format(data=args.data, kind=kind, n_spk=n_spk,
-                                num_spk=n_spk + 1, ignored=ignored)
-                + tail)
-        out = repo / 'configs' / f'{args.name}_{kind}.yaml'
-        out.write_text(text, encoding='utf-8')
-        print(f'{out}  (화자 {n_spk}명)')
+    out = out_dir / f'data_{args.name}.yaml'
+    out.write_text(
+        DATA_HEADER.format(data=args.data, name=args.name) + block
+        + f'\n# 화자 {n_spk}명 (명창 + pooled unknown). num_spk 는 최대 spk_id 보다 커야 한다.\n'
+        + f'num_spk: {n_spk + 1}\n',
+        encoding='utf-8')
+    print(f'{out.relative_to(repo)}  (화자 {n_spk}명)')
 
     for name, count in dropped:
         print(f'⚠ {name}: 홀드아웃 곡이 전체 {count:,}발화를 모두 차지 → 홀드아웃 해제 '

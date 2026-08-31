@@ -44,28 +44,27 @@ python 08_export.py   --set full_snap --out data/pansori_snap --wavs_from data/p
 
 ```sh
 conda activate dsp && export PYTHONPATH=. PYTHONNOUSERSITE=1
-python pansori/make_configs.py --data data/pansori_snap --name pansori_snap
-python scripts/binarize.py --config configs/pansori_snap_acoustic.yaml
-python scripts/binarize.py --config configs/pansori_snap_variance.yaml
+python pansori/make_configs.py --data data/pansori_snap --name snap
+python scripts/binarize.py --config configs/exp/ac_snap.yaml
+python scripts/binarize.py --config configs/exp/var_snap.yaml
 ```
 
 **`compute_spec_stats.py` 를 다시 돌리지 않는다.** mel 통계는 오디오에서만 나오고 오디오는
-동일하다. `configs/pansori_spec_stats.yaml` 을 그대로 재사용하는 것이 오히려 조건을
+동일하다. `configs/pansori/spec_stats.yaml` 을 그대로 재사용하는 것이 오히려 조건을
 묶어 준다.
 
 ## 3. 학습 — 두 런을 한 group 으로
 
 ```sh
-python pansori/train.py --config configs/pansori_snap_acoustic.yaml \
-  --exp_name pansori_ac_snap --reset \
-  --hparams max_updates=50000,num_ckpt_keep=12 \
-  --lyrics-source snapped --wandb-group lyrics-ab
+python pansori/train.py --config configs/exp/ac_snap.yaml \
+  --exp_name pansori_ac_snap --reset --lyrics-source snapped --wandb-group lyrics-ab
 
-python pansori/train.py --config configs/pansori_snap_variance.yaml \
-  --exp_name pansori_var_snap --reset \
-  --hparams max_updates=32000,num_ckpt_keep=8 \
-  --lyrics-source snapped --wandb-group lyrics-ab
+python pansori/train.py --config configs/exp/var_snap.yaml \
+  --exp_name pansori_var_snap --reset --lyrics-source snapped --wandb-group lyrics-ab
 ```
+
+스텝 수와 `num_ckpt_keep` 은 실험 파일 안에 있다 (`configs/exp/{ac,var}_snap.yaml`).
+이 두 런이 처음 돌 때는 `--hparams` 로 넘겼지만, 그러면 조건이 셸 히스토리에만 남는다.
 
 - **스텝 수는 baseline 에 맞춘 것이다.** `pansori_var_v1` 은 config 의 80k 가 아니라 실제로
   **32k 에서 멈춰 있다**(체크포인트·tfevents 둘 다). 더 오래 돌리면 snapped 쪽 피치 헤드만

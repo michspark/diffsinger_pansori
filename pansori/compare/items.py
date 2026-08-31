@@ -2,7 +2,7 @@
 """Which utterances may be compared, and why five of them may not.
 
 The old repo held out six songs, one per 명창. The new one holds out five:
-configs/pansori_acoustic.yaml gives 정권진 `test_prefixes: []` because that
+configs/pansori/data_pansori.yaml gives 정권진 `test_prefixes: []` because that
 singer's only song IS the holdout song, so holding it out would leave the
 speaker with zero training data (pansori/docs/NEXT.md, last line).
 
@@ -29,16 +29,16 @@ DATA = C.REPO / 'data' / 'pansori'
 
 
 def _load_datasets():
-    """(speaker, test_prefixes) for each dataset entry in the acoustic config.
+    """(speaker, test_prefixes) for each dataset entry in the corpus config.
 
     Parsed by hand rather than with yaml.safe_load so this works before anything
     else in the repo is importable, and so the failure mode is a clear exception
     rather than a silently empty list.
     """
-    text = (C.REPO / 'configs' / 'pansori_acoustic.yaml').read_text(encoding='utf-8')
+    text = (C.REPO / 'configs' / 'pansori' / 'data_pansori.yaml').read_text(encoding='utf-8')
     block = text.split('\ndatasets:', 1)
     if len(block) != 2:
-        raise RuntimeError('configs/pansori_acoustic.yaml has no datasets: block')
+        raise RuntimeError('configs/pansori/data_pansori.yaml has no datasets: block')
     entries, speaker, prefixes, in_prefixes = [], None, [], False
     for line in block[1].splitlines():
         if re.match(r'^\S', line) and line.strip():
@@ -60,7 +60,7 @@ def _load_datasets():
     if speaker:
         entries.append((speaker, prefixes))
     if not entries:
-        raise RuntimeError('parsed zero dataset entries from pansori_acoustic.yaml')
+        raise RuntimeError('parsed zero dataset entries from data_pansori.yaml')
     return entries
 
 
@@ -78,7 +78,7 @@ def assert_held_out(item):
     if prefix not in HELD_OUT_PREFIXES:
         raise NotHeldOut(
             f'{item}: song {prefix} is in the new model\'s TRAINING set '
-            f'(test_prefixes in configs/pansori_acoustic.yaml). '
+            f'(test_prefixes in configs/pansori/data_pansori.yaml). '
             f'Held out: {sorted(HELD_OUT_PREFIXES)}'
         )
 

@@ -402,8 +402,8 @@ conda activate dsp && export PYTHONPATH=. PYTHONNOUSERSITE=1 CUDA_VISIBLE_DEVICE
 ### B3. binarize
 
 ```sh
-python scripts/binarize.py --config configs/pansori_acoustic.yaml
-python scripts/binarize.py --config configs/pansori_variance.yaml
+python scripts/binarize.py --config configs/exp/ac_v1.yaml
+python scripts/binarize.py --config configs/exp/var_v1.yaml
 ```
 
 결과: **acoustic 4.5 GB / variance 381 MB**, train **27.8 h** · valid **1.08 h**,
@@ -418,7 +418,7 @@ python scripts/binarize.py --config configs/pansori_variance.yaml
 ### B4. spec 통계 부트스트랩 — 순서가 있다
 
 ```sh
-python pansori/compute_spec_stats.py     # → configs/pansori_spec_stats.yaml
+python pansori/compute_spec_stats.py     # → configs/pansori/spec_stats.yaml
 python pansori/make_configs.py           # 위 파일을 base_config 에 얹어 재생성
 ```
 
@@ -435,8 +435,8 @@ openvpi 기본값 `spec_max: [0]` 은 이 코퍼스에 맞지 않는다. **실�
 ## C. 학습
 
 ```sh
-python scripts/train.py --config configs/pansori_acoustic.yaml --exp_name pansori_ac_v1 --reset
-python scripts/train.py --config configs/pansori_variance.yaml --exp_name pansori_var_v1 --reset
+python scripts/train.py --config configs/exp/ac_v1.yaml --exp_name pansori_ac_v1 --reset
+python scripts/train.py --config configs/exp/var_v1.yaml --exp_name pansori_var_v1 --reset
 ```
 
 > 한 스텝 안에서 무슨 일이 벌어지는지 — 배치 구성부터 손실·옵티마이저·체크포인트 규칙까지는
@@ -660,13 +660,13 @@ python 08_export.py   --set full --out data/pansori   # 재커팅 ~20분
 conda activate dsp && export PYTHONPATH=. PYTHONNOUSERSITE=1 CUDA_VISIBLE_DEVICES=0
 python pansori/build_dictionary.py
 python pansori/make_configs.py
-python scripts/binarize.py --config configs/pansori_acoustic.yaml
-python scripts/binarize.py --config configs/pansori_variance.yaml
+python scripts/binarize.py --config configs/exp/ac_v1.yaml
+python scripts/binarize.py --config configs/exp/var_v1.yaml
 python pansori/compute_spec_stats.py && python pansori/make_configs.py
 
 # --- 학습 ------------------------------------------------------------------
-python scripts/train.py --config configs/pansori_acoustic.yaml --exp_name pansori_ac_v1 --reset
-python scripts/train.py --config configs/pansori_variance.yaml --exp_name pansori_var_v1 --reset
+python scripts/train.py --config configs/exp/ac_v1.yaml --exp_name pansori_ac_v1 --reset
+python scripts/train.py --config configs/exp/var_v1.yaml --exp_name pansori_var_v1 --reset
 
 # --- 추론 · 평가 · 리포트 ---------------------------------------------------
 bash pansori/examples/run_examples.sh

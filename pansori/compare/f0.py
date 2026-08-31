@@ -37,7 +37,7 @@ def _init():
     if _PE is None:
         from utils.hparams import set_hparams
         if not _HP:
-            set_hparams(config=str(C.REPO / 'configs' / 'pansori_acoustic.yaml'),
+            set_hparams(config=str(C.REPO / 'configs' / 'exp' / 'ac_v1.yaml'),
                         print_hparams=False)
             _HP = True
         from modules.pe import initialize_pe

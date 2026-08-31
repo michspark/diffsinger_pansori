@@ -39,7 +39,7 @@ python pansori/compare/stats.py     # results_ext.jsonl 이 있으면 자동으�
 1. **정권진 `a580300d` 5항목은 신 모델의 학습 데이터다.** 구 모델은 홀드아웃했지만
    신 모델 설정에서는 곡 하나가 화자 전부라 자동 해제됐다. 24항목 중 이 5개를 빼고
    **공정 쌍 19개**가 헤드라인이다. `items.assert_held_out()` 이 실행할 때마다
-   `configs/pansori_acoustic.yaml` 의 `test_prefixes` 를 읽어 강제한다 — 주석이 아니다.
+   `configs/exp/ac_v1.yaml` 의 `test_prefixes` 를 읽어 강제한다 — 주석이 아니다.
 2. **`|Δf0| per frame` 은 프레임률 아티팩트다.** 구 파이프라인 5.33 ms vs 신 11.61 ms.
    같은 곡선이 신 쪽에서 ~2.2배로 나온다. 여기서는 전부 **10 ms 공통 격자의 cents/초**로
    잰다. `docs/NEXT.md §C5` 의 프레임 단위 비율은 시스템 간 비교에 쓸 수 없다.

@@ -60,6 +60,18 @@ pansori/
 └── compute_spec_stats.py  이 코퍼스의 mel 포락선 실측 → spec_min/spec_max
 ```
 
+우리 config 는 저장소 루트의 `configs/` 아래 두 디렉토리에 있다:
+
+```
+configs/
+├── pansori/          make_configs.py 가 생성 — 직접 고치지 않는다
+│   ├── acoustic.yaml · variance.yaml    kind 공통층 (코퍼스를 모른다)
+│   ├── data_pansori.yaml · data_snap.yaml   코퍼스층 (datasets + num_spk)
+│   └── spec_stats.yaml                  compute_spec_stats.py 가 생성
+└── exp/              ★ 실험 하나 = 파일 하나, 손으로 쓴다 (§4)
+    └── ac_v1.yaml · var_v1.yaml · ac_snap.yaml · var_snap.yaml
+```
+
 데이터는 전부 gitignore 대상이라 저장소에 없다.
 
 | 무엇 | 어디 |
@@ -135,19 +147,52 @@ python pansori/preprocess/01b_recut_wavs.py --set full   # 31,529개, 새로 자
 conda activate dsp && export PYTHONPATH=. PYTHONNOUSERSITE=1 CUDA_VISIBLE_DEVICES=0
 
 python pansori/build_dictionary.py         # dictionaries/korean-coda.txt
-python pansori/make_configs.py             # configs/pansori_{acoustic,variance}.yaml
+python pansori/make_configs.py             # configs/pansori/ 생성층
 
-python scripts/binarize.py --config configs/pansori_acoustic.yaml
-python scripts/binarize.py --config configs/pansori_variance.yaml
-python pansori/compute_spec_stats.py       # → configs/pansori_spec_stats.yaml
-python pansori/make_configs.py             # 위 파일을 얹어 재생성
+python scripts/binarize.py --config configs/exp/ac_v1.yaml
+python scripts/binarize.py --config configs/exp/var_v1.yaml
+python pansori/compute_spec_stats.py       # → configs/pansori/spec_stats.yaml
 
-python pansori/train.py --config configs/pansori_acoustic.yaml --exp_name pansori_ac_v1 --reset
-python pansori/train.py --config configs/pansori_variance.yaml --exp_name pansori_var_v1 --reset
+python pansori/train.py --config configs/exp/ac_v1.yaml --exp_name pansori_ac_v1 --reset
+python pansori/train.py --config configs/exp/var_v1.yaml --exp_name pansori_var_v1 --reset
 ```
 
-**spec 통계는 부트스트랩이 필요하다** — 기본값으로 한 번 binarize → 실측 → config 재생성.
-`spec_min`/`spec_max` 는 학습 시점에만 쓰이므로 **재-binarize 는 필요 없다.**
+**spec 통계는 부트스트랩이 필요하다** — 기본값으로 한 번 binarize → 실측. `spec_min`/`spec_max`
+는 학습 시점에만 쓰이고 `configs/pansori/acoustic.yaml` 이 `spec_stats.yaml` 을 base 로
+얹고 있으므로, **재-binarize 도 config 재생성도 필요 없다.**
+
+### 실험을 하나 더 만들려면
+
+config 는 세 축으로 나뉘어 있고, upstream 의 `base_config` 체인이 다시 합친다:
+
+```
+configs/pansori/acoustic.yaml      kind  — 모델·배치·음소셋. 코퍼스를 모른다
+configs/pansori/data_pansori.yaml  코퍼스 — datasets(화자 23명) + num_spk
+configs/exp/ac_v1.yaml             실험  — 손으로 쓴다
+```
+
+앞의 둘은 `make_configs.py` 가 생성하므로 직접 고치지 않는다. 바꾸고 싶은 것은 **실험
+파일에 적는다** — 그러면 `--hparams` 로 셸에만 남던 조건이 git 에 남는다:
+
+```yaml
+# configs/exp/ac_big.yaml
+base_config:
+  - configs/pansori/acoustic.yaml
+  - configs/pansori/data_snap.yaml     # 데이터를 바꾸려면 이 줄
+
+binary_data_dir: data/pansori_snap/binary_acoustic
+
+max_updates: 50000                     # 학습 조건
+num_ckpt_keep: 12
+hidden_size: 512                       # 모델 구조
+```
+
+**뒤에 오는 것이 이긴다** (`utils/hparams.py:64-82`) — base 를 순서대로 덮고, 마지막에
+실험 파일 자신의 키가 이긴다. 코퍼스를 새로 만들었으면 그 층만 생성하면 된다:
+
+```sh
+python pansori/make_configs.py --data data/pansori_snap --name snap
+```
 
 `pansori/train.py` 는 `scripts/train.py` + wandb 다. `--no-wandb` 를 주면 완전히 동일하게
 동작한다. 끝난 학습의 텐서보드 로그는 `tb_to_wandb.py` 로 올린다 (`wandb sync

@@ -53,7 +53,7 @@ def main():
             break
 
     from utils.hparams import set_hparams, hparams
-    set_hparams(config=str(REPO / 'configs/pansori_acoustic.yaml'), print_hparams=False)
+    set_hparams(config=str(REPO / 'configs/exp/ac_v1.yaml'), print_hparams=False)
     from utils.binarizer_utils import get_mel_torch
 
     out_dir = REPO / args.wav_dir

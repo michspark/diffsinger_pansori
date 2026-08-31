@@ -1,0 +1,68 @@
+# 판소리 fine-tune — variance 공통층 (생성물)
+# python pansori/make_configs.py 로 생성한다. 직접 편집하지 말고 생성기를 고칠 것.
+#
+# 이 파일은 **코퍼스를 모른다.** 실험 파일이 data_*.yaml 과 함께 base_config 에 얹고
+# binary_data_dir 을 정한다 — configs/exp/ 참조.
+
+base_config:
+  - configs/variance.yaml
+
+dictionaries:
+  ko: dictionaries/korean-coda.txt
+extra_phonemes: []
+
+# openvpi 는 'SP'(무음) 와 'AP'(들숨) 를 음소셋에 항상 넣고
+# (utils/phoneme_utils.py:18), binarize 는 셋의 모든 항목이 코퍼스에 실제로
+# 나타나야 통과시킨다. 우리 라벨에는 들숨 구분이 없다 — 06_merge.py 는 노트가
+# 덮지 않은 무음을 전부 SP 로 만든다. 그래서 둘을 한 인덱스로 합친다.
+# 없는 구분을 지어내는 것보다 라벨이 말하는 대로 두는 쪽이 맞다.
+# 나중에 들숨을 따로 라벨하려면 이 줄을 지우고 재-binarize 하면 된다.
+merged_phoneme_groups:
+  - [SP, AP]
+num_lang: 1
+use_lang_id: false
+
+binarization_args:
+  num_workers: 4
+use_spk_id: true
+
+# 판소리 음역. 남성 통성은 ROSVOT 노트 기준 MIDI 35 = 61.7 Hz 까지 내려가므로
+# 기본값 65 Hz 면 저음이 통째로 무성 처리된다. 측정 상한은 740 Hz.
+f0_min: 55
+f0_max: 750
+pe: rmvpe
+pe_ckpt: checkpoints/rmvpe/model.pt
+
+# ---- fine-tune ------------------------------------------------------------
+# 공개 사전학습 체크포인트를 받은 뒤 아래 두 줄을 켠다. 사전학습 모델은 중국어
+# 음소셋이라 phoneme embedding 이 통째로 어긋나므로 반드시 무시 목록에 넣는다.
+# 실제 state_dict 키는 체크포인트마다 다르므로 받은 뒤 대조할 것.
+finetune_enabled: false
+finetune_ckpt_path: null
+finetune_ignored_params:
+  - model.fs2.encoder.embed_tokens
+  - model.fs2.txt_embed
+  - model.fs2.spk_embed
+finetune_strict_shapes: false
+
+# upstream VarianceTask + 부류별 음소 길이 지표. upstream 파일은 그대로 두고
+# task_cls 만 바꿔 끼운다 — 근거와 무엇이 더 붙는지는 pansori/variance_task.py 머리말.
+# 기존 rhythm_corr / ph_dur_acc 도 그대로 나온다 (이전 런과의 비교선 유지).
+task_cls: pansori.variance_task.PansoriVarianceTask
+
+# 새 지표를 몇 발화까지 재는가. 0 = 검증셋 전체.
+# upstream 의 rhythm_corr / ph_dur_acc 는 num_valid_plots(10) 에 묶여 있어 앞 10발화만
+# 채점한다. duration 추론은 conv 하나라 사실상 공짜이므로 전체로 돌린다.
+num_valid_metric_items: 0
+
+predict_dur: true
+predict_pitch: true
+predict_energy: false
+predict_breathiness: false
+predict_voicing: false
+predict_tension: false
+use_glide_embed: false
+
+max_batch_frames: 80000
+max_batch_size: 32
+pl_trainer_precision: '16-mixed'

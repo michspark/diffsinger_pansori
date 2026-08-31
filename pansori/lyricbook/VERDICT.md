@@ -181,7 +181,7 @@ Whisper 쪽이 오히려 나을 수도 있다. 판정하려면 두 라벨로 각
 |---|---|---|
 | 코퍼스 | `data/pansori` 26,955 발화 | `data/pansori_snap` 26,779 발화 (whisper 의 부분집합) |
 | 오디오 | 동일 파일 (`08_export.py --wavs_from` 이 심볼릭 링크) | ← |
-| spec 통계·홀드아웃·config | 동일 (`pansori_spec_stats.yaml` 재사용) | ← |
+| spec 통계·홀드아웃·config | 동일 (`pansori/spec_stats.yaml` 재사용) | ← |
 | acoustic | `pansori_ac_v1` 28k (검증 최저) | `pansori_ac_snap` 36k (검증 최저) |
 
 공유 발화 26,779개 중 **40.5%(10,857개)** 가 실제로 창본 텍스트를 쓴다.

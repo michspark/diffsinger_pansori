@@ -39,9 +39,9 @@ sys.path.insert(0, str(REPO / 'pansori' / 'examples'))
 OUT_ROOT = REPO / 'pansori' / 'examples' / 'ab_out'
 
 ARMS = {
-    'whisper': dict(config='configs/pansori_acoustic.yaml', data='data/pansori',
+    'whisper': dict(config='configs/exp/ac_v1.yaml', data='data/pansori',
                     ac_exp='pansori_ac_v1'),
-    'snapped': dict(config='configs/pansori_snap_acoustic.yaml', data='data/pansori_snap',
+    'snapped': dict(config='configs/exp/ac_snap.yaml', data='data/pansori_snap',
                     ac_exp='pansori_ac_snap'),
 }
 

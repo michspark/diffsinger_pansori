@@ -82,7 +82,7 @@ def extract_f0(wav_path, n_frames_hint=None):
     import librosa
     import numpy as np
     from utils.hparams import set_hparams, hparams
-    set_hparams(config=str(REPO / 'configs' / 'pansori_acoustic.yaml'), print_hparams=False)
+    set_hparams(config=str(REPO / 'configs' / 'exp' / 'ac_v1.yaml'), print_hparams=False)
     from modules.pe import initialize_pe
 
     waveform, _ = librosa.load(wav_path, sr=hparams['audio_sample_rate'], mono=True)

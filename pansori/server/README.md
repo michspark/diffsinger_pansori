@@ -47,7 +47,7 @@ rsync -av --info=progress2 ~/Desktop/DiffSinger/data/pansori/ 서버:~/DiffSinge
 
 - **spec 통계는 부트스트랩이다.** `binarize` 를 기본값으로 한 번 돌린 뒤
   `python pansori/compute_spec_stats.py` → `python pansori/make_configs.py` 로 config 를
-  재생성해야 `configs/pansori_spec_stats.yaml` 이 `base_config` 에 얹힌다.
+  재생성해야 `configs/pansori/spec_stats.yaml` 이 `base_config` 에 얹힌다.
   이 코퍼스 실측 상한이 **+2.838** 이라 openvpi 기본값 `spec_max: [0]` 으로는 diffusion
   타깃이 정규화 후 [-1, 1] 을 벗어난다. **재-binarize 는 필요 없다** — 학습 시점 값이다.
 - **사전학습 모델 (선택).** 지금은 scratch 로 돈다. fine-tune 하려면 `make_configs.py` 에서

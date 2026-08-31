@@ -62,7 +62,7 @@ def main():
 
     import measure as M
     from utils.hparams import set_hparams, hparams
-    set_hparams(config=str(REPO / 'configs/pansori_acoustic.yaml'), print_hparams=False)
+    set_hparams(config=str(REPO / 'configs/exp/ac_v1.yaml'), print_hparams=False)
     from modules.pe import initialize_pe
     pe = initialize_pe()
     sr = hparams['audio_sample_rate']
