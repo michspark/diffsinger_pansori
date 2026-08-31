@@ -137,6 +137,14 @@ class Book:
 
 
 def load_books():
+    # corpus.jsonl is not tracked -- it is the text of six published 창본. Say so
+    # here rather than letting read_jsonl raise a bare FileNotFoundError.
+    if not CORPUS_PATH.exists():
+        raise SystemExit(
+            f"창본 코퍼스가 없다: {CORPUS_PATH}\n"
+            f"  Pansori_Data/Lyrics 를 두고 먼저 실행할 것: "
+            f"python pansori/lyricbook/build_corpus.py")
+
     blocks_by_book = defaultdict(list)
     work_of = {}
     for block in read_jsonl(CORPUS_PATH):
