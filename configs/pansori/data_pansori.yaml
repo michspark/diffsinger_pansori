@@ -129,3 +129,9 @@ datasets:
 
 # 화자 23명 (명창 + pooled unknown). num_spk 는 최대 spk_id 보다 커야 한다.
 num_spk: 24
+
+# 이 코퍼스의 라벨에는 들숨 구분이 없다 (MFA 정렬) — 06_merge.py 는 노트가 덮지 않은
+# 무음을 전부 SP 로 만든다. 그래서 둘을 한 인덱스로 합친다. 없는 구분을 지어내는 것보다
+# 라벨이 말하는 대로 두는 쪽이 맞다.
+merged_phoneme_groups:
+  - [SP, AP]

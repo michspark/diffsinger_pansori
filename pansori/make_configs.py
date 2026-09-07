@@ -61,14 +61,6 @@ dictionaries:
   ko: dictionaries/korean-coda.txt
 extra_phonemes: []
 
-# openvpi 는 'SP'(무음) 와 'AP'(들숨) 를 음소셋에 항상 넣고
-# (utils/phoneme_utils.py:18), binarize 는 셋의 모든 항목이 코퍼스에 실제로
-# 나타나야 통과시킨다. 우리 라벨에는 들숨 구분이 없다 — 06_merge.py 는 노트가
-# 덮지 않은 무음을 전부 SP 로 만든다. 그래서 둘을 한 인덱스로 합친다.
-# 없는 구분을 지어내는 것보다 라벨이 말하는 대로 두는 쪽이 맞다.
-# 나중에 들숨을 따로 라벨하려면 이 줄을 지우고 재-binarize 하면 된다.
-merged_phoneme_groups:
-  - [SP, AP]
 num_lang: 1
 use_lang_id: false
 
@@ -149,6 +141,42 @@ DATA_HEADER = """# 판소리 코퍼스 — {data} (생성물)
 
 IGNORED = ['model.fs2.encoder.embed_tokens', 'model.fs2.txt_embed', 'model.fs2.spk_embed']
 
+# openvpi 는 'SP'(무음) 와 'AP'(들숨) 를 음소셋에 항상 넣고
+# (utils/phoneme_utils.py:18), binarize 는 셋의 모든 항목이 코퍼스에 실제로
+# 나타나야 통과시킨다. 그래서 이 블록은 코퍼스가 정한다, 사람이 정하지 않는다 —
+# 라벨에 AP 가 없는데 음소셋에 남겨 두면 binarize 가 죽고, 있는데 합쳐 두면
+# 실제로 라벨한 들숨을 도로 뭉갠다. 어느 쪽인지는 transcriptions.csv 안에만 있다.
+MERGED_SP_AP = """
+# 이 코퍼스의 라벨에는 들숨 구분이 없다 (MFA 정렬) — 06_merge.py 는 노트가 덮지 않은
+# 무음을 전부 SP 로 만든다. 그래서 둘을 한 인덱스로 합친다. 없는 구분을 지어내는 것보다
+# 라벨이 말하는 대로 두는 쪽이 맞다.
+merged_phoneme_groups:
+  - [SP, AP]
+"""
+
+SPLIT_SP_AP = """
+# 이 코퍼스는 들숨(AP) 을 실제로 라벨했다 (SOFA 정렬). 그래서 SP 와 합치지 않는다 —
+# 합치면 방금 라벨한 구분을 도로 버리는 셈이다. upstream 기본값이
+# `merged_phoneme_groups: []` (configs/acoustic.yaml:8) 이므로 아무것도 쓰지 않으면 된다.
+"""
+
+
+def corpus_has_ap(data_root: Path) -> bool:
+    """이 코퍼스의 ph_seq 에 AP 토큰이 실제로 있는가.
+
+    binarize 가 요구하는 조건 자체를 그대로 묻는다. datasets_block 이 어차피 같은
+    CSV 들을 읽지만, 그쪽은 발화 수를 세고 이쪽은 음소를 보므로 따로 돈다.
+    """
+    for path in sorted(p for p in data_root.iterdir() if p.is_dir()):
+        csv_path = path / 'transcriptions.csv'
+        if not csv_path.exists():
+            continue
+        with open(csv_path, encoding='utf-8') as f:
+            for row in csv.DictReader(f):
+                if 'AP' in row['ph_seq'].split():
+                    return True
+    return False
+
 
 def datasets_block(data_root: Path, rel: str) -> tuple:
     speakers = []
@@ -190,21 +218,27 @@ def main() -> None:
     out_dir = repo / 'configs' / 'pansori'
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    data_root = repo / args.data
+    has_ap = corpus_has_ap(data_root)
+    merged = SPLIT_SP_AP if has_ap else MERGED_SP_AP
+
     ignored = '\n'.join(f'  - {p}' for p in IGNORED)
     for kind, tail in (('acoustic', ACOUSTIC), ('variance', VARIANCE)):
         out = out_dir / f'{kind}.yaml'
         out.write_text(
-            KIND_HEADER.format(kind=kind, extra_base=EXTRA_BASE.get(kind, ''), ignored=ignored) + tail,
+            KIND_HEADER.format(kind=kind, extra_base=EXTRA_BASE.get(kind, ''),
+                               ignored=ignored) + tail,
             encoding='utf-8')
         print(f'{out.relative_to(repo)}')
+    print('들숨(AP) 라벨 있음 → merged_phoneme_groups 없음 (SP/AP 분리)' if has_ap
+          else '들숨(AP) 라벨 없음 → merged_phoneme_groups: [[SP, AP]]')
 
-    data_root = repo / args.data
     block, n_spk, dropped = datasets_block(data_root, args.data)
     out = out_dir / f'data_{args.name}.yaml'
     out.write_text(
         DATA_HEADER.format(data=args.data, name=args.name) + block
         + f'\n# 화자 {n_spk}명 (명창 + pooled unknown). num_spk 는 최대 spk_id 보다 커야 한다.\n'
-        + f'num_spk: {n_spk + 1}\n',
+        + f'num_spk: {n_spk + 1}\n' + merged,
         encoding='utf-8')
     print(f'{out.relative_to(repo)}  (화자 {n_spk}명)')
 

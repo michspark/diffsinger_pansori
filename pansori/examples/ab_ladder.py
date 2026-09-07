@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Paired A/B over many held-out utterances — does the lyric correction change the model?
+"""Paired A/B over many held-out utterances — does the treatment change the model?
+
+두 팔은 --arms 로 고른다. 가사 A/B (whisper vs snapped) 로 만들었지만 정렬기 A/B
+(whisper vs sofa) 도 같은 자다 — 바뀐 것이 .lab 이든 정렬기든, 남는 질문은
+"그 라벨로 배운 모델의 소리가 원본에 더 가까운가" 하나이기 때문이다.
 
 `run_examples.sh` renders three utterances, and three is not enough here. Measured
 seed spread on a single clip is ±3-12% on mel L1 and ±13-28% on f0 RMSE
@@ -18,6 +22,8 @@ global that every model constructor reads — the two arms have different config
 cannot coexist in one interpreter.
 
     PYTHONPATH=. python pansori/examples/ab_ladder.py --n 30 --seeds 3
+    PYTHONPATH=. python pansori/examples/ab_ladder.py --arms whisper sofa \
+        --ckpt sofa=32000 --n 24 --seeds 3
 
 Outputs `pansori/examples/ab_out/{arm}/` wavs and prints the paired table.
 """
@@ -40,10 +46,24 @@ OUT_ROOT = REPO / 'pansori' / 'examples' / 'ab_out'
 
 ARMS = {
     'whisper': dict(config='configs/exp/ac_v1.yaml', data='data/pansori',
-                    ac_exp='pansori_ac_v1'),
+                    ac_exp='pansori_ac_v1', ckpt=28000),
     'snapped': dict(config='configs/exp/ac_snap.yaml', data='data/pansori_snap',
-                    ac_exp='pansori_ac_snap'),
+                    ac_exp='pansori_ac_snap', ckpt=36000),
+    'sofa': dict(config='configs/exp/ac_sofa.yaml', data='data/pansori_sofa',
+                 ac_exp='pansori_ac_sofa', ckpt=None),   # --ckpt sofa=N 로 준다
 }
+
+# 어느 두 팔을 비교하는가. --arms 가 바꾼다; 하위 프로세스에도 그대로 넘어간다.
+PAIR = ['whisper', 'snapped']
+
+# 대조군을 무엇으로 가르는가. 가사 A/B 는 "텍스트가 바뀐 발화"가 처치군이지만,
+# 정렬기 A/B 는 모든 발화의 음소열이 바뀌므로 그 기준이 아무것도 가르지 못한다.
+# 대신 MFA 가 실제로 무너진 발화(하한선 비율 상위 절반)를 처치군으로 본다 —
+# 정렬기를 바꾼 이유가 바로 그 발화들이기 때문이다.
+GROUP_LABELS = {
+    ('whisper', 'snapped'): ('가사 바뀐 발화', '가사 동일 (대조군)'),
+}
+DEFAULT_LABELS = ('MFA 하한선 높은 발화', 'MFA 하한선 낮은 발화 (대조군)')
 
 
 # ---------------------------------------------------------------- items
@@ -61,27 +81,64 @@ def corpus_rows(data_root: Path):
 
 
 def holdout_prefixes(config_path: Path):
-    """test_prefixes out of the rendered config -- the songs no model ever trained on."""
-    # make_configs.py writes the count as a trailing comment on the same line
-    # ("- 'c235c995'      # 발화 3,792개"), so take what is between the quotes.
-    prefixes = []
-    for line in config_path.read_text(encoding='utf-8').splitlines():
-        line = line.strip()
-        if line.startswith("- '") and line.count("'") >= 2:
-            prefixes.append(line.split("'")[1])
+    """test_prefixes out of the config chain -- the songs no model ever trained on.
+
+    base_config 를 따라 내려간다. 커밋 3cb4989 가 datasets 블록을 실험 파일에서
+    configs/pansori/data_*.yaml 로 옮겼으므로, 실험 파일만 읽으면 아무것도 못 찾는다
+    (그 커밋 이후 이 함수는 조용히 빈 목록을 돌려주고 있었다).
+    """
+    import yaml
+
+    seen, prefixes = set(), []
+
+    def walk(path: Path):
+        path = path.resolve()
+        if path in seen or not path.exists():
+            return
+        seen.add(path)
+        text = path.read_text(encoding='utf-8')
+        # make_configs.py writes the count as a trailing comment on the same line
+        # ("- 'c235c995'      # 발화 3,792개"), so take what is between the quotes.
+        for line in text.splitlines():
+            line = line.strip()
+            if line.startswith("- '") and line.count("'") >= 2:
+                prefixes.append(line.split("'")[1])
+        base = (yaml.safe_load(text) or {}).get('base_config') or []
+        for child in ([base] if isinstance(base, str) else base):
+            walk(REPO / child)
+
+    walk(config_path)
+    if not prefixes:
+        sys.exit(f'{config_path} 체인에서 test_prefixes 를 찾지 못했습니다 — '
+                 f'홀드아웃 없이는 A/B 가 성립하지 않습니다.')
     return prefixes
 
 
+def _floor_rate(row):
+    """이 발화의 ph_dur 중 MFA 하한선에 박힌 비율. label_report 와 같은 정의를 쓴다."""
+    sys.path.insert(0, str(REPO / 'pansori' / 'eval'))
+    from label_report import MFA_FLOOR, EPS
+    durs = [float(x) for x in row['ph_dur'].split()]
+    phones = [d for d, p in zip(durs, row['ph_seq'].split()) if p not in ('SP', 'AP')]
+    return sum(1 for d in phones if d <= MFA_FLOOR + EPS) / len(phones) if phones else 1.0
+
+
 def pick_items(n, seed):
-    a = corpus_rows(REPO / ARMS['whisper']['data'])
-    b = corpus_rows(REPO / ARMS['snapped']['data'])
-    prefixes = tuple(holdout_prefixes(REPO / ARMS['whisper']['config']))
+    a = corpus_rows(REPO / ARMS[PAIR[0]]['data'])
+    b = corpus_rows(REPO / ARMS[PAIR[1]]['data'])
+    prefixes = tuple(holdout_prefixes(REPO / ARMS[PAIR[0]]['config']))
     shared = sorted(set(a) & set(b))
     held = [i for i in shared if i.startswith(prefixes)]
-    # Only utterances whose text actually differs carry the treatment; the rest are
-    # a control group, and both are worth having in the table.
-    changed = [i for i in held if a[i][1]['ph_seq'] != b[i][1]['ph_seq']]
-    same = [i for i in held if a[i][1]['ph_seq'] == b[i][1]['ph_seq']]
+    if tuple(PAIR) in GROUP_LABELS:
+        # Only utterances whose text actually differs carry the treatment; the rest are
+        # a control group, and both are worth having in the table.
+        changed = [i for i in held if a[i][1]['ph_seq'] != b[i][1]['ph_seq']]
+        same = [i for i in held if a[i][1]['ph_seq'] == b[i][1]['ph_seq']]
+    else:
+        rates = {i: _floor_rate(a[i][1]) for i in held}
+        cut = statistics.median(rates.values()) if rates else 0.0
+        changed = [i for i in held if rates[i] > cut]
+        same = [i for i in held if rates[i] <= cut]
     rng = random.Random(seed)
     rng.shuffle(changed)
     rng.shuffle(same)
@@ -167,20 +224,20 @@ def mode_acoustic(arm, items, seeds, ckpt):
 
 def mode_score(items, seeds, changed):
     from utils.hparams import set_hparams, hparams
-    set_hparams(config=str(REPO / ARMS['whisper']['config']), print_hparams=False)
+    set_hparams(config=str(REPO / ARMS[PAIR[0]]['config']), print_hparams=False)
     import measure as M
     from modules.pe import initialize_pe
     pe = initialize_pe()
     sample_rate = hparams['audio_sample_rate']
-    rows = corpus_rows(REPO / ARMS['whisper']['data'])
+    rows = corpus_rows(REPO / ARMS[PAIR[0]]['data'])
 
-    scores = {arm: {} for arm in ARMS}
-    per_seed_scores = {arm: {} for arm in ARMS}
+    scores = {arm: {} for arm in PAIR}
+    per_seed_scores = {arm: {} for arm in PAIR}
     for item in items:
         speaker, _ = rows[item]
-        ref = M.load_wav(REPO / ARMS['whisper']['data'] / speaker / 'wavs' / f'{item}.wav',
+        ref = M.load_wav(REPO / ARMS[PAIR[0]]['data'] / speaker / 'wavs' / f'{item}.wav',
                          sample_rate)
-        for arm in ARMS:
+        for arm in PAIR:
             per_seed = []
             for seed in seeds:
                 path = OUT_ROOT / arm / 'wav' / f'{item}__s{seed}.wav'
@@ -206,7 +263,7 @@ def mode_score(items, seeds, changed):
 
 
 def sign_test(deltas, lower_is_better=True):
-    """Wins for snapped, wins for whisper, two-sided binomial p."""
+    """Wins for PAIR[1], wins for PAIR[0], two-sided binomial p."""
     wins = sum(1 for d in deltas if (d < 0) == lower_is_better and d != 0)
     losses = sum(1 for d in deltas if d != 0) - wins
     n = wins + losses
@@ -222,19 +279,20 @@ def report(items, changed, scores):
     metrics = [('mel_l1', 'mel L1', True, 3),
                ('f0_rmse_cent', 'f0 RMSE ¢', True, 0),
                ('voiced_agree', '유무성 일치', False, 3)]
-    groups = [('가사 바뀐 발화', [i for i in items if changed.get(i)]),
-              ('가사 동일 (대조군)', [i for i in items if not changed.get(i)]),
+    hi, lo = GROUP_LABELS.get(tuple(PAIR), DEFAULT_LABELS)
+    groups = [(hi, [i for i in items if changed.get(i)]),
+              (lo, [i for i in items if not changed.get(i)]),
               ('전체', list(items))]
 
     for title, subset in groups:
-        subset = [i for i in subset if i in scores['whisper'] and i in scores['snapped']]
+        subset = [i for i in subset if i in scores[PAIR[0]] and i in scores[PAIR[1]]]
         if not subset:
             continue
         print(f'\n{title} — {len(subset)}쌍')
-        print(f"  {'지표':<12}{'whisper':>10}{'snapped':>10}{'Δ 중앙값':>11}"
-              f"{'snapped 승':>11}{'p':>9}")
+        print(f"  {'지표':<12}{PAIR[0]:>10}{PAIR[1]:>10}{'Δ 중앙값':>11}"
+              f"{PAIR[1] + ' 승':>11}{'p':>9}")
         for key, label, lower_better, nd in metrics:
-            pairs = [(scores['whisper'][i].get(key), scores['snapped'][i].get(key))
+            pairs = [(scores[PAIR[0]][i].get(key), scores[PAIR[1]][i].get(key))
                      for i in subset]
             pairs = [(a, b) for a, b in pairs if a is not None and b is not None]
             if not pairs:
@@ -257,13 +315,26 @@ def main() -> None:
     parser.add_argument('--n', type=int, default=30, help='항목 수 (절반은 대조군)')
     parser.add_argument('--seeds', type=int, default=3)
     parser.add_argument('--sample-seed', type=int, default=20260829)
-    parser.add_argument('--ckpt-whisper', type=int, default=28000)
-    parser.add_argument('--ckpt-snapped', type=int, default=36000)
+    parser.add_argument('--arms', nargs=2, default=['whisper', 'snapped'],
+                        metavar=('A', 'B'), choices=list(ARMS),
+                        help='비교할 두 팔 (예: --arms whisper sofa)')
+    parser.add_argument('--ckpt', action='append', default=[], metavar='ARM=STEP',
+                        help='팔별 체크포인트 step (예: --ckpt sofa=32000). 반복 가능')
     parser.add_argument('--mode', default='driver',
                         choices=['driver', 'prep', 'acoustic', 'score'])
     parser.add_argument('--arm', choices=list(ARMS))
     parser.add_argument('--items-file')
     args = parser.parse_args()
+
+    PAIR[:] = args.arms
+    for spec in args.ckpt:
+        name, _, step = spec.partition('=')
+        if name not in ARMS:
+            sys.exit(f'--ckpt 의 팔 이름이 틀렸습니다: {name} (있는 것: {sorted(ARMS)})')
+        ARMS[name]['ckpt'] = int(step)
+    missing = [a for a in PAIR if ARMS[a].get('ckpt') is None]
+    if missing:
+        sys.exit(f'체크포인트 step 이 없습니다: {missing} — --ckpt {missing[0]}=STEP 로 주십시오')
 
     if args.items_file:
         payload = json.loads(Path(args.items_file).read_text(encoding='utf-8'))
@@ -275,8 +346,7 @@ def main() -> None:
     if args.mode == 'prep':
         return mode_prep(args.arm, items)
     if args.mode == 'acoustic':
-        ckpt = args.ckpt_whisper if args.arm == 'whisper' else args.ckpt_snapped
-        return mode_acoustic(args.arm, items, seeds, ckpt)
+        return mode_acoustic(args.arm, items, seeds, ARMS[args.arm]['ckpt'])
     if args.mode == 'score':
         return mode_score(items, seeds, changed)
 
@@ -285,21 +355,20 @@ def main() -> None:
     items_file.write_text(json.dumps({'items': items, 'changed': changed},
                                      ensure_ascii=False), encoding='utf-8')
     n_changed = sum(1 for i in items if changed[i])
-    print(f'항목 {len(items)}개 — 가사 바뀜 {n_changed} / 동일 {len(items) - n_changed}, '
-          f'시드 {len(seeds)}개')
+    hi, lo = GROUP_LABELS.get(tuple(PAIR), DEFAULT_LABELS)
+    print(f'{PAIR[0]} vs {PAIR[1]} — 항목 {len(items)}개 '
+          f'({hi} {n_changed} / {lo} {len(items) - n_changed}), 시드 {len(seeds)}개')
 
     env = {**os.environ, 'PYTHONPATH': str(REPO)}
-    for arm in ARMS:
+    ckpt_args = [x for a in PAIR for x in ('--ckpt', f'{a}={ARMS[a]["ckpt"]}')]
+    common = ['--arms', *PAIR, '--items-file', str(items_file),
+              '--seeds', str(args.seeds), *ckpt_args]
+    for arm in PAIR:
         for mode in ('prep', 'acoustic'):
-            subprocess.run(
-                [sys.executable, __file__, '--mode', mode, '--arm', arm,
-                 '--items-file', str(items_file), '--seeds', str(args.seeds),
-                 '--ckpt-whisper', str(args.ckpt_whisper),
-                 '--ckpt-snapped', str(args.ckpt_snapped)],
-                cwd=REPO, env=env, check=True)
-    subprocess.run(
-        [sys.executable, __file__, '--mode', 'score', '--items-file', str(items_file),
-         '--seeds', str(args.seeds)], cwd=REPO, env=env, check=True)
+            subprocess.run([sys.executable, __file__, '--mode', mode, '--arm', arm,
+                            *common], cwd=REPO, env=env, check=True)
+    subprocess.run([sys.executable, __file__, '--mode', 'score', *common],
+                   cwd=REPO, env=env, check=True)
 
 
 if __name__ == '__main__':

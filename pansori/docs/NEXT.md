@@ -11,7 +11,7 @@
 - `04_align.py` 가 MFA words tier 도 기록 → MFA 재실행 없이 `ph_num` 유도
 - `06_merge.py` / `07_validate.py` openvpi CSV 스키마로 재작성
 - `08_export.py` 로 44.1 kHz 모노 재커팅 + 화자 23명 분할
-- `configs/pansori_{acoustic,variance}.yaml` 생성 (`make_configs.py`)
+- `configs/pansori/{acoustic,variance}.yaml` 생성 (`make_configs.py`)
 
 기동 세션:
 
@@ -19,7 +19,7 @@
 - **체크포인트 3종** 다운로드: `rmvpe`, `pc_nsf_hifigan_44.1k_hop512_128bin_2025.02`, `vr`(HN-SEP)
 - **`check_dict_agreement.py` 신규** — 매핑 변경을 사전 대조 점수로 판정하는 하네스
 - **라벨 결함 3갈래 수정** → 1음절 일치율 **87.92% → 89.59%**, 2음절 75.01% → 76.43%
-- 라벨 재생성 (04 `--skip_mfa` → 06 → 07 PASS → 08). 26,955항목 중 **3,109개(11.5%)** 변경
+- 라벨 재생성 (04 `--skip_align` → 06 → 07 PASS → 08). 26,955항목 중 **3,109개(11.5%)** 변경
 - **binarize 완료** — acoustic 4.5 GB / variance 381 MB, train 27.8 h · valid 1.08 h, 23화자 전원 학습 데이터 보유
 - **spec 통계 실측 → config 반영.** 상한이 실제로 기본값을 벗어났다 (아래 참조)
 - **acoustic + variance 학습 완료** — `checkpoints/pansori_{ac,var}_v1`, 둘 다 scratch
@@ -95,7 +95,7 @@ tensorboard --logdir checkpoints
 
 ### D. 남은 라벨 이슈 (측정만 해둠)
 `check_dict_agreement.py --syllables N --focus <기호>` 로 언제든 다시 잴 수 있다.
-고치면 04(`--skip_mfa`) → 06 → 07 이 2분, 08 재커팅이 20분이다. **MFA 재실행은 불필요.**
+고치면 04(`--skip_align`) → 06 → 07 이 2분, 08 재커팅이 20분이다. **재정렬은 불필요.**
 
 6. **ㅈ/ㅉ/ㅊ + 활음** (96건+): 죠는 [tɕo] 라 MFA 는 `j o`, 사전은 `j y o`.
    한국어에서 죠/조는 동음이므로 이건 **사전 쪽 문제**다 — `ipa_to_coda.csv` 에 `y` 를 붙이면
@@ -111,9 +111,10 @@ tensorboard --logdir checkpoints
 ### E. 정리 / 결정
 11. `~/Desktop/DiffSinger_moonInRiver` 를 origin 에 push 할지 (로컬 커밋만 되어 있음)
 12. 정리 대상: 구 24 kHz `wavs/`(5.5 GB), 구 `data/binary/pansori*`(16 GB) — 검증 후
-13. **들숨(AP) 라벨링**: 지금은 `merged_phoneme_groups: [[SP, AP]]` 로 무음과 합쳐 뒀다.
-    판소리는 들숨이 크게 들리므로 따로 라벨할 값어치가 있을 수 있다. 하려면 06 에
-    에너지 기반 판정을 넣고 재-binarize
+13. ~~**들숨(AP) 라벨링**~~ — 경로가 생겼다. `preprocess/align.yaml` 의
+    `breath_ap.enabled: true` 로 두면 SOFA 정렬 후 FoxBreatheLabeler 가 SP 구간 위에 AP 를
+    덧씌우고, `make_configs.py` 가 `merged_phoneme_groups` 를 자동으로 뺀다 (README §3.1).
+    에너지 기반 판정을 06 에 직접 넣을 필요는 없어졌다. 남은 것은 실제로 돌려서 재는 일
 
 ## 신경 쓸 것
 

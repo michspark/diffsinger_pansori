@@ -25,6 +25,10 @@
 python pansori/eval/label_report.py                                    # data/pansori
 python pansori/eval/label_report.py --corpus data/pansori data/pansori_snap \
        --html pansori/eval/out/label_report.html
+
+# 정렬기 A/B (MFA vs SOFA) — 이 표가 판정이다. README §3.1 참조
+python pansori/eval/label_report.py --corpus data/pansori data/pansori_sofa \
+       --html pansori/eval/out/label_report.html
 ```
 
 모델도 GPU 도 필요 없다. `transcriptions.csv` 의 `ph_dur` 만 읽는다.

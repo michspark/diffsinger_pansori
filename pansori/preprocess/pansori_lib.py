@@ -17,14 +17,48 @@ from typing import Dict, List, Optional, Tuple
 
 # ---------------------------------------------------------------- paths
 
-# preprocess/ -> pansori/
-PANSORI_DIR = Path(__file__).resolve().parent.parent
+# preprocess/ -> pansori/ -> repo root
+PREPROCESS_DIR = Path(__file__).resolve().parent
+PANSORI_DIR = PREPROCESS_DIR.parent
+REPO_DIR = PANSORI_DIR.parent
 DATA_DIR = PANSORI_DIR / "data"
 ALIGN_DIR = PANSORI_DIR / "alignment"
 
 # Source pansori corpus (not under this repo).
 PANSORI_DATA = Path("/home/sangheon/Desktop/Pansori_Data")
 MIDI_DIR = PANSORI_DATA / "rosvot_midi"
+
+# ---------------------------------------------------------------- align config
+
+
+def load_align_config(path: Optional[Path] = None) -> Dict:
+    """Stage 4 의 정렬기 설정. 경로 값은 ~ 확장 + repo 기준 절대경로로 돌려준다.
+
+    두 정렬기(MFA / SOFA)는 서로 다른 conda env 에 살고 각자 체크포인트·사전
+    경로를 들고 다닌다. 그걸 스크립트 상수로 두면 정렬기를 바꿀 때마다 코드를
+    고쳐야 하므로 align.yaml 한 곳으로 모았다. 여기서 경로를 미리 풀어 두는 이유는
+    04_align.py 가 conda run 으로 다른 cwd 에서 도구를 부르기 때문이다 — 상대경로가
+    거기까지 살아 남지 못한다.
+    """
+    import yaml  # aligner/pansori/dsp 세 env 모두에 있다 (MFA·lightning 의존성)
+
+    cfg_path = Path(path) if path else PREPROCESS_DIR / "align.yaml"
+    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+
+    for section, keys in (("sofa", ("root", "ckpt", "dictionary")),
+                          ("breath_ap", ("root", "ckpt"))):
+        for key in keys:
+            value = cfg.get(section, {}).get(key)
+            if value:
+                cfg[section][key] = resolve_path(value)
+    return cfg
+
+
+def resolve_path(value: str) -> Path:
+    """'~/x' -> home, 'a/b' -> repo-relative, '/a/b' -> as is."""
+    path = Path(value).expanduser()
+    return path if path.is_absolute() else (REPO_DIR / path).resolve()
+
 
 # ---------------------------------------------------------------- audio
 

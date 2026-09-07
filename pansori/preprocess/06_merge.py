@@ -94,7 +94,12 @@ def assign_words(phones: List[Phone], words) -> None:
 
 
 def absorb_silence(phones: List[Phone], notes) -> List[Phone]:
-    """Silence under a note = held note -> extend previous phone. Else -> SP."""
+    """Silence under a note = held note -> extend previous phone. Else -> SP.
+
+    Only the 'sil' placeholder stage 4 emits is resolved here. A real AP (breath),
+    which only the SOFA arm produces, is a phone like any other and passes through
+    -- an audible in-breath is not silence to be folded into the vowel before it.
+    """
     out: List[Phone] = []
     for phone in phones:
         if phone.coda != "sil":
@@ -142,7 +147,11 @@ def group_words(phones: List[Phone], words, table) -> List[List[Phone]]:
     index = 0
     while index < len(phones):
         phone = phones[index]
-        if phone.coda == "SP" or phone.word is None:
+        # SP/AP are non-speech and sit between words, so each is its own group.
+        # (AP only exists on the SOFA arm with breath_ap enabled; it never lands
+        # inside a word interval, so `word is None` already covered it -- naming
+        # it keeps the intent readable next to the SP case.)
+        if phone.coda in ("SP", "AP") or phone.word is None:
             groups.append([phone])
             index += 1
             continue

@@ -12,9 +12,12 @@
 - **`spec_max` 기본값 `[0]` 을 그대로 두지 말 것.** 이 코퍼스 실측 상한은 **+2.838** 이라
   정규화 후 diffusion 타깃이 [-1, 1] 을 벗어난다. 하한은 반대로 안전하다 — `nvSTFT` 가
   `log(clamp(x, 1e-5))` 로 압축해 -11.513 아래가 존재할 수 없다.
-- **`AP` 는 `SP` 와 합쳐 뒀다.** openvpi 는 음소셋에 `AP`(들숨) 를 항상 넣고 binarize 는 셋의
-  모든 항목이 코퍼스에 나타나야 통과시키는데, 우리 라벨에는 들숨 구분이 없다. 들숨을 따로
-  라벨하게 되면 `make_configs.py` 의 `merged_phoneme_groups` 를 지우고 재-binarize 할 것.
+- **`AP`/`SP` 병합은 코퍼스가 정한다, 사람이 정하지 않는다.** openvpi 는 음소셋에 `AP`(들숨) 를
+  항상 넣고 binarize 는 셋의 모든 항목이 코퍼스에 나타나야 통과시킨다. MFA 팔의 라벨에는 들숨
+  구분이 없으므로 `merged_phoneme_groups: [[SP, AP]]` 가 붙는다. SOFA + FoxBreatheLabeler 로
+  들숨을 실제로 라벨하면 (`preprocess/align.yaml` 의 `breath_ap.enabled`) `make_configs.py` 가
+  `transcriptions.csv` 에서 `AP` 를 보고 그 블록을 **자동으로 뺀다** — 손으로 지우지 말 것.
+  라벨과 음소셋이 어긋나면 binarize 가 죽는데, 어느 쪽인지는 CSV 안에만 있다.
 - **가장 최근 체크포인트가 최선이 아니다.** 구 파이프라인에서는 56k step 부근에서 과적합이
   시작됐다. 아키텍처가 달라졌으니 수치는 이월되지 않지만 습관은 유지할 것.
 

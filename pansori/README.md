@@ -4,7 +4,7 @@
 이 문서는 **실행법**만 담는다 — 왜 그렇게 하는지는 아래 문서들에 있다.
 
 **upstream 파일은 한 줄도 고치지 않았다.** 우리 코드는 `pansori/`, `dictionaries/korean-coda.txt`,
-`configs/pansori_*.yaml` 에만 있다. rebase 를 계속 감당하려면 그 상태를 유지할 것.
+`configs/pansori/`, `configs/exp/` 에만 있다. rebase 를 계속 감당하려면 그 상태를 유지할 것.
 
 | 문서 | 내용 |
 |---|---|
@@ -55,7 +55,7 @@ pansori/
 ├── variance_task.py     VarianceTask 서브클래스 — 음소 길이 지표를 등록한다
 ├── tb_to_wandb.py       끝난 학습의 텐서보드 로그 → wandb
 ├── build_dictionary.py  한글 11,172음절 → Coda 34음소 사전
-├── make_configs.py      화자 목록을 읽어 configs/pansori_*.yaml 렌더링
+├── make_configs.py      화자 목록을 읽어 configs/pansori/ 렌더링
 ├── make_ds.py           라벨 또는 악보 → .ds (추론 입력)
 └── compute_spec_stats.py  이 코퍼스의 mel 포락선 실측 → spec_min/spec_max
 ```
@@ -92,8 +92,11 @@ configs/
 | `pansori` | 3.10 | 전처리 01–03, 06–08 |
 | `aligner` | 3.14 | MFA 3.4.1 + `korean_mfa` + mecab-ko → 04–05 |
 | `dsp` | 3.10 | openvpi 본체 (binarize / train / infer / eval) |
+| `sofa` | 3.10 | SOFA 정렬기 (선택 — §3.1) |
+| `fbl` | 3.10 | FoxBreatheLabeler 들숨 라벨 (선택 — §3.1) |
 
-`bash pansori/server/run.sh setup` 이 셋을 만들고 체크포인트도 받는다.
+`bash pansori/server/run.sh setup` 이 앞의 셋을 만들고 체크포인트도 받는다.
+`sofa`/`fbl` 은 정렬기를 바꿀 때만 필요하다 (§3.1 에 설치 명령).
 
 - **`dsp` 는 `PYTHONNOUSERSITE=1` 이 필수다** (env 의 `activate.d` 에 넣어 뒀다).
   `~/.local` 의 낡은 tensorflow 가 tensorboard import 를 죽인다.
@@ -113,7 +116,8 @@ configs/
 | 2 | `02_speaker_map.py` | segments → `spk_map.json` | base |
 | 3 | `03_transcribe.py` | wavs → `lyrics.jsonl` (whisper-large-v3) | base |
 | 3b | `03b_snap_lyrics.py` | lyrics + 창본 → `lyrics_snapped.jsonl` (선택) | pansori |
-| 4 | `04_align.py` | lyrics + wavs → `phones.jsonl` | aligner |
+| 4 | `04_align.py` | lyrics + wavs → `phones.jsonl` (MFA 또는 SOFA — §3.1) | aligner |
+| 4b | `04b_sofa_data.py` | phones → SOFA 학습 데이터 (선택) | pansori |
 | 5 | `05_notes.py` | rosvot_midi → `notes.jsonl` | aligner |
 | 6 | `06_merge.py` | phones + notes → `transcriptions.csv` | pansori |
 | 7 | `07_validate.py` | transcriptions → PASS/FAIL | pansori |
@@ -121,7 +125,7 @@ configs/
 
 ```sh
 cd pansori/preprocess
-conda activate aligner && python 04_align.py --set full --skip_mfa    # 정렬 결과 재파싱 ~2분
+conda activate aligner && python 04_align.py --set full --skip_align  # 정렬 결과 재파싱 ~2분
 conda activate pansori
 python 06_merge.py --set full && python 07_validate.py --set full     # PASS 확인 필수
 python 08_export.py --set full --out data/pansori                     # 오디오 재커팅 ~20분
@@ -138,6 +142,135 @@ python pansori/preprocess/01b_recut_wavs.py --set full   # 31,529개, 새로 자
 **`07_validate.py` PASS 없이 binarize 하지 말 것.** binarizer 의 assert 실패는 스킵이
 아니라 실행 중단이다. `ipa_to_coda.csv` 나 `convert_phone` 을 고쳤다면 그 전후로
 `alignment/check_dict_agreement.py` 를 돌려 숫자로 판정한다 (1음절 현재 89.59%).
+
+---
+
+## 3.1 정렬기 — MFA ↔ SOFA
+
+Stage 4 의 정렬기는 `preprocess/align.yaml` 의 **`aligner` 한 줄**이 정한다
+(`--aligner mfa|sofa` 로 덮어쓸 수 있다). 어느 쪽이든 `aligned{suffix}/*.TextGrid` 를
+남기므로 06 이후는 아무것도 달라지지 않는다.
+
+| | MFA (기본) | SOFA |
+|---|---|---|
+| 설계 | 음성용 HMM-GMM | 노래 전용 |
+| 음소 | IPA → `ipa_to_coda.csv` + `convert_phone` (일치율 89.59%) | `korean-coda.txt` 를 그대로 써서 **Coda 가 바로 나온다** |
+| 파인튜닝 | 사실상 불가 | full/weak/no_label 로 직접 학습 (§3.2) |
+| 들숨(AP) | 없음 | FoxBreatheLabeler 로 라벨 (`breath_ap.enabled`) |
+| 환경 | `aligner` | `sofa` (`conda run` 으로 셸아웃) |
+
+왜 바꾸는가: 정렬기 원본 TextGrid 기준 음소의 **34.03%** 가 0.03초 하한선에 박혀 있고
+([`lyricbook/VERDICT.md`](lyricbook/VERDICT.md)), 06 이 흡수하는 "무음인데 노트가 있는"
+구간이 코퍼스 시간의 **52.2%** 다. 둘 다 정렬기가 판소리의 지속음을 감당하지 못한다는
+같은 이야기다. 창본 보정으로 가사 축을 손대 본 결과가 그 판정문의 결론이다 —
+*"가사를 바꾸는 것보다 정렬 자체를 고치는 쪽의 여지가 훨씬 크다."*
+
+### 설치 (한 번만)
+
+두 env 모두 `dsp` 와 같은 두 함정을 밟는다. 만들자마자 막아 둘 것:
+
+- **`PYTHONNOUSERSITE=1`** — 없으면 `~/.local` 의 낡은 패키지 때문에 pip 가 "이미 설치됨"
+  으로 건너뛰어 env 가 조용히 반쪽으로 만들어진다 (SOFA 는 `PIL` 없음으로 죽는다).
+- **`setuptools<81`** — `librosa<0.10` 이 `pkg_resources` 를 쓰는데 setuptools 81 이 그걸
+  뺐다. `dsp` 가 lightning 때문에 같은 핀을 쓰고 있다.
+
+```sh
+git clone https://github.com/qiuqiao/SOFA ~/src/SOFA
+conda create -y -n sofa python=3.10
+echo 'export PYTHONNOUSERSITE=1' \
+  > ~/miniconda3/envs/sofa/etc/conda/activate.d/no_user_site.sh   # 없으면 mkdir -p 먼저
+conda activate sofa
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+pip install -r ~/src/SOFA/requirements.txt "setuptools<81"
+cp dictionaries/korean-coda.txt ~/src/SOFA/dictionary/
+python infer.py --help          # 여기까지 떠야 한다
+
+# 들숨(AP) 라벨까지 할 때만.
+# FoxBreatheLabeler 에는 requirements.txt 가 없다 — 아래가 textgrid_add_ap.py 가
+# 실제로 import 하는 것들이다 (trainCLS 가 lightning 과 pytorch_lightning 을 둘 다 쓴다).
+git clone https://github.com/autumn-DL/FoxBreatheLabeler ~/src/FoxBreatheLabeler
+conda create -y -n fbl python=3.10
+echo 'export PYTHONNOUSERSITE=1' \
+  > ~/miniconda3/envs/fbl/etc/conda/activate.d/no_user_site.sh
+conda activate fbl
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+pip install click "einops==0.6.1" "librosa<0.10.0" "matplotlib~=3.7.3" "numpy~=1.24.1" \
+            "PyYAML~=6.0.1" textgrid tqdm "lightning>=2.0.0" pytorch-lightning \
+            numba chardet "setuptools<81"
+cd ~/src/FoxBreatheLabeler && python textgrid_add_ap.py --help    # 여기까지 떠야 한다
+# 체크포인트(config.yaml + model_ckpt_steps_7000.ckpt):
+#   https://github.com/autumn-DL/FoxBreatheLabeler/releases/latest
+```
+
+`align.yaml` 의 `sofa.root` / `sofa.ckpt` / `breath_ap.*` 를 받은 위치로 맞춘다.
+
+## 3.2 SOFA 파인튜닝
+
+한국어 SOFA 공개 체크포인트는 없다 (공개된 것은 만다린 `opencpop-extension`). 학습
+데이터는 기존 MFA 정렬에서 부트스트랩하되, **그대로 쓰지 않는다** — 통째로 주면 SOFA 가
+MFA 의 0.03초 바닥을 그대로 배운다. 발화별 floor_rate 로 갈라 나쁜 타이밍만 버린다.
+
+```sh
+conda activate pansori
+python pansori/preprocess/01b_recut_wavs.py --set full          # data/full/wavs 복원
+python pansori/preprocess/04b_sofa_data.py --set full --out ~/src/SOFA/data
+#   floor_rate <= 0.15 → full_label (타이밍까지 신뢰)
+#   초과              → weak_label (음소열만, 타이밍 버림)
+#   정렬 없음          → no_label   (오디오만)
+#   --max_floor_rate 로 조절. 문턱값별 발화 수를 같이 찍는다.
+```
+
+실측 (26,955발화): floor_rate 중앙값 **0.35**. `0.15` 에서 full 4,501 / weak 22,454 /
+no 4,574 로 갈린다.
+
+```sh
+conda activate sofa && cd ~/src/SOFA
+# configs/binarize_config.yaml 의 data_folder 를 위 --out 으로 맞춘다
+python binarize.py
+
+# 사전학습: releases 의 pretrained_multilingual_singing.zip (v1.0.1, 359MB)
+# configs/train_config.yaml 의 model_name 을 korean_pansori 로
+python train.py -p ckpt/pretrained_multilingual_singing.ckpt
+tensorboard --logdir=ckpt/
+```
+
+**음소셋이 달라도 `-p` 를 쓴다.** `modules/task/forced_alignment.py:190-197` 의
+`load_pretrained` 는 backbone 을 그대로 가져오고, vocab 크기가 다르면 **head 만 새로
+초기화한다**. 즉 만다린 체크포인트에서 음향 backbone 을 물려받고 한국어 음소 분류기만
+새로 배운다 — 처음부터 학습할 이유가 없다.
+
+**추론에 zero-shot 은 불가능하다.** vocab 은 체크포인트 안에 박혀 있고
+(`forced_alignment.py:309` 이 `self.vocab[ph]` 로 직접 찾는다), 만다린 vocab 에 Coda
+음소가 없으므로 학습 전에 `--aligner sofa` 를 돌리면 `KeyError` 로 죽는다. 순서는
+반드시 **학습 먼저**다.
+
+### SOFA 로 코퍼스 전체 정렬 → A/B
+
+`align.yaml` 에 `aligner: sofa` 와 학습된 `sofa.ckpt` 를 넣고:
+
+```sh
+conda activate aligner && cd pansori/preprocess
+python 04_align.py --set full --aligner sofa --suffix _sofa
+
+conda activate pansori && cd ../data && mkdir -p full_sofa && cd full_sofa
+ln -s ../full/{segments.jsonl,notes.jsonl,spk_map.json,wavs} .
+ln -s ../full/phones_sofa.jsonl phones.jsonl          # 다른 것은 이것뿐이다
+cd ../../preprocess
+python 06_merge.py --set full_sofa && python 07_validate.py --set full_sofa
+python 08_export.py --set full_sofa --out data/pansori_sofa --wavs_from data/pansori
+
+conda activate dsp && export PYTHONPATH=. PYTHONNOUSERSITE=1
+python pansori/make_configs.py --data data/pansori_sofa --name sofa
+python pansori/eval/label_report.py --corpus data/pansori data/pansori_sofa \
+       --html pansori/eval/out/label_report.html      # ★ 판정은 이 표로
+```
+
+들숨까지 하려면 `align.yaml` 의 `breath_ap.enabled: true` 로 두고 같은 절차를 돌린다.
+`ph_seq` 에 `AP` 가 실리면 `make_configs.py` 가 `merged_phoneme_groups` 를 자동으로 뺀다.
+
+`alignment/check_dict_agreement.py` 는 IPA→Coda **변환** 채점기이므로 SOFA 팔에는
+적용되지 않는다 (변환 단계가 없다). `eval/intelligibility.py` 는 MFA 를 *측정 도구* 로
+쓰므로 설정과 무관하게 MFA 고정이다 — 과거 수치와의 비교선을 지키기 위해서다.
 
 ---
 

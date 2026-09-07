@@ -13,27 +13,31 @@ snapped text -- so the comparison is paired and nothing but the .lab differs.
 data/{set}/wavs is gone once the pipeline has run, so the sampled clips are
 re-cut from the source audio the way 01_segment.py cut them (44.1kHz mono).
 
+정렬기는 preprocess/align.yaml 이 정한 것을 쓴다 (--aligner 로 덮어쓸 수 있다).
+가사 축을 재는 자이므로 정렬기는 고정해야 한다 — 두 팔이 같은 정렬기를 통과한다.
+
 Run in the `aligner` env (needs praatio, librosa, soundfile, and the mfa CLI).
 
     python pansori/eval/compare_lyrics_alignment.py --set full --n 200
+    python pansori/eval/compare_lyrics_alignment.py --set full --aligner sofa
 """
 
 import argparse
 import json
 import os
 import random
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "preprocess"))
 
-from pansori_lib import PANSORI_DATA, TARGET_SAMPLE_RATE, read_jsonl, set_dir
+from aligners import get_aligner
+from pansori_lib import (PANSORI_DATA, TARGET_SAMPLE_RATE, load_align_config,
+                         read_jsonl, set_dir)
 
-ACOUSTIC = DICTIONARY = "korean_mfa"
-
-# MFA's per-phone minimum. A phone sitting on it is one the aligner declined to
-# place; VERDICT.md measured 25.8% of phones pinned there on clips under 6s.
+# The per-phone minimum an aligner pins a phone to when it gives up. A phone
+# sitting on it is one the aligner declined to place; VERDICT.md measured 25.8%
+# of phones pinned there on clips under 6s (MFA's floor is 0.03s).
 FLOOR_SEC = 0.031
 LONG_SILENCE_SEC = 1.0
 SILENCE_LABELS = {"", "sil", "sp", "spn", "<eps>"}
@@ -62,8 +66,12 @@ def cut_clips(rows, segments, wav_dir):
         print(f"  [{index}/{len(by_song)}] {stem[:52]}")
 
 
-def build_corpus(rows, wav_dir, corpus_dir, field):
-    """wav symlink + .lab holding `field`'s text, for every sampled item."""
+def build_corpus(rows, wav_dir, corpus_dir, field, aligner):
+    """wav symlink + .lab holding `field`'s text, for every sampled item.
+
+    The .lab formatting is the aligner's, not ours -- MFA reads 어절, SOFA reads
+    whatever `sofa.lab_unit` says. Same text, the shape each one expects.
+    """
     corpus_dir.mkdir(parents=True, exist_ok=True)
     for row in rows:
         item = row["item_name"]
@@ -71,13 +79,8 @@ def build_corpus(rows, wav_dir, corpus_dir, field):
         if link.exists() or link.is_symlink():
             link.unlink()
         os.symlink((wav_dir / f"{item}.wav").resolve(), link)
-        (corpus_dir / f"{item}.lab").write_text(row[field], encoding="utf-8")
-
-
-def run_mfa(corpus_dir, aligned_dir):
-    subprocess.run(["mfa", "align", str(corpus_dir), DICTIONARY, ACOUSTIC,
-                    str(aligned_dir), "--clean", "--output_format",
-                    "long_textgrid"], check=True)
+        (corpus_dir / f"{item}.lab").write_text(aligner.lab_text(row[field]),
+                                                encoding="utf-8")
 
 
 def measure(aligned_dir, durations):
@@ -143,7 +146,7 @@ def report(before, after, rows):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="스냅 가사의 MFA 정렬 개선 검증")
+    parser = argparse.ArgumentParser(description="스냅 가사의 정렬 개선 검증")
     parser.add_argument("--set", default="full")
     parser.add_argument("--lyrics", default="lyrics_snapped.jsonl")
     parser.add_argument("--n", type=int, default=200, help="표본 세그먼트 수")
@@ -151,7 +154,12 @@ def main() -> None:
     parser.add_argument("--work-dir", default="", help="기본: data/{set}/lyric_eval")
     parser.add_argument("--reuse", action="store_true",
                         help="이미 잘라둔 wav와 정렬 결과를 재사용하고 분석만")
+    parser.add_argument("--aligner", default=None, choices=["mfa", "sofa"],
+                        help="기본값은 preprocess/align.yaml 의 aligner")
     args = parser.parse_args()
+
+    config = load_align_config()
+    aligner = get_aligner(args.aligner or config["aligner"], config)
 
     out_dir = set_dir(args.set)
     segments = read_jsonl(out_dir / "segments.jsonl")
@@ -162,7 +170,8 @@ def main() -> None:
     if not snapped:
         sys.exit(f"{args.lyrics} 에 source=book 인 세그먼트가 없습니다.")
     rows = random.Random(args.seed).sample(snapped, min(args.n, len(snapped)))
-    print(f"교정된 {len(snapped):,}개 중 {len(rows)}개 표본 (seed={args.seed})")
+    print(f"교정된 {len(snapped):,}개 중 {len(rows)}개 표본 "
+          f"(seed={args.seed}, 정렬기={aligner.name})")
 
     work = Path(args.work_dir) if args.work_dir else out_dir / "lyric_eval"
     wav_dir = work / "wavs"
@@ -171,9 +180,9 @@ def main() -> None:
         print("\n클립 재절단...")
         cut_clips(rows, segments, wav_dir)
         for field, tag in [("text_whisper", "whisper"), ("text", "snapped")]:
-            print(f"\nMFA 정렬 ({tag})...")
-            build_corpus(rows, wav_dir, work / f"corpus_{tag}", field)
-            run_mfa(work / f"corpus_{tag}", work / f"aligned_{tag}")
+            print(f"\n{aligner.name} 정렬 ({tag})...")
+            build_corpus(rows, wav_dir, work / f"corpus_{tag}", field, aligner)
+            aligner.run(work / f"corpus_{tag}", work / f"aligned_{tag}")
 
     before = measure(work / "aligned_whisper", durations)
     after = measure(work / "aligned_snapped", durations)

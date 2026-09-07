@@ -1,121 +1,78 @@
 #!/usr/bin/env python3
-"""Stage 4: force-align with korean_mfa, then convert IPA -> Coda phones.
+"""Stage 4: force-align, then emit Coda-36 phones with local-time spans.
 
-Builds an MFA corpus (wav + normalized .lab) from segments + lyrics, runs
-`mfa align`, and parses each TextGrid into Coda-36 phones with local-time
-spans. The context rules (on-glide split, nasal/liquid position) live in
-pansori_lib.convert_phone. Silence is kept as a 'sil' placeholder here;
-Stage 6 decides (using ROSVOT notes) whether it is a held vowel or a real SP.
+정렬기는 두 개 중에 고른다 (preprocess/align.yaml 의 `aligner`, 또는 --aligner):
+
+    mfa   korean_mfa. 사전이 IPA 를 내므로 pansori_lib.convert_phone 의 문맥
+          규칙(on-glide 분리, 비음/유음 위치)을 거쳐 Coda 가 된다.
+    sofa  노래 전용 정렬기. dictionaries/korean-coda.txt 를 그대로 사전으로
+          쓰므로 Coda 가 바로 나오고, breath_ap 를 켜면 들숨(AP)까지 라벨된다.
+
+무엇을 골랐든 aligned{suffix}/*.TextGrid 를 남기고 phones{suffix}.jsonl 을 쓴다.
+무음은 여기서 'sil' 자리표시자로 두고, Stage 6 이 ROSVOT 노트를 보고 held vowel
+인지 진짜 SP 인지 정한다. 백엔드의 속은 aligners.py 에 있다.
 
 Input : data/{set}/segments.jsonl + lyrics.jsonl + wavs/*.wav
         (--lyrics picks another lyrics file, e.g. 03b's lyrics_snapped.jsonl;
          --suffix keeps a second run's corpus/aligned/phones side by side so
-         two lyric sources can be aligned and compared)
+         two lyric sources -- or two aligners -- can be compared)
 Output: data/{set}/phones.jsonl   {item_name, phones:[[coda,start,end],...],
-                                   words:[[syllable,start,end],...]}
-        (+ data/{set}/mfa_corpus/, data/{set}/aligned/ as intermediates)
+                                   words:[[word,start,end],...]}
+        (+ data/{set}/{mfa,sofa}_corpus/, data/{set}/aligned/ as intermediates)
 
-Run in the `aligner` env (mfa CLI + praatio).
+Run in the `aligner` env (praatio; mfa CLI for the MFA arm). SOFA 는 자기
+conda env 로 셸아웃하므로 이 env 에 torch 가 없어도 된다.
 """
 
 import argparse
-import os
-import subprocess
 from pathlib import Path
-from typing import List
 
-from praatio import textgrid as tgio
-
-from pansori_lib import (SILENCE_LABELS, convert_phone, load_ipa_to_coda,
-                         read_jsonl, write_jsonl, set_dir)
-
-ACOUSTIC = "korean_mfa"
-DICTIONARY = "korean_mfa"
-MIN_HANGUL = 2  # skip utterances with too little text to align
+from aligners import get_aligner
+from pansori_lib import load_align_config, read_jsonl, set_dir, write_jsonl
 
 
-def build_corpus(out_dir: Path, segments, lyrics, suffix: str = "") -> Path:
-    """Create mfa_corpus{suffix}/{item}.wav (symlink) + {item}.lab (text)."""
-    corpus = out_dir / f"mfa_corpus{suffix}"
-    corpus.mkdir(exist_ok=True)
-    text_by_item = {r["item_name"]: r["text"] for r in lyrics}
+# ---------------------------------------------------------------- 호환 진입점
+# pansori/eval/intelligibility.py 가 이 파일을 importlib 로 열어 아래 두 이름을
+# 직접 부른다 ("04_align.py 는 숫자로 시작해 import 문으로 못 부른다"). 거기서
+# MFA 는 *측정 도구* 이므로 — 과거 수치와의 비교선을 지키려면 정렬기가 바뀌면
+# 안 된다 — 설정과 무관하게 MFA 로 고정한 얇은 위임으로 남긴다.
 
-    n = 0
-    for record in segments:
-        item = record["item_name"]
-        text = text_by_item.get(item, "").strip()
-        if sum(1 for ch in text if "가" <= ch <= "힣") < MIN_HANGUL:
-            continue                      # nothing alignable
-        wav_src = (out_dir / "wavs" / f"{item}.wav").resolve()
-        wav_link = corpus / f"{item}.wav"
-        if wav_link.exists() or wav_link.is_symlink():
-            wav_link.unlink()
-        os.symlink(wav_src, wav_link)
-        (corpus / f"{item}.lab").write_text(text, encoding="utf-8")
-        n += 1
-    print(f"MFA 코퍼스: {n}개 (텍스트 부족분 제외 {len(segments) - n}개)")
-    return corpus
+def _mfa():
+    return get_aligner("mfa", load_align_config())
 
 
 def run_mfa(corpus: Path, aligned: Path) -> None:
     """Invoke the MFA CLI. Assumes the `aligner` env is active."""
-    subprocess.run(
-        ["mfa", "align", str(corpus), DICTIONARY, ACOUSTIC, str(aligned),
-         "--clean", "--output_format", "long_textgrid"],
-        check=True,
-    )
+    _mfa().run(corpus, aligned)
 
 
-def textgrid_to_coda(tg_path: Path, mapping) -> dict:
-    """One TextGrid -> {"phones": [[coda,start,end],...], "words": [[syl,start,end],...]}.
+def textgrid_to_coda(tg_path: Path, mapping=None) -> dict:
+    """One MFA TextGrid -> {"phones": [...], "words": [...]}.
 
-    A single IPA interval can split into two Coda tokens (e.g. mʲ -> m y);
-    the interval duration is split evenly (harmless for length parity/is_slur).
-    sil/spn is kept as a single 'sil' placeholder for Stage 6 to resolve.
-
-    The `words` tier carries one Hangul syllable per interval. openvpi/DiffSinger's
-    variance model needs `ph_num` (phones per word), which is derivable only from
-    this tier, so it is emitted alongside the phones rather than discarded.
+    `mapping` 은 예전 시그니처를 지키려고 남겨 둔 자리다. MfaAligner 가 필요할 때
+    스스로 load_ipa_to_coda() 를 부르므로 넘기지 않아도 된다.
     """
-    grid = tgio.openTextgrid(str(tg_path), includeEmptyIntervals=True)
-    intervals = [(iv.label.strip(), iv.start, iv.end)
-                 for iv in grid.getTier("phones").entries]
-
-    phones = []
-    for idx, (label, start, end) in enumerate(intervals):
-        if label.lower() in SILENCE_LABELS:
-            phones.append(["sil", start, end])
-            continue
-        # next non-silence IPA label drives the context rules
-        next_ipa = None
-        for nlab, _, _ in intervals[idx + 1:]:
-            if nlab.lower() not in SILENCE_LABELS:
-                next_ipa = nlab
-                break
-        tokens = convert_phone(label, next_ipa, mapping)
-        step = (end - start) / len(tokens)
-        for k, tok in enumerate(tokens):
-            phones.append([tok, start + k * step, start + (k + 1) * step])
-
-    words = [[iv.label.strip(), iv.start, iv.end]
-             for iv in grid.getTier("words").entries
-             if iv.label.strip() not in SILENCE_LABELS]
-    return {"phones": phones, "words": words}
+    return _mfa().parse(Path(tg_path))
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Stage 4: MFA align + IPA->Coda")
+    config = load_align_config()
+    parser = argparse.ArgumentParser(description="Stage 4: force-align + Coda phones")
     parser.add_argument("--set", default="pilot_6s")
-    parser.add_argument("--skip_mfa", action="store_true",
+    parser.add_argument("--aligner", default=None, choices=["mfa", "sofa"],
+                        help=f"기본값은 align.yaml 의 aligner ({config['aligner']})")
+    parser.add_argument("--skip_align", "--skip_mfa", dest="skip_align",
+                        action="store_true",
                         help="reuse an existing aligned/ dir, only re-parse")
     parser.add_argument("--lyrics", default="lyrics.jsonl",
                         help="which lyrics file under data/{set} to align")
     parser.add_argument("--suffix", default="",
-                        help="tag mfa_corpus/aligned/phones so runs can coexist")
+                        help="tag corpus/aligned/phones so runs can coexist")
     parser.add_argument("--items", default="",
                         help="file of item_names to align, one per line")
     args = parser.parse_args()
 
+    aligner = get_aligner(args.aligner or config["aligner"], config)
     out_dir = set_dir(args.set)
     segments = read_jsonl(out_dir / "segments.jsonl")
     lyrics = read_jsonl(out_dir / args.lyrics)
@@ -126,20 +83,22 @@ def main() -> None:
         segments = [r for r in segments if r["item_name"] in wanted]
         lyrics = [r for r in lyrics if r["item_name"] in wanted]
 
-    if not args.skip_mfa:
-        corpus = build_corpus(out_dir, segments, lyrics, args.suffix)
-        run_mfa(corpus, aligned)
+    print(f"정렬기: {aligner.name}")
+    if not args.skip_align:
+        corpus = aligner.build_corpus(out_dir, segments, lyrics, args.suffix)
+        aligner.run(corpus, aligned)
 
-    mapping = load_ipa_to_coda()
     rows = []
     for tg_path in sorted(aligned.glob("*.TextGrid")):
-        parsed = textgrid_to_coda(tg_path, mapping)
-        rows.append({"item_name": tg_path.stem, **parsed})
+        rows.append({"item_name": tg_path.stem, **aligner.parse(tg_path)})
 
     write_jsonl(out_dir / f"phones{args.suffix}.jsonl", rows)
     aligned_n = len(rows)
     oov = sorted({p[0] for r in rows for p in r["phones"] if p[0].startswith("<OOV")})
+    breath = sum(1 for r in rows for p in r["phones"] if p[0] == "AP")
     print(f"정렬 완료 {aligned_n}/{len(segments)} → phones{args.suffix}.jsonl")
+    if breath:
+        print(f"들숨(AP) {breath:,}개")
     if oov:
         print(f"⚠ OOV 발생: {oov}")
 

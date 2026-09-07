@@ -165,7 +165,14 @@ Whisper 는 판소리에서 완벽하지 않다. 목표는 완벽한 가사가 �
 
 **`words` tier 를 함께 기록하는 것이 이 단계의 핵심 변경이다.** openvpi 가 요구하는 `ph_num`
 (단어별 음소 개수)은 여기서만 유도할 수 있다. 남겨 두면 매핑을 고칠 때마다
-`--skip_mfa` 로 **정렬 없이 파싱만** 다시 돌릴 수 있다 (수 시간 → 2분).
+`--skip_align`(옛 이름 `--skip_mfa` 도 받는다) 로 **정렬 없이 파싱만** 다시 돌릴 수 있다
+(수 시간 → 2분).
+
+정렬기는 `preprocess/align.yaml` 의 `aligner` 가 정한다 — `mfa`(기본) 또는 `sofa`.
+백엔드의 속은 `preprocess/aligners.py` 에 있고, 둘 다 `aligned{suffix}/*.TextGrid` 를
+남기므로 여기서 아래로는 아무것도 달라지지 않는다. SOFA 는 사전이 곧 음소셋이라
+`dictionaries/korean-coda.txt` 를 주면 IPA→Coda 변환 단계 자체가 없다. 절차는
+README §3.1–3.2.
 
 무음은 `sil` 플레이스홀더로 남긴다 — 그것이 쉼인지 지속음인지는 노트를 봐야 알 수 있고,
 그 판단은 06이 한다.
@@ -377,7 +384,7 @@ conda activate dsp && export PYTHONPATH=. PYTHONNOUSERSITE=1 CUDA_VISIBLE_DEVICE
 
 ### B2. config 생성 `make_configs.py`
 
-`configs/pansori_{acoustic,variance}.yaml` 을 **생성**한다 (직접 편집 금지 — 생성기를 고칠 것).
+`configs/pansori/{acoustic,variance}.yaml` 을 **생성**한다 (직접 편집 금지 — 생성기를 고칠 것).
 `datasets:` 블록이 08이 디스크에 실제로 쓴 것과 일치해야 하기 때문이다.
 
 핵심 키:
@@ -649,7 +656,8 @@ conda activate pansori && python 01_segment.py --out_dir ../data/full
 python 02_speaker_map.py --set full
 python 03_transcribe.py --set full
 conda activate aligner
-python 04_align.py --set full            # 매핑만 고쳤으면 --skip_mfa (~2분)
+python 04_align.py --set full            # 매핑만 고쳤으면 --skip_align (~2분)
+                                         # SOFA 로 돌리려면 --aligner sofa (README §3.1)
 python 05_notes.py  --set full
 conda activate pansori
 python 06_merge.py    --set full
