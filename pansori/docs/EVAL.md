@@ -1,94 +1,100 @@
-# 음소·발음 계측 — 세 개의 자
+# Phoneme and pronunciation measurement — the three rulers
 
-합성음이 **알아들리는가**를 재는 도구들. 파이프라인 전체 기록은
-[`PIPELINE.md`](PIPELINE.md), 실행법 요약은 [`../README.md`](../README.md).
+The tools that measure whether the synthesis is **intelligible**. The full pipeline record
+is in [`PIPELINE.md`](PIPELINE.md); the command summary is in [`../README.md`](../README.md).
 
 ---
 
-합성음의 발음이 부정확할 때, **그것을 잴 자가 이 저장소에 없었다.** `compare/` 의 지표
-22개는 전부 피치 아니면 스펙트럼이고 (`compare/stats.py:40-60`), 가장 가까운 `voiced_agree`
-조차 "이 프레임에서 소리를 내야 하는가"만 재므로 자음을 통째로 빼먹어도 떨어지지 않는다
-(홀드아웃에서 0.95~0.97). [가사 A/B](LYRICS_AB.md) 를 포함해 지금까지의 모든 판정이 발음을 보지
-못한 채 내려졌다. 이 절의 셋이 그 구멍을 메운다.
+When the synthesis pronounced things badly, **there was no ruler in this repository that
+could measure it.** All 22 of `compare/`'s metrics are pitch or spectrum
+(`compare/stats.py:40-60`), and even the closest one, `voiced_agree`, only asks "should this
+frame make sound at all" — so dropping a consonant entirely does not move it (0.95–0.97 on
+the hold-out). Every verdict reached so far, [lyrics A/B](LYRICS_AB.md) included, was
+reached without being able to see pronunciation. The three tools below fill that hole.
 
-| 자 | 답하는 질문 | 무엇을 보나 | 비용 |
+| Ruler | Question it answers | Where it shows | Cost |
 |---|---|---|---|
-| **A** `variance_task.py` | 모델이 음소 길이를 정확히 예측하는가 | wandb, 매 검증 | 공짜 (자동) |
-| **B** `eval/intelligibility.py` | 렌더된 소리가 실제로 알아들리는가 | 콘솔·wandb | 표본 40개 ~15분 |
-| **C** `eval/label_report.py` | 학습 라벨 자체가 얼마나 망가졌나 | 콘솔·HTML | 몇 초 |
+| **A** `variance_task.py` | Does the model predict phoneme durations accurately? | wandb, every validation | Free (automatic) |
+| **B** `eval/intelligibility.py` | Is the rendered audio actually intelligible? | Console, wandb | 40 samples, ~15 min |
+| **C** `eval/label_report.py` | How broken are the training labels themselves? | Console, HTML | Seconds |
 
-**셋 중 C 부터 볼 것.** 모델을 의심하기 전에 무엇을 보고 배웠는지 아는 편이 빠르다.
+**Start with C.** Knowing what the model was shown is faster than suspecting the model.
 
-## 1. C — 라벨 진단
+## 1. C — label diagnosis
 
 ```sh
 python pansori/eval/label_report.py                                    # data/pansori
 python pansori/eval/label_report.py --corpus data/pansori data/pansori_snap \
        --html pansori/eval/out/label_report.html
 
-# 정렬기 A/B (MFA vs SOFA) — 이 표가 판정이다. README §3.1 참조
+# Aligner A/B (MFA vs SOFA) — this table is the verdict. See README §8
 python pansori/eval/label_report.py --corpus data/pansori data/pansori_sofa \
        --html pansori/eval/out/label_report.html
 ```
 
-모델도 GPU 도 필요 없다. `transcriptions.csv` 의 `ph_dur` 만 읽는다.
+Needs no model and no GPU. It reads only `ph_dur` out of `transcriptions.csv`.
 
-**현재 알려진 수치 (다음에 돌렸을 때 이것과 비교할 것):**
+**Currently known values (compare against these next time you run it):**
 
 | | `data/pansori` | `data/pansori_snap` |
 |---|---:|---:|
-| 정확히 `0.030000` 초인 음소 | **22.3%** | 23.7% |
+| Phonemes at exactly `0.030000` s | **22.3%** | 23.7% |
 | ≤30 ms | 26.4% | 27.9% |
-| ≤3프레임 (학습 지표와 같은 자) | 30.7% | 32.2% |
-| 초성 ≤30 ms | 34.8% | 36.9% |
-| 종성 ≤30 ms | 12.0% | 13.3% |
-| 무음 시간 비율 | 21.7% | 24.0% |
+| ≤3 frames (the same ruler the training metrics use) | 30.7% | 32.2% |
+| Onsets ≤30 ms | 34.8% | 36.9% |
+| Codas ≤30 ms | 12.0% | 13.3% |
+| Fraction of time that is silence | 21.7% | 24.0% |
 
-`0.030000` 에 22.3% 가 쌓인 것은 분포가 아니라 **스파이크**다 — 다음으로 흔한 값(0.04)의
-3.2배다. 0.03 은 MFA 의 최소 음소 길이이므로, 거기 있는 음소는 길이가 그렇게 측정된 것이
-아니라 **정렬기가 음향적 근거를 못 찾고 최소값에 박아 둔 것**이다. 그리고 초성 파열음에
-몰려 있다 (`pp` 48% · `tt` 46% · `b` 42% · `g` 42%). 30 ms 는 hop 512 에서 2.6프레임이라,
-모델은 그 자음에 프레임 두세 개만 배정받고 그마저 자리가 틀렸을 수 있다.
+22.3% piling up at `0.030000` is not a distribution, it is a **spike** — 3.2× the
+next-most-common value (0.04). 0.03 is MFA's minimum phoneme duration, so a phoneme sitting
+there was not *measured* to be that long; **the aligner failed to find acoustic evidence and
+pinned it to the minimum**. And they cluster on onset plosives (`pp` 48% · `tt` 46% ·
+`b` 42% · `g` 42%). At hop 512, 30 ms is 2.6 frames, so the model gets two or three frames
+for those consonants — and even those may be in the wrong place.
 
-`LYRICBOOK_VERDICT.md` §7-4 가 이미 같은 것을 지목했다 — *"가사를 바꾸는 것보다 정렬
-자체를 고치는 쪽의 여지가 훨씬 크다."*
+`LYRICBOOK_VERDICT.md` §7-4 already pointed at the same thing —
+*"there is far more headroom in fixing the alignment itself than in changing the lyrics."*
 
-## 2. A — 학습중 wandb 지표
+## 2. A — training-time wandb metrics
 
-`pansori/train.py` 로 variance 를 돌리면 자동으로 붙는다 (README §4). config 의
-`task_cls: pansori.variance_task.PansoriVarianceTask` 가 그 일을 한다 —
-**upstream 은 그대로 두고 서브클래스만 갈아 끼운다.**
+These attach automatically when variance is trained with `pansori/train.py` (README §9).
+The config key `task_cls: pansori.variance_task.PansoriVarianceTask` does it —
+**upstream is left alone and only the subclass is swapped in.**
 
-wandb 차트 (`metrics/` 네임스페이스):
+wandb charts (the `metrics/` namespace):
 
-| 키 | 읽는 법 |
+| Key | How to read it |
 |---|---|
-| `dur_acc_onset` / `dur_acc_coda` / `dur_acc_vowel` / `dur_acc_glide` / `dur_acc_sp` | 부류별 길이 정확도 (±20%). **초성만 낮으면 자음이 뭉개지고 있는 것이다** |
-| `dur_mae_onset_ms` / `dur_mae_vowel_ms` | 부류별 절대오차. 초성은 대부분 2~4프레임이라 정확도가 바닥에 붙어 안 움직일 때가 있는데, 이건 그 아래에서도 움직인다 |
-| `floor_rate_pred` | 예측 길이 중 ≤3프레임 비율 |
-| `floor_rate_gt` | **라벨** 중 ≤3프레임 비율. 모델과 무관한 상수 — 기준선이자 검산용 |
-| `floor_rate_pred_onset` | 초성만 본 예측 하한선율 |
-| `dur_acc_macro` | 음소 35종 정확도의 매크로 평균. upstream `ph_dur_acc`(마이크로)와 나란히 보면 "흔한 음소만 맞히고 있는가"가 보인다 |
-| `phone_dur_acc` (그림) | 음소 하나하나의 정확도와 하한선율 막대. 부류별로 묶여 있다 |
+| `dur_acc_onset` / `dur_acc_coda` / `dur_acc_vowel` / `dur_acc_glide` / `dur_acc_sp` | Per-class duration accuracy (±20%). **If only onset is low, consonants are being smeared** |
+| `dur_mae_onset_ms` / `dur_mae_vowel_ms` | Per-class absolute error. Onsets are mostly 2–4 frames, so their accuracy can sit pinned at the floor and not move; this still moves underneath it |
+| `floor_rate_pred` | Fraction of predicted durations that are ≤3 frames |
+| `floor_rate_gt` | Fraction of the **labels** that are ≤3 frames. A constant, independent of the model — the baseline, and a cross-check |
+| `floor_rate_pred_onset` | Predicted floor rate, onsets only |
+| `dur_acc_macro` | Macro average of the 35 phonemes' accuracies. Read next to upstream's `ph_dur_acc` (micro) to see whether only the common phonemes are being hit |
+| `phone_dur_acc` (figure) | Per-phoneme accuracy and floor-rate bars, grouped by class |
 
-**`floor_rate_pred` 와 `floor_rate_gt` 를 겹쳐 볼 것.** 예측이 라벨을 따라가면 모델이
-라벨의 병을 그대로 배운 것이고, 크게 낮으면 라벨과 다르게 굴고 있다는 뜻이다. 어느 쪽이
-옳은지는 이 지표가 답하지 않는다 — 그건 §3 의 일이다.
+**Overlay `floor_rate_pred` on `floor_rate_gt`.** If the prediction tracks the labels, the
+model has learned the labels' disease as-is; if it is much lower, it is behaving differently
+from the labels. Which of those is correct is not something this metric answers — that is
+§3's job.
 
-**함정 둘.**
+**Two traps.**
 
-- **범위가 다르다.** upstream 의 `ph_dur_acc` / `rhythm_corr` 은 `num_valid_plots`(10)
-  게이트 안에 있어 **앞 10발화**만 채점한다 (`variance_task.py:253,260`). 새 `dur_acc_*` 는
-  `num_valid_metric_items: 0` 으로 **검증셋 전체**를 본다. 두 수치를 직접 빼지 말 것.
-  기존 둘은 이전 런과의 비교선을 위해 일부러 그대로 뒀다.
-- **단위가 프레임이다.** binarize 가 `ph_dur` 을 mel 프레임으로 양자화한 뒤에야 모델이
-  보므로 여기서도 프레임으로 잰다. 하한선은 3프레임(34.8 ms)이라 §1 의 **`≤30ms` 열이
-  아니라 `≤3프레임` 열**과 맞춰 봐야 한다. 실측 검산: 검증셋 라벨의 ≤3프레임 비율은
-  30.6899%, 학습이 기록한 `floor_rate_gt` 는 30.6974% — 13,379개 중 1개 차이(반올림 타이)다.
+- **Different scope.** Upstream's `ph_dur_acc` / `rhythm_corr` sit behind the
+  `num_valid_plots` (10) gate, so they score only the **first 10 utterances**
+  (`variance_task.py:253,260`). The new `dur_acc_*` use `num_valid_metric_items: 0` and see
+  the **whole validation set**. Do not subtract one from the other. The original two are
+  deliberately left as they are, to keep the comparison line with earlier runs.
+- **The unit is frames.** The model only sees `ph_dur` after binarize quantises it to mel
+  frames, so this measures in frames too. The floor is 3 frames (34.8 ms), which means these
+  line up with §1's **`≤3 frames` row, not its `≤30 ms` row**. Cross-check, measured: the
+  validation labels' ≤3-frame rate is 30.6899%, and training recorded `floor_rate_gt` at
+  30.6974% — a difference of 1 item in 13,379 (a rounding tie).
 
-## 3. B — 발음 명료도 eval
+## 3. B — the intelligibility evaluation
 
-사다리 각 단을 재서 **어디서 무너지는지** 가른다. env 가 셋이라 단계를 나눈다.
+Measures each rung of the ladder to isolate **where it collapses**. It is split into stages
+because it needs three different environments.
 
 ```sh
 conda activate dsp     && export PYTHONPATH=. PYTHONNOUSERSITE=1
@@ -97,7 +103,7 @@ python pansori/eval/intelligibility.py --stage render --n 40 --seeds 3
 conda activate pansori && export PYTHONPATH=.
 python pansori/eval/intelligibility.py --stage asr    --n 40 --seeds 3
 
-conda activate aligner && export PYTHONPATH=.          # mfa CLI 가 PATH 에 있어야 한다
+conda activate aligner && export PYTHONPATH=.          # the mfa CLI must be on PATH
 python pansori/eval/intelligibility.py --stage mfa    --n 40 --seeds 3
 
 conda activate dsp     && export PYTHONPATH=. PYTHONNOUSERSITE=1
@@ -105,41 +111,47 @@ python pansori/eval/intelligibility.py --stage score  --n 40 --seeds 3 \
        --wandb --wandb-group intelligibility
 ```
 
-각 단계는 이미 만든 행을 건너뛰므로 중간에 끊고 다시 시작해도 된다. 렌더는
-`compare/render_new.py` 에 그대로 넘긴다(렌더 로직을 두 벌 두지 않는다). 표본은
-`compare/items.py` 의 층화표본이고 `assert_held_out()` 이 학습 데이터 누출을 막는다.
+Each stage skips rows it has already produced, so it is safe to interrupt and restart.
+Rendering is handed straight to `compare/render_new.py` (there is not a second copy of the
+render logic). The sample is `compare/items.py`'s stratified sample, and
+`assert_held_out()` prevents training-data leakage.
 
-**함정 넷 — 이걸 모르면 표를 거꾸로 읽는다.**
+**Four traps — miss these and you will read the table backwards.**
 
-1. **`1_orig` 은 whisper 쪽에서 천장이 아니라 널 대조다.** CER 의 참조 텍스트가
-   `data/full/lyrics.jsonl` 인데 그것 자체가 Whisper 가 이 녹음에서 뽑은 전사다
-   (`03_transcribe.py`). 원본을 다시 전사하면 자기 자신과 비교하는 셈이라 CER 이 0 에
-   가깝게 나온다. **판소리를 잘 알아듣는다는 뜻이 아니다.** 0 근처가 아니면 Whisper 의
-   디코딩이 재현되지 않는다는 뜻이고, 그러면 그 뒤 숫자는 전부 무효다.
-   합성음의 실질적 천장은 **`0_vocoder`** (GT mel → 보코더) 다. MFA 쪽에서는 반대로
-   `1_orig` 이 제대로 된 천장이다 — 정렬기는 오디오와 텍스트를 독립적으로 받는다.
-2. **`spn` 은 단 비교에 쓰지 않는다.** 처음엔 "소리에 자음이 없으면 MFA 가 spn 을 낸다"고
-   보고 넣었는데, 실측하니 **같은 발화의 다섯 단에서 값이 완전히 같았다.** spn 은 사전에
-   없는 단어(OOV)에 대해 나오는 것이라 오디오가 아니라 **가사의 성질**이다. 표본의 OOV
-   정도를 알려 주는 참고값으로만 한 번 인쇄한다. `phone_match` 도 같은 이유로 거의 상수다
-   — 음소열은 우리가 준 가사가 정한다.
-3. **MFA 쪽 실질 지표는 `floor_rate` 와 `boundary_mae_ms` 둘이다.** `floor_rate` 는 §1 이
-   라벨에 대는 것과 **같은 자를 합성음에 대는 것**이라, 두 표를 나란히 읽을 수 있다.
-4. **Whisper 는 없는 소리를 채워 넣는다.** 그래서 두 backend 를 같이 본다. Whisper 가
-   그럴듯한 문장을 뱉는데 MFA `floor_rate` 가 높으면, 그 문장은 상상이다.
+1. **On the whisper side, `1_orig` is a null control, not a ceiling.** The CER reference
+   text is `data/full/lyrics.jsonl`, which is itself Whisper's transcription of these very
+   recordings (`03_transcribe.py`). Re-transcribing the original compares it against itself,
+   so the CER comes out near zero. **That does not mean Whisper understands pansori well.**
+   If it is *not* near zero, Whisper's decoding is not reproducing, and every number after
+   it is void. The real ceiling for synthesis is **`0_vocoder`** (GT mel → vocoder). On the
+   MFA side it is the other way round: `1_orig` is a proper ceiling, because the aligner
+   receives the audio and the text independently.
+2. **`spn` is not used for comparing rungs.** It went in on the theory that "MFA emits spn
+   when there is no consonant in the sound", but measured, **its value was identical across
+   all five rungs of the same utterance.** `spn` is emitted for out-of-vocabulary words, so
+   it is a property of the **lyrics**, not the audio. It is printed once as a reference
+   figure for how much OOV the sample contains. `phone_match` is near-constant for the same
+   reason — the phoneme sequence is fixed by the lyrics we supplied.
+3. **The two metrics that matter on the MFA side are `floor_rate` and `boundary_mae_ms`.**
+   `floor_rate` applies **the same ruler §1 applies to the labels** to the synthesis, so the
+   two tables can be read side by side.
+4. **Whisper hallucinates sounds that are not there.** That is why both backends are read
+   together. If Whisper produces a plausible sentence but MFA's `floor_rate` is high, that
+   sentence is imagined.
 
-**판독표 — 어느 단에서 떨어지면 무엇이 범인인가.**
+**Reading table — which rung falls, and what is to blame.**
 
-| 증상 | 범인 | 다음에 볼 것 |
+| Symptom | Culprit | What to look at next |
 |---|---|---|
-| `1_orig` 의 CER 이 0 근처가 아니다 | 계측 자체가 불안정 | 여기서 멈춘다 |
-| `0_vocoder` 가 이미 나쁘다 | 보코더 · 추출기 | 그 아래 단은 읽을 필요 없다 |
-| `2_resynth` 에서 이미 무너진다 | **라벨(MFA 정렬) 또는 음향모델** | §1 의 초성 하한선율 |
-| `2_resynth` 는 멀쩡한데 `4_full` 에서 무너진다 | **duration 예측** | §2 의 `dur_acc_onset` |
-| 전 단이 고르게 나쁘다 | 음소셋 · 사전 | `dictionaries/korean-coda.txt` |
+| `1_orig` CER is not near zero | The measurement itself is unstable | Stop here |
+| `0_vocoder` is already bad | Vocoder or extractor | No need to read the rungs below it |
+| It already collapses at `2_resynth` | **Labels (MFA alignment) or the acoustic model** | §1's onset floor rate |
+| `2_resynth` is fine but `4_full` collapses | **Duration prediction** | §2's `dur_acc_onset` |
+| Every rung is uniformly bad | Phoneme set or dictionary | `dictionaries/korean-coda.txt` |
 
-**첫 관측 (n = 3, 시드 1 — 방향만 보는 예비 수치다).** 널 대조 0.000 통과. CER 은
-`0_vocoder` 0.33 → `2_resynth` 1.00 → `4_full` 1.69, MFA 하한선율은 `1_orig` 30% →
-`2_resynth` 40% → `4_full` 65%. 즉 **`2_resynth` 단계에서 이미 무너진다** — GT `ph_dur` 과
-GT f0 를 주었는데도 그렇다. 판독표대로면 duration 예측이 아니라 라벨·음향모델 쪽이다.
-표본이 3개뿐이므로 `--n 40 --seeds 3` 으로 다시 재고 나서 판정할 것.
+**First observation (n = 3, one seed — preliminary, direction only).** Null control passed
+at 0.000. CER goes `0_vocoder` 0.33 → `2_resynth` 1.00 → `4_full` 1.69, and the MFA floor
+rate goes `1_orig` 30% → `2_resynth` 40% → `4_full` 65%. So **it already collapses at the
+`2_resynth` rung** — and that is with GT `ph_dur` and GT f0 both supplied. By the reading
+table, that points at the labels and the acoustic model, not at duration prediction. With
+only 3 samples, re-measure at `--n 40 --seeds 3` before calling it.
