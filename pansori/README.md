@@ -10,7 +10,7 @@ the shape it has. Sections 5 onward are the runbook.
 | | |
 |---|---|
 | Base model | [openvpi/DiffSinger](https://github.com/openvpi/DiffSinger) — acoustic + variance, reflow sampler, 44.1 kHz |
-| Corpus | 394 pansori recordings → **26,955 utterances / 33.5 h**, 23 speakers |
+| Corpus | 394 pansori recordings → **26,955 utterances / 28.9 h**, 23 speakers |
 | Language pipeline | Whisper transcription → forced alignment → Coda-34 phoneme set |
 | Branch | `feat/pansori` |
 
@@ -143,6 +143,7 @@ Every stage works inside `pansori/data/{set}/` and is selected with `--set` (in 
 | 01 segmentation | **31,529 utterances / 33.48 h** | *aniri* and *changjo* excluded; fragments under 2 s discarded |
 | 04 alignment succeeded | **26,955 utterances** | Fewer than 2 Hangul characters, or alignment failed (−4,574) |
 | 06 merge | 26,955 | Nothing lost |
+| 08 final corpus | **26,955 utterances / 28.93 h / 23 speakers** | — |
 
 ## 6. Directory map
 
