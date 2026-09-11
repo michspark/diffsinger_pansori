@@ -6,7 +6,7 @@ OpenUtau. There is no CLI that makes one, and for pansori there is no editor
 project to export from either, so this fills the gap at both ends of the
 pipeline:
 
-  from-label   an item that exists in data/pansori/{화자}/transcriptions.csv.
+  from-label   an item that exists in data/pansori/{speaker}/transcriptions.csv.
                Use it to isolate one stage: hand the acoustic model the real
                durations and the real f0 and what comes back is the acoustic
                ceiling; withhold them and the variance model has to invent them.
@@ -16,14 +16,14 @@ pipeline:
                a grapheme-to-phoneme step, which only exists now that
                dictionaries/korean-coda.txt does.
 
-Score files are one note per line, `음절 노트 길이초`:
+Score files are one note per line, `syllable note duration_seconds`:
 
     춘  A4    0.45
     향  G4    0.40
-    -   F4    0.55        # 앞 음절이 이어짐 (melisma) — 판소리에서 흔하다
-    _   rest  0.30        # 쉼표 → SP
+    -   F4    0.55        # the previous syllable continues (melisma) -- common in pansori
+    _   rest  0.30        # a rest -> SP
 
-`#` 뒤는 주석. Blank lines are ignored.
+Anything after `#` is a comment. Blank lines are ignored.
 
 Usage (dsp env, from the repo root):
   PYTHONPATH=. python pansori/make_ds.py from-label 01ed19bb_0003 --with-dur --with-f0
@@ -69,7 +69,7 @@ def find_item(item_name, data_root):
             for row in csv.DictReader(f):
                 if row['name'] == item_name:
                     return speaker_dir.name, row, speaker_dir / 'wavs' / f'{item_name}.wav'
-    raise SystemExit(f'라벨에 없는 item: {item_name}')
+    raise SystemExit(f'item not found in the labels: {item_name}')
 
 
 def extract_f0(wav_path, n_frames_hint=None):
@@ -77,7 +77,7 @@ def extract_f0(wav_path, n_frames_hint=None):
 
     Reading it back off the wav rather than out of the binary keeps this usable
     for any wav, and guarantees the f0_min/f0_max of the config are applied --
-    the default 65 Hz would cut off male 통성 (see pansori/docs/SEGMENTATION_VERDICT.md).
+    the default 65 Hz would cut off male tongseong (see pansori/docs/SEGMENTATION_VERDICT.md).
     """
     import librosa
     import numpy as np
@@ -109,11 +109,11 @@ def parse_score(path):
             continue
         parts = line.split()
         if len(parts) != 3:
-            raise SystemExit(f'{path}:{lineno}: `음절 노트 길이` 3칸이어야 한다 — {raw!r}')
+            raise SystemExit(f'{path}:{lineno}: expected 3 fields, `syllable note duration` -- {raw!r}')
         syllable, note, dur = parts
         notes.append((syllable, note, float(dur)))
     if not notes:
-        raise SystemExit(f'{path}: 노트가 없다')
+        raise SystemExit(f'{path}: no notes')
     return notes
 
 
@@ -134,7 +134,7 @@ def derive_note_slur(ph_num, ph_dur, note_dur):
     import numpy as np
     counts = [int(n) for n in ph_num.split()]
     durs = [float(d) for d in ph_dur.split()]
-    assert sum(counts) == len(durs), 'ph_num 과 ph_dur 길이가 안 맞는다'
+    assert sum(counts) == len(durs), 'ph_num and ph_dur lengths disagree'
 
     word_start, at, i = [], 0.0, 0
     for n in counts:
@@ -145,7 +145,7 @@ def derive_note_slur(ph_num, ph_dur, note_dur):
 
     n_w, n_n = len(word_start), len(note_start)
     if n_n < n_w:
-        raise SystemExit(f'노트({n_n})가 단어({n_w})보다 적어 note_slur 를 만들 수 없다')
+        raise SystemExit(f'fewer notes ({n_n}) than words ({n_w}); note_slur cannot be built')
 
     INF = float('inf')
     cost = np.abs(note_start[None, :] - np.array(word_start)[:, None])   # [T_w, T_n]
@@ -175,7 +175,7 @@ def score_to_ds(notes, dictionary):
     A word here is one syllable, or one SP for a rest. Notes stay a separate
     axis: a syllable held over several notes just contributes its phones once
     while the extra notes sit alongside, which is how openvpi represents
-    melisma and how 시김새 lands in the labels.
+    melisma and how sigimsae lands in the labels.
     """
     words, note_seq, note_dur, note_slur = [], [], [], []
     for syllable, note, dur in notes:
@@ -183,18 +183,18 @@ def score_to_ds(notes, dictionary):
         note_dur.append(f'{dur:.4f}')
         if syllable == MELISMA:
             if not words:
-                raise SystemExit(f"'{MELISMA}' 가 첫 노트에 올 수 없다")
+                raise SystemExit(f"'{MELISMA}' cannot be the first note")
             note_slur.append('1')
             continue
         if syllable == REST:
             if words and words[-1][1] == ['SP']:
-                note_slur.append('1')         # 연속 쉼표는 SP 하나로
+                note_slur.append('1')         # consecutive rests collapse into one SP
                 continue
             words.append(('SP', ['SP']))
         else:
             phones = dictionary.get(syllable)
             if phones is None:
-                raise SystemExit(f"사전에 없는 음절: '{syllable}'")
+                raise SystemExit(f"syllable not in the dictionary: '{syllable}'")
             words.append((syllable, phones))
         note_slur.append('0')
 
@@ -212,7 +212,7 @@ def set_speaker(segment, speaker):
     """Write the speaker into the .ds instead of passing --spk.
 
     scripts/infer.py parses --spk with `[0-9A-Za-z_-]+` (utils/infer_utils.py:55),
-    which rejects every 명창's name. The .ds fields it would have populated take
+    which rejects every myeongchang's name. The .ds fields it would have populated take
     the same dict, so set them here and leave the upstream parser alone.
     """
     segment['spk_mix'] = {speaker: 1.0}
@@ -231,9 +231,9 @@ def write_ds(segment, out_path):
             print(f'  {key:9s} {str(segment[key])[:110]}')
     length = sum(float(d) for d in segment['note_dur'].split())
     extras = [k for k in ('ph_dur', 'f0_seq') if k in segment]
-    print(f'  길이 {length:.2f}s | 노트 {len(segment["note_dur"].split())}개'
-          f' | 음소 {len(segment["ph_seq"].split())}개'
-          f' | 함께 넣은 것: {", ".join(extras) if extras else "없음 (variance 가 채운다)"}')
+    print(f'  length {length:.2f}s | {len(segment["note_dur"].split())} notes'
+          f' | {len(segment["ph_seq"].split())} phonemes'
+          f' | supplied: {", ".join(extras) if extras else "nothing (variance fills it in)"}')
 
 
 def cmd_from_label(args):
@@ -254,9 +254,9 @@ def cmd_from_label(args):
         f0, uv_ratio = extract_f0(wav_path)
         segment['f0_seq'] = ' '.join(f'{v:.1f}' for v in f0)
         segment['f0_timestep'] = F0_TIMESTEP
-        print(f'  f0: {len(f0)}프레임, 무성 비율 {uv_ratio:.1%}')
+        print(f'  f0: {len(f0)} frames, unvoiced {uv_ratio:.1%}')
     out = Path(args.out) if args.out else REPO / 'pansori' / 'examples' / 'ds' / f'{args.item}.ds'
-    print(f'화자 {speaker} · 원본 {wav_path.relative_to(REPO)}')
+    print(f'speaker {speaker} · source {wav_path.relative_to(REPO)}')
     write_ds(segment, out)
 
 
@@ -274,19 +274,19 @@ def main():
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='cmd', required=True)
 
-    a = sub.add_parser('from-label', help='라벨된 발화에서 .ds 생성')
-    a.add_argument('item', help='item_name (예: 01ed19bb_0003)')
+    a = sub.add_parser('from-label', help='build a .ds from a labelled utterance')
+    a.add_argument('item', help='item_name (e.g. 01ed19bb_0003)')
     a.add_argument('--data', default='data/pansori')
-    a.add_argument('--with-dur', action='store_true', help='실제 ph_dur 를 넣는다')
-    a.add_argument('--with-f0', action='store_true', help='원본에서 f0 를 뽑아 넣는다')
-    a.add_argument('--spk', help='화자 (기본: 원본 화자)')
+    a.add_argument('--with-dur', action='store_true', help='inject the real ph_dur')
+    a.add_argument('--with-f0', action='store_true', help='extract f0 from the source and inject it')
+    a.add_argument('--spk', help='speaker (default: the source recording\'s speaker)')
     a.add_argument('--out')
     a.set_defaults(func=cmd_from_label)
 
-    b = sub.add_parser('from-score', help='가사+악보에서 .ds 생성')
-    b.add_argument('score', help='악보 파일 (음절 노트 길이초)')
+    b = sub.add_parser('from-score', help='build a .ds from lyrics + a score')
+    b.add_argument('score', help='score file (syllable note duration_seconds)')
     b.add_argument('--dictionary', default='dictionaries/korean-coda.txt')
-    b.add_argument('--spk', required=True, help='화자 (data/pansori 의 디렉토리 이름)')
+    b.add_argument('--spk', required=True, help='speaker (a directory name under data/pansori)')
     b.add_argument('--out')
     b.set_defaults(func=cmd_from_score)
 

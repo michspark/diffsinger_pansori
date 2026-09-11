@@ -15,7 +15,8 @@ maps korean_mfa IPA to the same 34 Coda tokens. A syllable is written as
 so 갸 -> `g y a`, 의 -> `eu i`, 왕 -> `w a NG`.
 
 CAVEAT: this is a syllable-local mapping with no sandhi. Training labels come from
-MFA, which does apply 연음/자음동화 (책이 -> ch e g i, not ch e K i), so inference
+MFA, which does apply liaison and consonant assimilation (책이 -> ch e g i, not
+ch e K i), so inference
 phonemes will differ from training phonemes at some syllable boundaries. That is
 inherent to a syllable dictionary and is the same trade-off upstream makes; it is
 documented here rather than silently absorbed.
@@ -29,13 +30,13 @@ from pathlib import Path
 BASE = 0xAC00  # '가'
 N_JUNG, N_JONG = 21, 28
 
-# 초성 19 — ㅇ is silent, hence the empty string.
+# 19 onsets -- ㅇ is silent, hence the empty string.
 ONSET = [
     'g', 'kk', 'n', 'd', 'tt', 'r', 'm', 'b', 'pp', 's',
     'ss', '', 'j', 'jj', 'ch', 'k', 't', 'p', 'h',
 ]
 
-# 중성 21 — glide precedes the vowel; ㅐ/ㅔ and the ㅙ/ㅚ/ㅞ group are merged,
+# 21 nuclei -- the glide precedes the vowel; ㅐ/ㅔ and the ㅙ/ㅚ/ㅞ group are merged,
 # matching ipa_to_coda.csv (ɛ -> e, ɥ -> w).
 NUCLEUS = [
     'a', 'e', 'y a', 'y e', 'eo', 'e', 'y eo', 'y e', 'o', 'w a',
@@ -43,7 +44,7 @@ NUCLEUS = [
     'i',
 ]
 
-# 종성 28 — index 0 is "no coda"; clusters collapse to their 대표음.
+# 28 codas -- index 0 is "no coda"; clusters collapse to their representative sound.
 CODA = [
     '', 'K', 'K', 'K', 'N', 'N', 'N', 'T', 'L', 'K',
     'M', 'L', 'L', 'L', 'P', 'L', 'M', 'P', 'P', 'T',

@@ -43,14 +43,14 @@ def parse_wandb_args():
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--wandb-project', default='pansori')
     parser.add_argument('--wandb-group', default=None,
-                        help='두 런을 한 실험으로 묶는다 (예: lyrics-ab)')
+                        help='group two runs as one experiment (e.g. lyrics-ab)')
     parser.add_argument('--wandb-tags', default='',
-                        help='쉼표로 구분')
+                        help='comma-separated')
     parser.add_argument('--wandb-name', default=None,
-                        help='기본값은 --exp_name')
+                        help='defaults to --exp_name')
     parser.add_argument('--lyrics-source', default=None,
                         choices=['whisper', 'snapped'],
-                        help='이 런을 가르는 변수. wandb config 에 박아 필터로 쓴다')
+                        help='the variable that distinguishes this run; recorded in the wandb config to filter on')
     parser.add_argument('--no-wandb', action='store_true')
     args, _ = parser.parse_known_args()
     return args
@@ -114,7 +114,7 @@ def main():
     try:
         run = start_wandb(wandb_args)
     except Exception as exc:            # wandb must never be the reason a run dies
-        print(f'⚠ wandb 초기화 실패, 텐서보드로만 기록한다: {exc}')
+        print(f'⚠ wandb init failed; logging to TensorBoard only: {exc}')
 
     try:
         run_task()

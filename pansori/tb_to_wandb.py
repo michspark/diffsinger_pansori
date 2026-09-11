@@ -31,17 +31,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--exp', required=True, help='checkpoints/{exp}')
     parser.add_argument('--logdir', default=None,
-                        help='기본값 checkpoints/{exp}/lightning_logs/latest')
+                        help='defaults to checkpoints/{exp}/lightning_logs/latest')
     parser.add_argument('--project', default='pansori')
     parser.add_argument('--run-id', default=None,
-                        help='기본값 --exp. wandb 는 한 번 삭제한 id 를 다시 못 쓰므로 '
-                             '다시 올릴 때는 새 id 를 주고 이름만 --exp 로 남긴다')
+                        help='defaults to --exp. wandb will not reuse an id it has deleted, '
+                             'so on a re-upload give a fresh id and keep the name via --exp')
     parser.add_argument('--group', default=None)
     parser.add_argument('--tags', default='')
     parser.add_argument('--lyrics-source', default=None,
                         choices=['whisper', 'snapped'])
     parser.add_argument('--no-media', action='store_true',
-                        help='스칼라만 올린다 (그림·오디오는 용량이 크다)')
+                        help='upload scalars only (figures and audio are large)')
     args = parser.parse_args()
 
     import numpy as np
@@ -80,8 +80,8 @@ def main() -> None:
                     np.asarray(samples), sample_rate=int(rate))
                 media_count += 1
 
-    print(f'{logdir}\n  스칼라 {len(tags["scalars"])}종 · 스텝 {len(by_step):,}개 · '
-          f'미디어 {media_count:,}개')
+    print(f'{logdir}\n  {len(tags["scalars"])} scalar tags · {len(by_step):,} steps · '
+          f'{media_count:,} media')
 
     config = {'backfilled_from': str(logdir)}
     if args.lyrics_source:
@@ -97,7 +97,7 @@ def main() -> None:
     for step in sorted(by_step):
         run.log(by_step[step], step=step)
     run.finish()
-    print(f'완료: {run.url}')
+    print(f'done: {run.url}')
 
 
 if __name__ == '__main__':

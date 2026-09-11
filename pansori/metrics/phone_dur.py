@@ -1,31 +1,36 @@
 #!/usr/bin/env python3
-"""음소 길이 예측을 **부류별로** 재는 검증 지표.
+"""Validation metrics that measure duration prediction **per phone class**.
 
-upstream 은 이미 `modules/metrics/duration.py` 에 `PhonemeDurationAccuracy` 를 갖고
-있고 `training/variance_task.py:136` 에서 그것을 등록한다. 그런데 그 지표는 코퍼스
-전체를 하나의 숫자로 접는다 — 그리고 이 코퍼스에서 볼 만한 것은 정확히 그 접힘 안에
-있다:
+upstream already has `PhonemeDurationAccuracy` in `modules/metrics/duration.py`
+and registers it at `training/variance_task.py:136`. But that metric folds the
+whole corpus into one number -- and what is worth seeing in this corpus is
+exactly what is inside that fold:
 
-    초성 ≤3프레임  40.9%          종성 ≤3프레임  15.1%
+    onsets <=3 frames  40.9%          codas <=3 frames  15.1%
     (pp 48 / tt 46 / b 42 / g 42)  (N 8.5 / NG 12 / M 13)
 
-초성과 종성을 '자음' 하나로 묶으면 서로를 상쇄해 아무것도 안 보이고, 모음까지 섞으면
-더 안 보인다. 그래서 여기서는 `pansori_lib.phone_class` 의 다섯 부류를 각각 따로 잰다.
-(`pansori/eval/label_report.py` 가 같은 분류로 라벨 쪽을 재므로 두 수치가 직접 대응한다.)
+Lump onsets and codas together as 'consonants' and they cancel each other out
+and nothing is visible; mix vowels in and less is visible still. So this measures
+each of `pansori_lib.phone_class`'s five classes separately.
+(`pansori/eval/label_report.py` measures the label side with the same
+classification, so the two numbers correspond directly.)
 
-**단위는 프레임이다.** binarize 가 ph_dur 을 mel 프레임으로 양자화한 뒤에야 모델이
-보므로(`preprocessing/variance_binarizer.py:293-295`), 여기서 초로 되돌리는 것은
-없는 정밀도를 지어내는 일이다. 하한선도 프레임으로 잡는다 — hop 512 / 44.1 kHz 에서
-한 프레임이 11.61 ms 이고 MFA 의 30 ms 하한선은 3프레임(34.8 ms)에 걸린다. 그래서
-`floor_rate_gt` 는 label_report 의 '≤30ms' 열이 아니라 '≤3프레임' 열과 맞춰 봐야 한다.
+**The unit is frames.** The model only sees ph_dur after binarize quantises it to
+mel frames (`preprocessing/variance_binarizer.py:293-295`), so converting back to
+seconds here would invent precision that does not exist. The floor is in frames
+too -- at hop 512 / 44.1 kHz one frame is 11.61 ms, and MFA's 30 ms floor lands
+on 3 frames (34.8 ms). Which is why `floor_rate_gt` lines up with
+label_report's '<=3 frames' column, not its '<=30ms' one.
 
-예측 길이는 재기 전에 `RhythmRegulator` 로 GT 단어 길이에 맞춘다 — 추론이 실제로
-그렇게 하고(`modules/toplevel.py:262`), 단어 길이는 악보가 주는 값이지 모델이 푸는
-문제가 아니기 때문이다. 모델이 푸는 문제는 **단어 안에서의 배분**이고, 그것만 재야 한다.
-upstream `PhonemeDurationAccuracy` 와 같은 처리라서 두 수치가 서로 비교된다.
+Predicted durations are fitted to the GT word durations with `RhythmRegulator`
+before measuring -- because inference really does that
+(`modules/toplevel.py:262`), and because word duration is a value the score
+supplies, not a problem the model solves. What the model solves is **the division
+within a word**, and that is what has to be measured. This is the same treatment
+upstream's `PhonemeDurationAccuracy` applies, so the two numbers are comparable.
 
-이 파일은 upstream 을 한 줄도 건드리지 않는다. 등록은 `pansori/variance_task.py` 의
-서브클래스가 한다.
+This file does not touch one line of upstream. Registration is done by the
+subclass in `pansori/variance_task.py`.
 """
 
 import matplotlib
@@ -37,9 +42,10 @@ from torch import Tensor
 
 matplotlib.rcParams['axes.unicode_minus'] = False
 
-# 부류 이름은 한글이라 CJK 글리프가 있는 폰트가 필요하다. 없으면 tofu 상자가 찍히고
-# wandb 에서 그림이 못 읽게 되므로, 폰트를 못 찾으면 라벨을 로마자로 떨어뜨린다.
-# Noto Sans CJK 는 JP/KR 어느 쪽 이름으로 등록돼 있든 한글 글리프를 갖고 있다.
+# The class names are Hangul, so a font with CJK glyphs is needed. Without one the
+# figure prints tofu boxes and becomes unreadable in wandb, so when no font is found
+# the labels fall back to romanised names. Noto Sans CJK carries Hangul glyphs whether
+# it is registered under its JP or its KR name.
 _CJK_CANDIDATES = ('Noto Sans CJK KR', 'Noto Sans CJK JP', 'NanumGothic',
                    'Malgun Gothic', 'AppleGothic', 'UnDotum')
 _ASCII_CLASS = {'onset': 'onset', 'coda': 'coda', 'vowel': 'vowel',
@@ -56,11 +62,12 @@ def _cjk_font():
 
 
 def build_token_class(phoneme_dictionary, classes) -> Tensor:
-    """토큰 id -> 부류 index 룩업. 사전 하나당 한 번만 만든다.
+    """A token id -> class index lookup. Built once per dictionary.
 
-    `PAD_INDEX` (0) 와 분류 불가 토큰은 -1 로 두어 어떤 부류에도 안 들어가게 한다.
-    병합된 음소(SP/AP 처럼 한 id 에 여러 이름)는 `decode_one(scalar=False)` 가 튜플을
-    주므로 첫 이름으로 분류한다 — 병합된 것들은 정의상 같은 부류다.
+    `PAD_INDEX` (0) and unclassifiable tokens are set to -1 so they fall into no
+    class at all. Merged phonemes (several names on one id, as with SP/AP) are
+    classified by their first name, since `decode_one(scalar=False)` returns a
+    tuple -- and merged phonemes are by definition in the same class.
     """
     from pansori_lib import phone_class
 
@@ -75,10 +82,10 @@ def build_token_class(phoneme_dictionary, classes) -> Tensor:
 
 
 class _TokenClassMetric(torchmetrics.Metric):
-    """토큰 부류로 걸러 재는 지표들의 공통 뼈대.
+    """The shared skeleton for metrics that filter by token class.
 
-    `token_class` 는 버퍼라 `.to(device)` 를 따라간다. `cls_id=None` 이면 마스크
-    안의 모든 음소를 쓴다 (부류 구분 없는 전체 지표).
+    `token_class` is a buffer, so it follows `.to(device)`. With `cls_id=None`
+    every phoneme inside the mask is used (the overall metric, no class split).
     """
 
     def __init__(self, token_class: Tensor, cls_id=None, **kwargs):
@@ -93,13 +100,14 @@ class _TokenClassMetric(torchmetrics.Metric):
 
 
 class PhoneClassDurationAccuracy(_TokenClassMetric):
-    """한 부류 안에서 |pred - target| <= tolerance * target 인 음소의 비율.
+    """The fraction of phonemes in a class where |pred - target| <= tolerance * target.
 
-    upstream `PhonemeDurationAccuracy` 와 같은 정의이고 tolerance 도 같은 0.2 를 쓴다.
-    다른 것은 부류로 거른다는 점 하나뿐이라, 부류별 값들이 그 전체 값을 분해한 것이 된다.
+    The same definition as upstream's `PhonemeDurationAccuracy`, with the same
+    tolerance of 0.2. The only difference is filtering by class, so the per-class
+    values are a decomposition of that overall value.
 
-    target 이 0 인 음소는 상대 오차가 정의되지 않으므로 제외한다 (프레임 양자화가
-    0프레임 음소를 만들 수 있다).
+    Phonemes whose target is 0 are excluded, since relative error is undefined
+    there (frame quantisation can produce a zero-frame phoneme).
     """
 
     def __init__(self, *, tolerance, token_class, cls_id=None, **kwargs):
@@ -121,11 +129,12 @@ class PhoneClassDurationAccuracy(_TokenClassMetric):
 
 
 class PhoneClassDurationMAE(_TokenClassMetric):
-    """한 부류의 평균 절대오차 (ms).
+    """Mean absolute error for one class (ms).
 
-    정확도만으로는 부족하다 — 초성은 대부분 2~4프레임이라 tolerance 20% 가 한 프레임도
-    허용하지 않는 구간이 있고, 그러면 정확도가 바닥에 붙어 움직이지 않는다. ms 오차는
-    그 아래에서도 계속 움직인다.
+    Accuracy alone is not enough -- onsets are mostly 2-4 frames, so there are
+    ranges where a 20% tolerance does not permit even one frame, and accuracy sits
+    pinned at the floor and does not move. The ms error keeps moving underneath
+    it.
     """
 
     def __init__(self, *, token_class, timestep_ms, cls_id=None, **kwargs):
@@ -146,11 +155,14 @@ class PhoneClassDurationMAE(_TokenClassMetric):
 
 
 class DurationFloorRate(_TokenClassMetric):
-    """길이가 하한선 이하인 음소의 비율. `on='target'` 이면 라벨을, `'pred'` 면 예측을 잰다.
+    """The fraction of phonemes at or below the floor. `on='target'` measures the
+    labels, `'pred'` the predictions.
 
-    두 곡선을 나란히 보는 것이 요점이다. 예측이 라벨을 그대로 따라가면 모델이 라벨의
-    병을 배운 것이고, 크게 낮으면 모델이 라벨과 다르게 굴고 있다는 뜻이다. 어느 쪽이
-    옳은지는 이 지표가 답하지 않는다 — 그건 `pansori/eval/intelligibility.py` 의 일이다.
+    The point is reading the two curves together. If the prediction tracks the
+    labels, the model has learned the labels' disease; if it is much lower, the
+    model is behaving differently from the labels. Which of those is correct is
+    not something this metric answers -- that is
+    `pansori/eval/intelligibility.py`'s job.
     """
 
     def __init__(self, *, floor_frames, token_class, on='pred', cls_id=None, **kwargs):
@@ -174,13 +186,14 @@ class DurationFloorRate(_TokenClassMetric):
 
 
 class PerPhonemeDurationStats(torchmetrics.Metric):
-    """음소 하나하나의 정확도를 쌓아 둔다. 스칼라로는 매크로 평균을 낸다.
+    """Accumulates per-phoneme accuracy. As a scalar it emits the macro average.
 
-    매크로 평균인 이유: 마이크로 평균(=upstream 의 `ph_dur_acc`)은 `a`, `i`, `o` 세
-    모음이 전체의 25% 라 그쪽에 끌려간다. `pp` 345개가 통째로 무너져도 마이크로에서는
-    0.1%p 도 안 움직인다. 두 평균을 같이 보면 "흔한 음소만 맞히고 있는가"가 보인다.
+    Why macro: the micro average (= upstream's `ph_dur_acc`) is pulled towards the
+    vowels `a`, `i` and `o`, which are 25% of everything. All 345 instances of
+    `pp` collapsing would not move the micro figure by 0.1 pp. Read together, the
+    two averages show whether only the common phonemes are being hit.
 
-    막대그래프의 재료는 `per_phone()` 이 준다.
+    The material for the bar chart comes from `per_phone()`.
     """
 
     def __init__(self, *, tolerance, vocab_size, min_count=20, **kwargs):
@@ -209,7 +222,7 @@ class PerPhonemeDurationStats(torchmetrics.Metric):
         self.floored.scatter_add_(0, flat_tokens, floored.long())
 
     def per_phone(self):
-        """(token_ids, accuracy, floor_rate, count) — 표본이 min_count 이상인 음소만."""
+        """(token_ids, accuracy, floor_rate, count) — phonemes with at least min_count samples."""
         count = self.count.cpu().numpy()
         keep = np.flatnonzero(count >= self.min_count)
         if keep.size == 0:
@@ -231,11 +244,12 @@ class PerPhonemeDurationStats(torchmetrics.Metric):
 
 def phone_dur_to_figure(stats: PerPhonemeDurationStats, id_to_name, id_to_class,
                         class_labels, floor_frames, title=None):
-    """음소별 정확도와 하한선 비율을 한 그림에.
+    """Per-phoneme accuracy and floor rate, on one figure.
 
-    부류로 묶어 세로로 쌓는다. 색을 부류마다 다르게 주지 않는 이유는, 여기서 읽어야 할
-    것이 '어느 부류인가'(위치가 이미 말해 준다)가 아니라 '얼마나 맞았는가'(크기)이기
-    때문이다. 두 계열 — 정확도와 하한선율 — 만 색으로 가른다.
+    Grouped by class and stacked vertically. The classes are not given different
+    colours because what has to be read here is not 'which class' (position
+    already says that) but 'how accurate' (size). Only the two series --
+    accuracy and floor rate -- are separated by colour.
     """
     ids, acc, floor, count = stats.per_phone()
     if ids.size == 0:
@@ -256,8 +270,9 @@ def phone_dur_to_figure(stats: PerPhonemeDurationStats, id_to_name, id_to_class,
         floor_label = f'예측이 ≤{floor_frames}프레임인 비율'
         x_label = '비율'
 
-    # 부류 순서는 class_labels 의 키 순서를 따른다 (PHONE_CLASSES 순: 초성이 먼저).
-    # 알파벳순으로 두면 문제가 몰려 있는 초성이 그림 한가운데로 밀려난다.
+    # Class order follows the key order of class_labels (PHONE_CLASSES order: onsets
+    # first). Sorted alphabetically, the onsets -- where the problems are -- get pushed
+    # into the middle of the figure.
     rank = {cls: i for i, cls in enumerate(class_labels)}
     order = sorted(range(len(ids)),
                    key=lambda i: (rank.get(id_to_class[ids[i]], len(rank)), -acc[i]))
