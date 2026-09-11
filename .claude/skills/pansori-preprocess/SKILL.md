@@ -104,9 +104,9 @@ while singing. A real `AP` (in-breath, when `breath_ap` is on) is passed through
 ## Constraints carried from the verdicts
 
 - **Utterances must be ≤6 s.** Past that MFA collapses: measured, ≤6 s had zero silences over
-  1 s while >6 s averaged 4.06 s of silence (`pansori/alignment/VERDICT.md`).
+  1 s while >6 s averaged 4.06 s of silence (`pansori/docs/SEGMENTATION_VERDICT.md`).
 - **Never string-match phone symbols across systems.** MFA `k` is ㄱ, Coda `k` is ㅋ; MFA `p` is
   ㅂ, `t` is ㄷ. Always convert through the explicit table.
 - Paths in `labels_2.json` mix NFC and NFD — join on the 8-char uuid prefix, never the filename.
 - **Snapping lyrics to the 창본 is a closed question** — it makes alignment measurably worse
-  (`pansori/lyricbook/VERDICT.md`). `lyrics.jsonl` stays the default input.
+  (`pansori/docs/LYRICBOOK_VERDICT.md`). `lyrics.jsonl` stays the default input.

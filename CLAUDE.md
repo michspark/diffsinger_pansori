@@ -19,9 +19,9 @@ exist and are current — **read the relevant doc before acting on its subject.*
 | Old vs new model, quantitatively | `pansori/compare/README.md` |
 
 **Settled questions — read the verdict before re-proposing the idea:**
-`pansori/lyricbook/VERDICT.md` (snapping lyrics to the 창본 makes alignment *worse*;
+`pansori/docs/LYRICBOOK_VERDICT.md` (snapping lyrics to the 창본 makes alignment *worse*;
 ❌ dead end) · `pansori/docs/VIBRATO_VERDICT.md` (the sine vibrato model fits unrelated
-notes as well as real ones; ❌ dead end, Phases 4–6 halted) · `pansori/alignment/VERDICT.md`
+notes as well as real ones; ❌ dead end, Phases 4–6 halted) · `pansori/docs/SEGMENTATION_VERDICT.md`
 (MFA is usable, but only at ≤6 s utterances) · `pansori/docs/NEXT.md` §C5 (f0 flattening
 did not reproduce; item closed).
 
