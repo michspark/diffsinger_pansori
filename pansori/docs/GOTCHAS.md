@@ -1,37 +1,48 @@
-# 알아둘 것 — 설정과 데이터의 함정
+# Things to know — config and data traps
 
-`README.md` 의 실행 절차를 따르다 막히면 여기부터 본다. 전부 실제로 한 번씩 밟은 것들이다.
-
----
-
-- **화자는 `datasets:` 항목 단위로 지정된다.** 23명(명창 22 + pooled `unknown`)이 각각 자기
-  디렉토리를 갖는다. `make_configs.py` 가 발화 수 내림차순으로 `spk_id` 를 매긴다.
-- **홀드아웃 곡이 한 화자의 전부를 차지하면 자동 해제된다.** 정권진(226발화)이 그 경우라
-  홀드아웃에서 빠졌다 — 학습 데이터 0인 화자는 임베딩이 아예 학습되지 않는다.
-- **`f0_min: 55` / `f0_max: 750` 을 빠뜨리지 말 것.** 기본값 65 Hz 는 남성 통성을 잘라낸다.
-- **`spec_max` 기본값 `[0]` 을 그대로 두지 말 것.** 이 코퍼스 실측 상한은 **+2.838** 이라
-  정규화 후 diffusion 타깃이 [-1, 1] 을 벗어난다. 하한은 반대로 안전하다 — `nvSTFT` 가
-  `log(clamp(x, 1e-5))` 로 압축해 -11.513 아래가 존재할 수 없다.
-- **`AP`/`SP` 병합은 코퍼스가 정한다, 사람이 정하지 않는다.** openvpi 는 음소셋에 `AP`(들숨) 를
-  항상 넣고 binarize 는 셋의 모든 항목이 코퍼스에 나타나야 통과시킨다. MFA 팔의 라벨에는 들숨
-  구분이 없으므로 `merged_phoneme_groups: [[SP, AP]]` 가 붙는다. SOFA + FoxBreatheLabeler 로
-  들숨을 실제로 라벨하면 (`preprocess/align.yaml` 의 `breath_ap.enabled`) `make_configs.py` 가
-  `transcriptions.csv` 에서 `AP` 를 보고 그 블록을 **자동으로 뺀다** — 손으로 지우지 말 것.
-  라벨과 음소셋이 어긋나면 binarize 가 죽는데, 어느 쪽인지는 CSV 안에만 있다.
-- **가장 최근 체크포인트가 최선이 아니다.** 구 파이프라인에서는 56k step 부근에서 과적합이
-  시작됐다. 아키텍처가 달라졌으니 수치는 이월되지 않지만 습관은 유지할 것.
+When the procedure in `README.md` stops working, start here. Every one of these was hit for
+real at least once.
 
 ---
 
-## 학습·추론
+- **Speakers are defined per `datasets:` entry.** All 23 (22 myeongchang + the pooled
+  `unknown`) get their own directory. `make_configs.py` assigns `spk_id` in descending order
+  of utterance count.
+- **A hold-out song that accounts for a speaker's entire output is released automatically.**
+  Jeong Gwon-jin (226 utterances) was that case and was dropped from the hold-out — a
+  speaker with zero training data never learns an embedding at all.
+- **Do not omit `f0_min: 55` / `f0_max: 750`.** The default of 65 Hz cuts off male
+  *tongseong*.
+- **Do not leave `spec_max` at its default `[0]`.** The measured ceiling for this corpus is
+  **+2.838**, so after normalisation the diffusion target leaves [-1, 1]. The floor is safe
+  the other way round — `nvSTFT` compresses with `log(clamp(x, 1e-5))`, so nothing below
+  -11.513 can exist.
+- **Whether `AP`/`SP` are merged is decided by the corpus, not by a person.** openvpi always
+  includes `AP` (breath) in the phoneme set, and binarize only passes if every member of the
+  set actually appears in the corpus. Labels from the MFA arm carry no breath distinction,
+  so `merged_phoneme_groups: [[SP, AP]]` gets attached. If breath is genuinely labelled via
+  SOFA + FoxBreatheLabeler (`breath_ap.enabled` in `preprocess/align.yaml`), then
+  `make_configs.py` sees `AP` in `transcriptions.csv` and **removes that block
+  automatically** — do not delete it by hand. When the labels and the phoneme set disagree,
+  binarize dies, and which one is wrong is knowable only from the CSV.
+- **The most recent checkpoint is not the best one.** In the old pipeline, overfitting
+  started around step 56k. The architecture has changed since, so the number does not carry
+  over, but the habit should.
 
-- **선행 다운로드가 셋이다** (`server/run.sh setup` 이 받는다): `checkpoints/rmvpe/`,
-  `checkpoints/pc_nsf_hifigan_44.1k_hop512_128bin_2025.02/`, `checkpoints/vr/`.
-  마지막 것은 HN-SEP 인데, breathiness 등을 전부 꺼도 acoustic binarize 가
-  `DecomposedWaveform` 을 무조건 만들기 때문에 없으면 거기서 멈춘다.
-- **wandb 는 한 번 삭제한 run id 를 다시 쓰지 못한다.** 잘못 올려서 지웠다면 `--run-id` 로
-  새 id 를 주고 표시 이름만 `--exp` 로 남길 것.
-- **체크포인트는 헤드마다 다르다.** variance 의 `dur_loss` 와 `pitch_loss` 는 서로 다른
-  step 에서 최저다. `run_examples.sh` 가 헤드별로 골라 variance 를 두 번 돌린다.
-- **`--spk` 는 한글 화자명을 못 받는다** (`utils/infer_utils.py:55`). `make_ds.py` 가
-  `.ds` 의 `spk_mix` 에 직접 써서 우회한다.
+---
+
+## Training and inference
+
+- **There are three prerequisite downloads** (`server/run.sh setup` fetches them):
+  `checkpoints/rmvpe/`, `checkpoints/pc_nsf_hifigan_44.1k_hop512_128bin_2025.02/`, and
+  `checkpoints/vr/`. The last is HN-SEP, which is needed even if breathiness and everything
+  like it is switched off, because acoustic binarize builds a `DecomposedWaveform`
+  unconditionally and stops there without it.
+- **wandb will not reuse a run id that has been deleted once.** If you uploaded to the wrong
+  place and deleted it, pass a fresh id with `--run-id` and keep the display name via
+  `--exp`.
+- **Checkpoints differ per head.** The variance model's `dur_loss` and `pitch_loss` bottom
+  out at different steps. `run_examples.sh` picks per head and runs variance twice.
+- **`--spk` cannot take a Hangul speaker name** (`utils/infer_utils.py:56` matches
+  `[0-9A-Za-z_-]+`). `make_ds.py` works around it by writing `spk_mix` into the `.ds`
+  directly.

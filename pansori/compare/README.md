@@ -1,108 +1,121 @@
-# pansori/compare — 구·신 모델 정량 비교
+# pansori/compare — quantitative comparison, old model vs new
 
-`~/Desktop/DiffSinger_moonInRiver`(MoonInTheRiver cascade, 24 kHz)와 이 저장소의
-`pansori_ac_v1` + `pansori_var_v1`(openvpi reflow, 44.1 kHz)을 **같은 홀드아웃 발화에서
-같은 자로** 재는 평가 패키지. 리포트: `report.html`.
+An evaluation package that measures `~/Desktop/DiffSinger_moonInRiver` (MoonInTheRiver
+cascade, 24 kHz) and this repository's `pansori_ac_v1` + `pansori_var_v1` (openvpi reflow,
+44.1 kHz) **on the same held-out utterances with the same rulers**. Report: `report.html`.
 
-## 결론 한 줄
+## The conclusion, in one line
 
-**신 모델은 판소리처럼 움직이지만, 원본과 함께 움직이지는 않는다.**
-노트내 변동비 0.29 → 0.92 (Holm p = 0.0005, 시드 잡음과 보코더 천장 격차를 모두 넘음),
-원본과의 상관 0.035 → 0.037 (변화 없음).
+**The new model moves like pansori, but it does not move together with the original.**
+Within-note variation ratio 0.29 → 0.92 (Holm p = 0.0005, clearing both the seed-noise floor
+and the vocoder-ceiling gap); correlation with the original 0.035 → 0.037 (unchanged).
 
-## 실행
+## Running it
 
 ```sh
 conda activate dsp && cd ~/Desktop/DiffSinger && export PYTHONPATH=. PYTHONNOUSERSITE=1
 
-python pansori/compare/smoke.py                              # 게이트 5개 + 널 대조
-python pansori/compare/render_new.py --items fair --seeds 5  # 19항목 × 5시드, ~40초
+python pansori/compare/smoke.py                              # 5 gates + null controls
+python pansori/compare/render_new.py --items fair --seeds 5  # 19 items × 5 seeds, ~40 s
 python pansori/compare/collect.py                            # → out/results.jsonl
-python pansori/compare/stats.py                              # → out/summary.json + 콘솔 표
+python pansori/compare/stats.py                              # → out/summary.json + console table
 python pansori/compare/report.py                             # → report.html
 ```
 
-홀드아웃 확장(절대 수치 + 대표성 검정):
+Hold-out extension (absolute numbers + a representativeness test):
 
 ```sh
 python pansori/compare/render_new.py --items sample:200 --seeds 3
 python pansori/compare/collect.py --items sample:200 --seeds 3 --only-new --no-spectral \
        --out pansori/compare/out/results_ext.jsonl
-python pansori/compare/stats.py     # results_ext.jsonl 이 있으면 자동으로 붙는다
+python pansori/compare/stats.py     # picks up results_ext.jsonl automatically if present
 ```
 
-**`smoke.py` 가 실패하면 그 뒤 숫자는 전부 무효다.** 특히 G1(샘플레이트 무관성)이
-깨지면 24 kHz 시스템과 44.1 kHz 시스템을 한 표에 놓을 수 없다.
+**If `smoke.py` fails, every number after it is void.** In particular, if G1 (sample-rate
+invariance) breaks, a 24 kHz system and a 44.1 kHz system cannot go in the same table.
 
-## 이 코드가 아는 함정 다섯
+## The five traps this code knows about
 
-1. **정권진 `a580300d` 5항목은 신 모델의 학습 데이터다.** 구 모델은 홀드아웃했지만
-   신 모델 설정에서는 곡 하나가 화자 전부라 자동 해제됐다. 24항목 중 이 5개를 빼고
-   **공정 쌍 19개**가 헤드라인이다. `items.assert_held_out()` 이 실행할 때마다
-   `configs/exp/ac_v1.yaml` 의 `test_prefixes` 를 읽어 강제한다 — 주석이 아니다.
-2. **`|Δf0| per frame` 은 프레임률 아티팩트다.** 구 파이프라인 5.33 ms vs 신 11.61 ms.
-   같은 곡선이 신 쪽에서 ~2.2배로 나온다. 여기서는 전부 **10 ms 공통 격자의 cents/초**로
-   잰다. `docs/NEXT.md §C5` 의 프레임 단위 비율은 시스템 간 비교에 쓸 수 없다.
-3. **RMVPE 는 `f0_min`/`f0_max` 를 받기만 하고 쓰지 않는다** (`modules/pe/rmvpe/inference.py:63-78`).
-   남성 통성에서 옥타브를 떨어뜨린다 — 19항목 중앙값 4.4%, 최악 28%. 보정 없이는
-   **원본**의 노트내 변동이 650 cents 로 부풀어 공표값 161 과 어긋난다. 그래서 노트
-   잔차를 (−600, 600] 로 감고(`sigimsae.octave_snap`), **기준과 모든 시스템에 동일하게**
-   적용한다. 이 보정은 Tier 2 에만 쓴다 — 진짜 옥타브 오류는 음정 지표에서 벌점을 받아야 한다.
-4. **구 `2_gt_crepe` 는 GT mel 이다**(보코더 천장). 신 `2_resynth`(음향모델 통과)와 같은
-   것이 아니어서, 신 쪽에 `0_vocoder` 를 새로 만들었다. 대응은
-   구 `5_pred_own` ↔ 신 `3_pitch` 하나뿐이다.
-5. **두 저장소의 노트 격자는 동일하다.** `cumsum(note_dur)` 가 구 `notes.jsonl` 온셋을
-   19항목 전부 0.000 ms 오차로 재현한다(게이트 G2). 그래서 계단 하나가 양쪽을 다 잰다 —
-   구 `note_seg.py` 를 이식할 필요가 없다.
+1. **Jeong Gwon-jin's 5 items under `a580300d` are training data for the new model.** The
+   old model held them out, but under the new configuration that one song is the speaker's
+   entire output, so it was released automatically. Dropping those 5 from the 24 leaves the
+   **19 fair pairs** that are the headline. `items.assert_held_out()` enforces this on every
+   run by reading `test_prefixes` out of `configs/exp/ac_v1.yaml` — it is not a comment.
+2. **`|Δf0| per frame` is a frame-rate artefact.** The old pipeline ran at 5.33 ms, the new
+   one at 11.61 ms, so the same curve comes out ~2.2× larger on the new side. Everything
+   here is measured in **cents/second on a common 10 ms grid**. The per-frame ratios in
+   `docs/NEXT.md §C5` cannot be used to compare systems.
+3. **RMVPE accepts `f0_min`/`f0_max` but does not use them**
+   (`modules/pe/rmvpe/inference.py:63-78`). It drops an octave on male *tongseong* — median
+   4.4% of the 19 items, worst case 28%. Uncorrected, the **original's** within-note
+   variation inflates to 650 cents, which contradicts the published figure of 161. So note
+   residuals are wrapped into (−600, 600] (`sigimsae.octave_snap`) and that is applied
+   **identically to the reference and to every system**. The correction is used only in
+   Tier 2 — a genuine octave error should be penalised by the pitch-accuracy metrics.
+4. **The old `2_gt_crepe` is GT mel** (the vocoder ceiling). That is not the same thing as
+   the new `2_resynth` (which passes through the acoustic model), so a new `0_vocoder` rung
+   was added. The only true correspondence is old `5_pred_own` ↔ new `3_pitch`.
+5. **The two repositories' note grids are identical.** `cumsum(note_dur)` reproduces the old
+   `notes.jsonl` onsets for all 19 items to within 0.000 ms (gate G2). So one staircase
+   measures both sides — there is no need to port the old `note_seg.py`.
 
-## 설계 결정
+## Design decisions
 
-- **기준 f0 는 RMVPE 하나로 통일.** 다만 구 모델은 CREPE 타깃으로 학습됐으므로
-  기준 교체가 불리할 수 있어, 두 기준의 차이(162 cents, 원본 노트내 변동 CREPE 133 vs
-  RMVPE 160)를 리포트에 싣는다. 진폭 효과는 이 차이보다 크고, 음정 쪽은 그렇지 않아
-  애초에 개선으로 주장하지 않았다.
-- **시드**: 신 모델은 reflow 샘플러라 5시드 중앙값. 구 `pansori_aux` 는 결정론적
-  회귀라 렌더 하나가 곧 모델의 답이다 — 이 비대칭이 정당한 이유가 그것이다.
-  `pansori_ds3` 는 샘플러라 스펙트럼 전용·단일 draw 표기.
-- **주장 규칙(사전 등록)**: 시드 IQR 의 2배 초과 **∧** Holm p < 0.05 **∧**
-  보코더 천장 격차 초과. 세 값을 모두 표에 인쇄한다.
-- **사인 비브라토 적합은 넣지 않는다.** `pansori/docs/VIBRATO_VERDICT.md` 가 이 코퍼스에서
-  반증했다 — 같은 사인이 무관한 노트의 잔차도 똑같이 잘 맞았고(대조 0.829 vs 실측 0.782),
-  깨끗한 주기 성분을 가진 노트는 3.9% 뿐이다.
-- **PESQ/STOI 도 넣지 않는다.** 미설치이고, 협대역 전화음성 명료도용이라 판소리에서는
-  권위 있어 보이는 무의미한 숫자가 나온다.
-- `pansori/eval/` 은 import 하지 않는다 (`note_seg.py` 가 없어 실행 불가, `docs/NEXT.md §C4`
-  가 폐기 권고). 정의만 이식했다. `f0_metrics.gross_error_rate` 는 분모가 공통 유성
-  프레임이라 **어려운 프레임을 무성 처리하면 점수가 좋아지는 결함**이 있어 그대로 쓰지 않고,
-  RPA-50 은 기준의 유성 프레임을 분모로 쓴다(두 버전을 나란히 보고한다).
+- **One reference f0 for everything: RMVPE.** But the old model was trained against CREPE
+  targets, so swapping the reference could disadvantage it; the report therefore carries the
+  difference between the two references (162 cents; the original's within-note variation is
+  133 under CREPE vs 160 under RMVPE). The amplitude effect is larger than that difference;
+  the pitch-accuracy side is not, and was never claimed as an improvement.
+- **Seeds**: the new model uses a reflow sampler, so 5-seed medians. The old `pansori_aux`
+  is a deterministic regression, so a single render *is* the model's answer — that is what
+  justifies the asymmetry. `pansori_ds3` is a sampler, so it is marked spectral-only and
+  single-draw.
+- **Claim rule (pre-registered)**: exceeds 2× the seed IQR **∧** Holm p < 0.05 **∧** exceeds
+  the vocoder-ceiling gap. All three values are printed in the table.
+- **No sine-vibrato fitting.** `pansori/docs/VIBRATO_VERDICT.md` refuted it on this corpus —
+  the same sinusoid fitted residuals from unrelated notes just as well (control 0.829 vs
+  measured 0.782), and only 3.9% of notes have a clean periodic component.
+- **No PESQ/STOI either.** They are not installed, and they are built for narrowband
+  telephone-speech intelligibility, so on pansori they produce authoritative-looking
+  nonsense.
+- **`pansori/eval/` is never imported** (it cannot run — `note_seg.py` is missing, and
+  `docs/NEXT.md §C4` recommends retiring it). Only the definitions were carried across.
+  `f0_metrics.gross_error_rate` is not used as-is: its denominator is the set of commonly
+  voiced frames, which means **marking hard frames unvoiced improves the score**. RPA-50
+  uses the reference's voiced frames as the denominator instead (both versions are reported
+  side by side).
 
-## 파일
+## Files
 
-| 파일 | 책임 |
+| File | Responsibility |
 |---|---|
-| `config.py` | 분석 격자 10 ms, 공통 스펙트럼 기저, 시드, 체크포인트, **사전 등록 종점 4개**. CLI 오버라이드 없음 |
-| `items.py` | 홀드아웃 강제, 공정 19쌍, 층화 표본 |
-| `notes.py` | 노트 격자·계단·core 마스크·경계 |
-| `f0.py` | 10 ms RMVPE (디스크 캐시) + 구 CREPE 로더 |
-| `sigimsae.py` | 잔차 분해, 옥타브 스냅, 모션(cents/s), wobble, 전이 |
-| `pitch_metrics.py` | RPA/RCA/유무성/옥타브 점프 |
-| `spectral.py` | 24 kHz 공통 기저 MCD/LSD, 대역 에너지 |
-| `render_new.py` | 인프로세스 배치 렌더러 (prep → variance → acoustic 3프로세스) |
-| `collect.py` | → `out/results.jsonl` (long 포맷) |
-| `stats.py` | Wilcoxon · 부트스트랩 CI · Holm · 시드 바닥 · 확장 대표성 |
-| `plots.py` | 인라인 SVG (테마 대응) |
-| `report.py` | 자체완결 HTML |
-| `smoke.py` | 게이트 G1–G5 + 널 대조 |
+| `config.py` | 10 ms analysis grid, common spectral basis, seeds, checkpoints, **4 pre-registered endpoints**. No CLI overrides |
+| `items.py` | Hold-out enforcement, the fair 19 pairs, stratified sampling |
+| `notes.py` | Note grid, staircase, core mask, boundaries |
+| `f0.py` | 10 ms RMVPE (disk-cached) + the old CREPE loader |
+| `sigimsae.py` | Residual decomposition, octave snap, motion (cents/s), wobble, transitions |
+| `pitch_metrics.py` | RPA / RCA / voicing / octave jumps |
+| `spectral.py` | MCD/LSD on a common 24 kHz basis, band energy |
+| `render_new.py` | In-process batch renderer (prep → variance → acoustic, 3 processes) |
+| `collect.py` | → `out/results.jsonl` (long format) |
+| `stats.py` | Wilcoxon · bootstrap CI · Holm · seed floor · extension representativeness |
+| `plots.py` | Inline SVG (theme-aware) |
+| `report.py` | Self-contained HTML |
+| `smoke.py` | Gates G1–G5 + null controls |
 
-`render_new.py` 는 모델을 프로세스당 한 번만 올린다. `scripts/infer.py` 를 렌더마다
-띄우면 같은 일이 ~2.6시간이고 대부분이 모델 로딩이다 — 실측 304렌더 19초.
+`render_new.py` loads the model once per process. Spawning `scripts/infer.py` per render
+takes ~2.6 hours for the same work, nearly all of it model loading — measured: 304 renders
+in 19 seconds.
 
-## 알려진 한계
+## Known limits
 
-- `4_full`(길이까지 예측)은 구 사다리가 만든 적이 없어 비교 대상이 없다. 프레임 정렬도
-  깨지므로 프레임 기반 지표에서 제외하고 분포 지표만 준다.
-- 일부 홀드아웃 항목은 `note_slur` 복원이 불가능해(단어 > 노트) `4_full` 입력을 만들 수
-  없다. 해당 항목은 그 단만 빠지고 나머지 비교에는 그대로 참여한다.
-- 구 모델의 잡음 바닥은 측정하지 못했다(렌더가 하나뿐).
-- n = 19 는 작다. 구 렌더가 24개뿐이라 정해진 크기이고, 신 항목을 더해도 쌍체 검정력은
-  늘지 않는다. 그래서 200발화 확장은 절대 수치와 **대표성 검정**에만 쓴다.
+- `4_full` (durations predicted too) has no counterpart, because the old ladder never built
+  that rung. It also breaks frame alignment, so it is excluded from frame-based metrics and
+  only gets distribution metrics.
+- For some hold-out items `note_slur` cannot be recovered (more words than notes), so no
+  `4_full` input can be built. Those items lose just that rung and stay in the rest of the
+  comparison.
+- The old model's noise floor could not be measured (only one render exists).
+- n = 19 is small. It is fixed at that by the old model having only 24 renders, and adding
+  new items does not increase paired power. That is why the 200-utterance extension is used
+  only for absolute numbers and for the **representativeness test**.

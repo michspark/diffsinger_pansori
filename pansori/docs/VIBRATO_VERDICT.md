@@ -1,98 +1,114 @@
-# Phase 2 결과 — 판소리 요성은 사인파가 아니다
+# Phase 2 result — pansori *yoseong* is not a sine wave
 
-`pansori/eval/vibrato_stats.py`, train 300발화 → 노트 746개, CREPE 기준.
-Transition-Sustain(Bonada & Blaauw, arXiv 1803.04030) 계획의 R² 게이트.
+`pansori/eval/vibrato_stats.py`, 300 training utterances → 746 notes, against CREPE.
+The R² gate of the Transition-Sustain plan (Bonada & Blaauw, arXiv 1803.04030).
 
-**판정: 사인 모델을 지지하는 증거가 없다. Phase 4~6(sustain) 중단을 권고한다.**
-Phase 3(transition + 노트 위치 특징)은 이 결론과 무관하게 유효하며, 오히려 강화된다.
+**Verdict: there is no evidence supporting the sine model. Phases 4–6 (sustain) are
+recommended for cancellation.** Phase 3 (transition + note-position features) is unaffected
+by this conclusion, and is in fact strengthened by it.
+
+> **Note on reproducing this.** The measurement was made in the MoonInTheRiver repository,
+> before the port. `pansori/eval/vibrato_stats.py` was **not** carried across to this branch
+> and the command in §7 refers to the old repository's layout. The numbers stand as a
+> record; re-running them would mean re-porting the script first.
+>
+> *yoseong* (요성) is the wide vibrato of pansori — see *sigimsae* in the README glossary.
 
 ---
 
-## 1. 겉보기 숫자는 통과처럼 보인다
+## 1. The surface numbers look like a pass
 
-| | 중앙값 | 평균 | 25% | 75% |
+| | Median | Mean | 25% | 75% |
 |---|---|---|---|---|
-| 사인만 (계획서 정의) | **0.752** | 0.694 | 0.543 | 0.890 |
-| 2차 추세만 | 0.364 | 0.408 | 0.137 | 0.656 |
-| 추세 + 사인 | 0.935 | 0.874 | 0.836 | 0.978 |
-| 사인이 추세 위에 더한 몫 | 0.454 | 0.466 | 0.213 | 0.716 |
+| Sine only (as the plan defines it) | **0.752** | 0.694 | 0.543 | 0.890 |
+| Quadratic trend only | 0.364 | 0.408 | 0.137 | 0.656 |
+| Trend + sine | 0.935 | 0.874 | 0.836 | 0.978 |
+| What the sine adds on top of the trend | 0.454 | 0.466 | 0.213 | 0.716 |
 
-계획서 기준 `R² > 0.7 → 전체 진행`. **그런데 이 숫자는 아티팩트다.**
+The plan's criterion is `R² > 0.7 → proceed with everything`. **But these numbers are an
+artefact.**
 
-## 2. 대조군이 그것을 보여준다
+## 2. The control group shows it
 
-R²를 잴 때 ω(3배율) × α,β(4×4 격자)를 탐색하고 A·θ는 최소제곱 해석해로 얻는다.
-노트 중앙값이 64프레임(0.34초)이고 그중 다수가 **1주기 안팎**이다.
-사인 한 팔은 어떤 완만한 곡선에도 들어맞는다.
+Computing R² searches ω (3 multipliers) × α,β (a 4×4 grid) and solves A·θ analytically by
+least squares. The median note is 64 frames (0.34 s) long and many of those are **around a
+single period**. One arm of a sine fits any gentle curve.
 
-그래서 **같은 모델을 같은 길이의 *다른 노트* 잔차에 적합**했다. 요성이 있어서 맞은
-것인지, 모델이 유연해서 맞은 것인지를 가르는 유일한 방법이다.
+So the **same model was fitted to residuals from a *different* note of the same length**.
+That is the only way to separate "it fitted because there is yoseong" from "it fitted
+because the model is flexible".
 
-| 주기수 | n | R² 실측 | R² 대조 | 차이 | 길이(프레임) |
+| Periods | n | R² measured | R² control | Difference | Length (frames) |
 |---|---|---|---|---|---|
 | < 1.5 | 323 | 0.776 | 0.863 | **−0.087** | 54 |
 | 1.5–3 | 254 | 0.824 | 0.821 | +0.003 | 62 |
 | 3–5 | 52 | 0.625 | 0.688 | **−0.064** | 112 |
 | ≥ 5 | 16 | 0.382 | 0.340 | +0.042 | 189 |
-| **전체** | **645** | **0.782** | **0.829** | **−0.047** | |
+| **All** | **645** | **0.782** | **0.829** | **−0.047** | |
 
-**사인은 무관한 노트의 잔차를 실제 노트만큼(오히려 조금 더) 잘 맞춘다.**
-어느 구간에서도 차이가 ±0.09를 넘지 않는다. 식별 가능 구간(≥3주기)만 봐도
-실측 0.615 vs 대조 0.603 — 차이 0.012.
+**The sine fits residuals from unrelated notes as well as real ones — slightly better, in
+fact.** In no bucket does the difference exceed ±0.09. Even restricted to the identifiable
+range (≥3 periods): measured 0.615 vs control 0.603, a difference of 0.012.
 
-## 3. 뒷받침하는 정황 셋
+## 3. Three corroborating circumstances
 
-- **`has_vibrato`(prominence > 3)가 746개 중 29개, 3.9%뿐이다.** 판소리 노트 대부분에는
-  깨끗한 주기 성분이 없다.
-- **그 29개가 오히려 더 안 맞는다** — R²(사인) 0.358 vs 전체 0.752.
-  가설이 맞다면 정반대가 나와야 한다.
-- **ω가 일정하지 않다.** `has_vibrato` 노트의 IQR이 3.45 Hz(중앙값 4.41 Hz)로 넓다.
-  고정 속도 사인이라는 전제와 맞지 않는다.
+- **`has_vibrato` (prominence > 3) holds for only 29 of 746 notes, 3.9%.** Most pansori
+  notes have no clean periodic component at all.
+- **Those 29 fit *worse*** — R²(sine) 0.358 vs 0.752 overall. If the hypothesis were right,
+  the opposite should happen.
+- **ω is not constant.** For `has_vibrato` notes its IQR is 3.45 Hz (median 4.41 Hz), which
+  is wide. That does not match the premise of a fixed-rate sine.
 
-위상 θ는 원형 집중도 R = 0.081 (균일 가정 기대값 0.032, Rayleigh p = 0.007).
-n=746이라 통계적으로는 유의하지만 크기는 사실상 균일이다 —
-**θ를 자유 파라미터로 두라는 계획서의 판단 자체는 옳다.** 다만 그럴 대상이 없다.
+Phase θ has circular concentration R = 0.081 (expected 0.032 under uniformity, Rayleigh
+p = 0.007). With n = 746 that is statistically significant but effectively uniform in
+magnitude — **the plan's judgement to leave θ a free parameter was itself correct.** There
+is just nothing to apply it to.
 
-## 4. 그림이 말하는 것
+## 4. What the figure says
 
-`pansori/review/vibrato_long_notes.png` — 가장 긴 노트 12개의 잔차와 최적 사인.
+`pansori/review/vibrato_long_notes.png` — the residuals of the 12 longest notes with their
+best-fit sines.
 
-- 12개 중 **교과서적 요성은 1개**(451프레임, 4.6 Hz, R²=0.62). 그마저 진폭이 자라는데
-  상수 A 사인은 그걸 못 따라간다.
-- 나머지는 불규칙한 진동, 단조 활강, 또는 ±600~1500 cents의 큰 도약이다.
-- 도약 중 일부는 **CREPE 옥타브 오류**로 보인다(1200 cents 계단 모양).
+- Of the 12, **one is textbook yoseong** (451 frames, 4.6 Hz, R² = 0.62). Even there the
+  amplitude grows, and a constant-A sine cannot follow that.
+- The rest are irregular oscillation, monotone glide, or large jumps of ±600–1500 cents.
+- Some of those jumps look like **CREPE octave errors** (a 1200-cent step shape).
 
-## 5. 그래서 계획서에 대한 함의
+## 5. What this implies for the plan
 
-계획서는 이 가능성을 스스로 적어두었다:
+The plan wrote down this possibility itself:
 
-> 논문의 전제는 서양 가창 기준이고 거기 비브라토는 50~100 cents다. 판소리 요성은
-> 135~160 cents로 훨씬 넓어 이 전제가 성립하지 않을 수 있다. R²가 그 검증이다.
+> The paper's premise is Western singing, where vibrato is 50–100 cents. Pansori yoseong is
+> much wider at 135–160 cents, so that premise may not hold. R² is the test of it.
 
-**성립하지 않는다.** 판소리의 노트 내 움직임 135 cents는 "느린 사인 진동"이 아니라
-**불규칙하고 비주기적인 움직임**이 주성분이다.
+**It does not hold.** Pansori's 135 cents of within-note movement is not "slow sinusoidal
+oscillation" — its principal component is **irregular, aperiodic movement**.
 
-- **Phase 4~6 (전역 노트 ID, sustain 모델, ω·θ bootstrap) — 중단 권고.**
-  약 4%의 노트를 위해 80만 개 노트 임베딩과 위상 초기화 파이프라인을 만드는 것은
-  ROI가 맞지 않고, 나머지 96%에서는 학습된 A가 무의미한 진동을 만들 것이다.
-  이는 Stage B·§5.5에서 이미 두 번 본 실패 양식(크기는 맞고 내용은 무관)과 같다.
-- **Phase 3 (transition + 노트 위치 특징) — 유효하며 오히려 강화된다.**
-  움직임의 주성분이 비주기적·단조 변화라면, 그것을 담당할 곳은 바로 transition이고
-  거기에 없는 것이 노트 내 위치 정보다. 사인 가설과 독립적으로 옳다.
+- **Phases 4–6 (global note IDs, sustain model, ω·θ bootstrap) — recommended for
+  cancellation.** Building 800,000 note embeddings and a phase-initialisation pipeline for
+  roughly 4% of notes does not pay for itself, and on the other 96% the learned A would
+  produce meaningless oscillation. This is the same failure pattern already seen twice in
+  Stage B and §5.5: right in magnitude, unrelated in content.
+- **Phase 3 (transition + note-position features) — valid, and strengthened.** If the
+  principal component of the movement is aperiodic and monotone, then the transition is
+  exactly where it belongs, and note-position information is exactly what is missing there.
+  That is true independently of the sine hypothesis.
 
-## 6. 부수적으로 드러난 데이터 이슈
+## 6. Data issues this turned up along the way
 
-| | 수치 | 메모 |
+| | Value | Note |
 |---|---|---|
-| 노트 길이 | 중앙값 0.34초, 최대 **5.31초** | 1초 초과 6.8%, 2초 초과 2.4% |
-| 노트내 std > 300 cents | **2.1%** | 요성이 아니라 음 이동 또는 CREPE 옥타브 오류 |
+| Note length | median 0.34 s, max **5.31 s** | 6.8% over 1 s, 2.4% over 2 s |
+| Within-note std > 300 cents | **2.1%** | Not yoseong — pitch movement, or a CREPE octave error |
 
-5초짜리 "노트"는 `(pitch_midi, midi_dur)`가 그 구간 내내 일정하다는 뜻이다.
-ROSVOT 또는 `06_merge.py`가 긴 구간을 하나로 묶고 있는지 확인할 가치가 있다.
-Phase 5가 살아 있었다면 노트 하나에 (θ, α, β) 한 벌이라 5초짜리 노트에서는
-어차피 성립하지 않았을 것이다.
+A five-second "note" means `(pitch_midi, midi_dur)` stayed constant across that whole span.
+It is worth checking whether ROSVOT or `06_merge.py` is fusing long spans into one. Had
+Phase 5 survived, it would have carried one (θ, α, β) set per note and so would not have
+held up on a five-second note anyway.
 
-## 7. 재현
+## 7. Reproduction
+
+Historical — this is the command as run in the old repository (see the note at the top).
 
 ```sh
 conda activate diffsinger && export PYTHONPATH=.
@@ -101,12 +117,14 @@ python pansori/eval/vibrato_stats.py \
     --set train --n 300 --plot_notes 12
 ```
 
-산출물: `infer_out/note_vibrato_init.npz`,
+Outputs: `infer_out/note_vibrato_init.npz`,
 `pansori/review/{vibrato_freq_hist,vibrato_phase_hist,r2_hist,r2_gain_hist,vibrato_long_notes}.png`
 
-## 8. 한계
+## 8. Limits
 
-- train 300발화 / 노트 746개. ≥5주기 구간은 n=16으로 얇다.
-- 대조군은 **같은 길이의 기증자가 필요**해 가장 긴 노트에는 계산되지 않았다
-  (전체의 86.5%, 길이 상위 10% 중에서는 34.7%만). 긴 노트의 결론은 그만큼 약하다.
-- `--min_frames 40` 과 유성 90% 조건이 짧고 안정된 노트 쪽으로 표본을 치우치게 한다.
+- 300 training utterances / 746 notes. The ≥5-period bucket is thin at n = 16.
+- The control group **needs a donor of the same length**, so it could not be computed for
+  the longest notes (86.5% of all notes got one, but only 34.7% of the longest decile). The
+  conclusions about long notes are weaker in proportion.
+- `--min_frames 40` and the 90%-voiced condition bias the sample towards short, stable
+  notes.

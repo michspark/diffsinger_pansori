@@ -1,46 +1,50 @@
-# 가사 A/B — 창본 보정을 하고 / 안 하고
+# Lyrics A/B — with and without changbon correction
 
-두 라벨로 각각 학습시켜 합성음을 비교한 실험의 **절차와 결과**다. 판정의 근거와 한계는
-[`LYRICBOOK_VERDICT.md`](LYRICBOOK_VERDICT.md), 실행법 요약은
+The **procedure and result** of training on two label sets and comparing the synthesised
+audio. The reasoning behind the verdict, and its limits, are in
+[`LYRICBOOK_VERDICT.md`](LYRICBOOK_VERDICT.md); the command summary is in
 [`../README.md`](../README.md).
 
 ---
 
-`03b_snap_lyrics.py` 는 Whisper 전사를 창본(`lyricbook/corpus.jsonl`)에 맞춰 교정한다.
-[`LYRICBOOK_VERDICT.md`](LYRICBOOK_VERDICT.md) 는 **MFA 정렬 지표로는** 이 교정이 오히려
-나쁘다고 판정했지만, 같은 문서 §4 가 그 판정의 한계를 명시한다 — MFA 는 오디오에서 파생된
-텍스트를 구조적으로 편애하므로 "어느 가사가 **학습에** 좋은가"는 답할 수 없다. 그 질문은
-두 라벨로 각각 학습시켜 합성음을 비교해야 답이 나온다. 이 절이 그 절차다.
+`03b_snap_lyrics.py` corrects the Whisper transcription against the *changbon* — the
+published libretto (`lyricbook/corpus.jsonl`).
+[`LYRICBOOK_VERDICT.md`](LYRICBOOK_VERDICT.md) judged that **by MFA alignment metrics** this
+correction makes things worse, but §4 of that same document states the limit of the verdict:
+MFA structurally favours text derived from the audio, so it cannot answer "which lyrics are
+better **for training**". Answering that means training on both label sets and comparing the
+synthesised audio. This section is that procedure.
 
-**바꾸는 것은 라벨 하나뿐이다.** 오디오·노트·홀드아웃·spec 통계·config·학습 설정이 전부
-동일해야 차이를 가사 탓으로 돌릴 수 있다.
+**Exactly one thing changes: the labels.** Audio, notes, hold-out, spec statistics, configs
+and training settings must all be identical, or the difference cannot be attributed to the
+lyrics.
 
-## 1. snapped 코퍼스 만들기
+## 1. Building the snapped corpus
 
 ```sh
 conda activate pansori
-python pansori/preprocess/01b_recut_wavs.py --set full        # 04 의 입력 복원 (README §3)
+python pansori/preprocess/01b_recut_wavs.py --set full        # restore stage 04's input (README §8)
 
 conda activate aligner && cd pansori/preprocess
-python 04_align.py --set full --lyrics lyrics_snapped.jsonl --suffix _snap   # 수 시간
+python 04_align.py --set full --lyrics lyrics_snapped.jsonl --suffix _snap   # several hours
 
-# 06·07 은 data/{set}/ 의 고정된 파일명을 읽는다. 새 --set 을 링크로 조립하면
-# 스크립트를 고치지 않고 그대로 돌릴 수 있다.
+# 06 and 07 read fixed filenames out of data/{set}/. Assembling a new --set out of
+# symlinks lets them run unchanged.
 cd ../data && mkdir -p full_snap && cd full_snap
 ln -s ../full/{segments.jsonl,notes.jsonl,spk_map.json,wavs} .
-ln -s ../full/phones_snap.jsonl phones.jsonl                  # 다른 것은 이것뿐이다
+ln -s ../full/phones_snap.jsonl phones.jsonl                  # this is the only difference
 
 conda activate pansori && cd ../../preprocess
 python 06_merge.py    --set full_snap
-python 07_validate.py --set full_snap                         # PASS 없이 진행 금지
+python 07_validate.py --set full_snap                         # do not proceed without PASS
 python 08_export.py   --set full_snap --out data/pansori_snap --wavs_from data/pansori
 ```
 
-`--wavs_from` 은 화자별 `wavs/` 를 기존 코퍼스로 심볼릭 링크한다. 두 변종의 오디오는
-바이트 단위로 같으므로 14 GB 를 다시 자를 이유가 없고, 같은 파일을 가리키는 편이
-"라벨 말고는 전부 같다"를 보장한다.
+`--wavs_from` symlinks each speaker's `wavs/` to the existing corpus. The audio is identical
+byte for byte across the two variants, so there is no reason to re-cut 14 GB — and pointing
+at the same files is itself what guarantees "everything but the labels is the same".
 
-## 2. config 와 binarize
+## 2. Configs and binarize
 
 ```sh
 conda activate dsp && export PYTHONPATH=. PYTHONNOUSERSITE=1
@@ -49,11 +53,11 @@ python scripts/binarize.py --config configs/exp/ac_snap.yaml
 python scripts/binarize.py --config configs/exp/var_snap.yaml
 ```
 
-**`compute_spec_stats.py` 를 다시 돌리지 않는다.** mel 통계는 오디오에서만 나오고 오디오는
-동일하다. `configs/pansori/spec_stats.yaml` 을 그대로 재사용하는 것이 오히려 조건을
-묶어 준다.
+**Do not re-run `compute_spec_stats.py`.** Mel statistics come only from the audio, and the
+audio is identical. Reusing `configs/pansori/spec_stats.yaml` as-is ties the conditions
+together rather than loosening them.
 
-## 3. 학습 — 두 런을 한 group 으로
+## 3. Training — both runs in one group
 
 ```sh
 python pansori/train.py --config configs/exp/ac_snap.yaml \
@@ -63,19 +67,21 @@ python pansori/train.py --config configs/exp/var_snap.yaml \
   --exp_name pansori_var_snap --reset --lyrics-source snapped --wandb-group lyrics-ab
 ```
 
-스텝 수와 `num_ckpt_keep` 은 실험 파일 안에 있다 (`configs/exp/{ac,var}_snap.yaml`).
-이 두 런이 처음 돌 때는 `--hparams` 로 넘겼지만, 그러면 조건이 셸 히스토리에만 남는다.
+Step counts and `num_ckpt_keep` live inside the experiment files
+(`configs/exp/{ac,var}_snap.yaml`). The first time these two ran they were passed via
+`--hparams`, which leaves the conditions only in shell history.
 
-- **스텝 수는 baseline 에 맞춘 것이다.** `pansori_var_v1` 은 config 의 80k 가 아니라 실제로
-  **32k 에서 멈춰 있다**(체크포인트·tfevents 둘 다). 더 오래 돌리면 snapped 쪽 피치 헤드만
-  더 학습돼 비교가 기운다. acoustic 은 baseline 이 100k 까지 갔지만 최적이 28k 였으므로
-  50k 로 충분하다.
-- **`num_ckpt_keep` 을 올린다.** 기본값(acoustic 8 / variance 5)이면 초반 체크포인트가
-  지워지는데, 실측 최적은 acoustic 28k · dur 16k · pitch 32k 로 전부 초반이다.
+- **The step counts are matched to the baseline.** `pansori_var_v1` actually stopped at
+  **32k**, not the 80k in its config (both the checkpoints and the tfevents agree). Running
+  longer would train only the snapped arm's pitch head further and tilt the comparison. For
+  acoustic, the baseline went to 100k but its optimum was 28k, so 50k is plenty.
+- **`num_ckpt_keep` is raised.** At the defaults (acoustic 8 / variance 5) the early
+  checkpoints get deleted — and the measured optima are all early: acoustic 28k, dur 16k,
+  pitch 32k.
 
-## 4. 평가 — 같은 자로 두 번
+## 4. Evaluation — the same ruler, twice
 
-`run_examples.sh` 는 환경변수로 모델과 코퍼스를 받는다 (README §5).
+`run_examples.sh` takes the model and corpus from environment variables (README §11).
 
 ```sh
 bash pansori/examples/run_examples.sh                          # whisper
@@ -88,30 +94,36 @@ python pansori/examples/measure.py --out pansori/examples/out_snap \
   --json pansori/examples/out_snap/metrics.json
 ```
 
-`SEED` 를 두 실행에서 같게 둘 것. reflow 는 확률적 샘플러라 시드만 바꿔도 f0 RMSE 가
-±17% 움직인다 — **두 모델의 차이가 `seed_spread.py` 의 편차보다 작으면 차이가 없는 것이다.**
+Keep `SEED` the same across both runs. Reflow is a stochastic sampler; changing nothing but
+the seed moves f0 RMSE by ±17% — **if the gap between two models is smaller than
+`seed_spread.py`'s variation, there is no gap.**
 
-## 5. 결과 (2026-08-29 실행분)
+## 5. Result (run of 2026-08-29)
 
-**보정은 도움이 되지 않았다.** 홀드아웃 60쌍 × 3시드를 `2_resynth` 단에서 재면, 분리되는
-지표는 하나뿐이고 그것이 **가사가 실제로 바뀐 발화에서만** 나온다 — 유무성 일치가
-whisper 21승 6패 3무(p = 0.006), 대조군(음소열이 동일한 30쌍)에서는 10승 12패 8무
-(p = 0.83). 전체 수치와 해석은 [`LYRICBOOK_VERDICT.md`](LYRICBOOK_VERDICT.md) §9.
+**The correction did not help.** Measuring 60 held-out pairs × 3 seeds at the `2_resynth`
+rung, exactly one metric separates, and it does so **only on utterances where the lyrics
+actually changed**: voiced/unvoiced agreement, whisper winning 21–6 with 3 ties
+(p = 0.006), against 10–12 with 8 ties in the control group (30 pairs whose phoneme
+sequences are identical, p = 0.83). The full numbers and their interpretation are in
+[`LYRICBOOK_VERDICT.md`](LYRICBOOK_VERDICT.md) §9.
 
 ```sh
-python pansori/examples/ab_ladder.py --n 60 --seeds 3      # 두 팔을 한 번에, ~5분
+python pansori/examples/ab_ladder.py --n 60 --seeds 3      # both arms at once, ~5 min
 ```
 
-`ab_ladder.py` 는 팔마다 모델을 **한 번만** 올려 60항목을 렌더한다 (`run_examples.sh` 는
-렌더마다 프로세스를 새로 띄워 25초씩 쓴다). 절반은 두 코퍼스에서 음소열이 글자 하나
-다르지 않은 **대조군**이다 — 같은 모델 두 개로 재므로 학습 런 사이의 우연한 차이는 두
-군에 똑같이 나타나고, 처치군에서만 나오는 차이라야 가사 탓이다.
+`ab_ladder.py` loads each arm's model **once** and renders all 60 items
+(`run_examples.sh` spawns a fresh process per render, costing 25 s each). Half the items are
+a **control group** whose phoneme sequences do not differ by a single character across the
+two corpora — since both are measured with the same two models, any incidental difference
+between the training runs shows up equally in both groups, and only a difference that
+appears in the treatment group alone can be attributed to the lyrics.
 
-## 6. 읽을 때 주의
+## 6. Reading this carefully
 
-- **두 런의 검증 손실을 높낮이로 비교하면 안 된다.** 각자 자기 라벨에 대해 계산된 값이다.
-  wandb 에 나란히 보이는 것은 수렴 양상과 과적합 시점을 보기 위한 것이고, 우열 판정은
-  §4 의 합성음 지표로만 한다.
-- 두 변종에서 07 을 통과한 아이템 집합이 완전히 같지는 않다. 차이를 세어 명시할 것.
-- 청취 검증은 여전히 없다. 이 실험은 "어느 라벨이 더 나은 합성음을 만드는가"만 답한다.
-
+- **Do not compare the two runs' validation losses as higher/lower.** Each is computed
+  against its own labels. They sit side by side in wandb to show convergence shape and when
+  overfitting starts; which arm is better is decided only by the synthesis metrics in §4.
+- The set of items passing 07 is not exactly identical across the two variants. Count the
+  difference and state it.
+- There is still no listening verification. This experiment only answers "which label set
+  produces better synthesis".
