@@ -592,7 +592,7 @@ def build(summary, table, with_audio=True):
 
 
 def main():
-    p = argparse.ArgumentParser(description='비교 리포트 생성')
+    p = argparse.ArgumentParser(description='render the comparison report')
     p.add_argument('--summary', default=str(C.OUT / 'summary.json'))
     p.add_argument('--results', default=str(C.OUT / 'results.jsonl'))
     p.add_argument('--out', default=str(OUT_HTML))

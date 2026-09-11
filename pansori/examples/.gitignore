@@ -1,10 +1,10 @@
-# 생성물은 추적하지 않는다 — run_examples.sh + build_report.py 로 재생성한다.
+# Artefacts are not tracked — run_examples.sh + build_report.py regenerate them.
 out/
 ds/
 report.html
 listening_test.html
 
-# 가사 A/B 의 두 번째 팔과 ab_ladder.py 의 렌더 (§7)
+# The lyrics A/B's second arm, and ab_ladder.py's renders (§7)
 out_snap/
 ds_snap/
 ab_out/
