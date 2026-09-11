@@ -75,7 +75,7 @@ def restore_best():
         exp, step = saved.stem.split('_step')
         dest = C.REPO / 'checkpoints' / exp / f'model_ckpt_steps_{step}.ckpt'
         if dest.parent.is_dir() and not dest.exists():
-            print(f'복원: {dest.relative_to(C.REPO)} ← best/')
+            print(f'restored: {dest.relative_to(C.REPO)} <- best/')
             dest.write_bytes(saved.read_bytes())
 
 
@@ -85,7 +85,7 @@ def assert_ckpts():
                       ('pansori_var_v1', C.CKPT_PITCH)):
         p = C.REPO / 'checkpoints' / exp / f'model_ckpt_steps_{step}.ckpt'
         if not p.exists():
-            raise FileNotFoundError(f'필요한 체크포인트 없음: {p}')
+            raise FileNotFoundError(f'required checkpoint missing: {p}')
 
 
 # ---------------------------------------------------------------- prep
@@ -123,9 +123,9 @@ def mode_prep(items):
                 skipped.append(f'{item}: {e}')
                 continue
             made += 1
-    print(f'| prep: {made}개 .ds 생성, {len(items)}항목')
+    print(f'| prep: {made} .ds built, {len(items)} items')
     if skipped:
-        print(f'| 4_full 불가 {len(skipped)}항목 (note_slur 복원 실패): '
+        print(f'| 4_full impossible for {len(skipped)} items (note_slur recovery failed): '
               f'{", ".join(s.split(":")[0] for s in skipped[:8])}'
               f'{" …" if len(skipped) > 8 else ""}')
 
@@ -168,7 +168,7 @@ def mode_variance(items, seeds):
             d = run(dur, OUT_DS / f'{item}_notes.ds', f'{item}_notes_dur_s{seed}', seed)
             if d is not None:
                 run(pitch, d, f'{item}_notes_var_s{seed}', seed)
-    print(f'| variance: {len(items)}항목 x {len(seeds)}시드, {time.time() - t0:.1f}s')
+    print(f'| variance: {len(items)} items x {len(seeds)} seeds, {time.time() - t0:.1f}s')
 
 
 # ---------------------------------------------------------------- acoustic
@@ -229,15 +229,15 @@ def mode_acoustic(items, seeds):
             render(OUT_DS / f'{item}_notes_var_s{seed}.ds', f'{item}__4_full__s{seed}', seed)
     n = len(items) * (1 + 3 * len(seeds))
     dt = time.time() - t0
-    print(f'| acoustic: {n}렌더 / {dt:.1f}s = 렌더당 {dt / max(n, 1):.2f}s')
+    print(f'| acoustic: {n} renders / {dt:.1f}s = {dt / max(n, 1):.2f}s per render')
 
 
 # ---------------------------------------------------------------- driver
 
 def main():
-    p = argparse.ArgumentParser(description='신모델 사다리 렌더')
+    p = argparse.ArgumentParser(description='render the new model\'s ladder')
     p.add_argument('--items', default='fair',
-                   help='fair | excluded | paired | sample:N | 쉼표 목록')
+                   help='fair | excluded | paired | sample:N | a comma-separated list')
     p.add_argument('--seeds', type=int, default=len(C.SEEDS))
     p.add_argument('--mode', default='driver',
                    choices=['driver', 'prep', 'variance', 'acoustic'])
@@ -249,7 +249,7 @@ def main():
     if args.mode == 'driver':
         restore_best()
         assert_ckpts()
-        print(f'{len(items)}항목 x {len(seeds)}시드 '
+        print(f'{len(items)} items x {len(seeds)} seeds '
               f'(acoustic {C.CKPT_ACOUSTIC} · dur {C.CKPT_DUR} · pitch {C.CKPT_PITCH})')
         env = {**os.environ, 'PYTHONPATH': str(C.REPO), 'PYTHONNOUSERSITE': '1'}
         for mode in ('prep', 'variance', 'acoustic'):
@@ -260,8 +260,8 @@ def main():
                 cwd=C.REPO, env=env,
             )
             if r.returncode:
-                sys.exit(f'{mode} 실패 (exit {r.returncode})')
-        print(f'\n완료 — {OUT_WAV}')
+                sys.exit(f'{mode} failed (exit {r.returncode})')
+        print(f'\ndone — {OUT_WAV}')
         return
 
     {'prep': lambda: mode_prep(items),

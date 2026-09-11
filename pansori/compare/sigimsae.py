@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""시김새 measured from the f0 curve, with no manual labelling.
+"""Sigimsae measured from the f0 curve, with no manual labelling.
 
 The decomposition is the one pansori/docs/SIGIMSAE_PLAN.md §1 already applied to
 the old model, kept field-for-field so the historical table extends rather than
@@ -7,9 +7,9 @@ restarts:
 
     residual(t) = f0(t) - note_staircase(t)      in cents
                 = bias(n)                        per-note constant -- tuning
-                + within(t)                      the part that moves -- 시김새
+                + within(t)                      the part that moves -- sigimsae
 
-Three numbers decide whether a model sings 시김새, and only the third is hard to
+Three numbers decide whether a model sings sigimsae, and only the third is hard to
 fake: how much ground truth moves inside a note, how much the model moves, and
 whether the two move *together*. A model with the right amount of motion and zero
 correlation is generating decorative noise, which is worse than a flat line
@@ -17,14 +17,14 @@ because it sounds drunk rather than plain.
 
 One correction is applied before any of it: **octave snapping to the note**.
 RMVPE accepts f0_min/f0_max and ignores them (modules/pe/rmvpe/inference.py:63-78),
-and on male 통성 it drops octaves -- on 8b4d0824_0000 it reads 92 Hz where CREPE
+and on male tongseong it drops octaves -- on 8b4d0824_0000 it reads 92 Hz where CREPE
 reads 192 Hz, inside a single sustained B3. Across the 19 paired items a median
 4.4% of voiced frames sit more than 600 cents from their own note, and two items
 reach 24-28%. Left alone that inflates the *reference's* own within-note std to
 650 cents against a published 161.4.
 
 So the residual is wrapped into (-600, 600] before the decomposition, identically
-for the reference and for every system. 시김새 excursions in this corpus are
+for the reference and for every system. Sigimsae excursions in this corpus are
 135-160 cents (docs/VIBRATO_VERDICT.md), nowhere near 600, and the note step
 itself is already removed by the staircase -- so a >600-cent excursion inside a
 note is extractor or label error, not ornament. After snapping the reference
@@ -42,7 +42,7 @@ Two deliberate omissions:
     better (control R^2 0.829 vs actual 0.782), and only 3.9% of notes have a
     clean periodic component. A rate/depth metric built on that fit measures the
     fitter's flexibility over short windows, and would flatter whichever system
-    produces smoother contours for reasons unrelated to 요성.
+    produces smoother contours for reasons unrelated to yoseong.
 
   * No |Δf0| per *frame*. The old pipeline framed at 5.33 ms and this one at
     11.61 ms, so the same physical contour scores ~2.2x higher on the new grid.
@@ -117,7 +117,7 @@ def _std(x):
 
 
 def note_stats(f0, voiced, item, n_frames=None):
-    """Per-utterance 시김새 statistics for one contour."""
+    """Per-utterance sigimsae statistics for one contour."""
     n_frames = n_frames or len(f0)
     note_id, stair = N.frame_notes(item, n_frames)
     f0, voiced, note_id, stair = (a[:n_frames] for a in (f0, voiced, note_id, stair))
@@ -260,8 +260,8 @@ def transitions(f0, voiced, item, n_frames=None):
     """Approach / release behaviour at each interior note boundary.
 
     Measured on the *residual*, so the note step itself is already removed and
-    what is left is the singer's approach to the note -- 추성 (pushing up into it),
-    퇴성 (falling away), 꺾기 (the pre-strike against the direction of the step).
+    what is left is the singer's approach to the note -- chuseong (pushing up into it),
+    toeseong (falling away), kkeokgi (the pre-strike against the direction of the step).
 
     The window is 120 ms rather than 40 ms because ROSVOT boundaries carry
     +-1-2 frames of error; direction agreement is the robust statistic here and
@@ -287,7 +287,7 @@ def transitions(f0, voiced, item, n_frames=None):
             dev = after - bias_after
             over = float(dev[np.nanargmax(np.abs(dev))])
 
-        # 꺾기: an excursion against the direction of the note step that comes
+        # kkeokgi: an excursion against the direction of the note step that comes
         # back through zero quickly. Defined by shape, not by fitting anything.
         kkeokgi = False
         if step != 0 and np.isfinite(bias_after):
@@ -354,7 +354,7 @@ def transition_agreement(rows_g, rows_r, floor=C.SLOPE_FLOOR):
 # ---------------------------------------------------------------- top level
 
 def evaluate(f0_g, voiced_g, f0_r, voiced_r, item):
-    """Every 시김새 metric for one (system, reference) pair on one item."""
+    """Every sigimsae metric for one (system, reference) pair on one item."""
     n = min(len(f0_g), len(f0_r))
     g = note_stats(f0_g[:n], voiced_g[:n], item, n)
     r = note_stats(f0_r[:n], voiced_r[:n], item, n)

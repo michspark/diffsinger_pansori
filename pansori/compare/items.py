@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Which utterances may be compared, and why five of them may not.
 
-The old repo held out six songs, one per 명창. The new one holds out five:
+The old repo held out six songs, one per myeongchang. The new one holds out five:
 configs/pansori/data_pansori.yaml gives 정권진 `test_prefixes: []` because that
 singer's only song IS the holdout song, so holding it out would leave the
 speaker with zero training data (pansori/docs/NEXT.md, last line).
@@ -180,16 +180,16 @@ def main():
     fair, excluded = paired_items()
     print(f'held-out songs (new model): {sorted(HELD_OUT_PREFIXES)}')
     print(f'old ladder items: {len(old_ladder_items())}')
-    print(f'\n공정 쌍 {len(fair)}개:')
+    print(f'\n{len(fair)} fair pairs:')
     by_spk = {}
     for item in fair:
         by_spk.setdefault(speaker_of(item), []).append(item)
     for spk in sorted(by_spk, key=lambda s: -len(by_spk[s])):
         print(f'  {spk:6s} {len(by_spk[spk])}  {" ".join(by_spk[spk])}')
-    print(f'\n제외 {len(excluded)}개 (신모델 학습 데이터):')
+    print(f'\n{len(excluded)} excluded (training data for the new model):')
     for item in excluded:
         print(f'  {item}  {speaker_of(item)}')
-    print(f'\n홀드아웃 전체: {len(holdout_items())}발화')
+    print(f'\nhold-out total: {len(holdout_items())} utterances')
 
 
 if __name__ == '__main__':

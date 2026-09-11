@@ -100,7 +100,7 @@ def collect(items, seeds, old_runs=('aux', 'ds3'), only_new=False, spectral=True
         ref_path = I.wav_of(item)
         ref_f0, ref_v = F.contour(ref_path)
 
-        # the reference's own 시김새 level -- the row every ratio is divided by
+        # the reference's own sigimsae level -- the row every ratio is divided by
         st = S.note_stats(ref_f0, ref_v, item)
         for k in ('within_std', 'within_std_core', 'bias_rms', 'residual_rms',
                   'octave_snap_rate', 'n_notes'):
@@ -157,25 +157,25 @@ def collect(items, seeds, old_runs=('aux', 'ds3'), only_new=False, spectral=True
                 out += rows_for('NEW', item, '4_full', seed, p, ref_f0, ref_v, ref_path,
                                 frame_aligned=False, spectral=False)
 
-        print(f'  {item} ({I.speaker_of(item)}) 완료', flush=True)
+        print(f'  {item} ({I.speaker_of(item)}) done', flush=True)
 
     return ref_rows + out
 
 
 def main():
-    p = argparse.ArgumentParser(description='지표 수집')
+    p = argparse.ArgumentParser(description='collect the metrics')
     p.add_argument('--items', default='fair')
     p.add_argument('--seeds', type=int, default=len(C.SEEDS))
     p.add_argument('--out', default=str(RESULTS))
     p.add_argument('--only-new', action='store_true',
-                   help='신 모델 3_pitch 만 (홀드아웃 확장용)')
+                   help='the new model\'s 3_pitch only (for the hold-out extension)')
     p.add_argument('--no-spectral', action='store_true')
     args = p.parse_args()
 
     from pansori.compare.render_new import resolve_items
     items = resolve_items(args.items)
     seeds = list(C.SEEDS[:args.seeds])
-    print(f'{len(items)}항목 x {len(seeds)}시드')
+    print(f'{len(items)} items x {len(seeds)} seeds')
 
     rows = collect(items, seeds, only_new=args.only_new,
                    spectral=not args.no_spectral)
@@ -185,7 +185,7 @@ def main():
     with open(args.out, 'w', encoding='utf-8') as f:
         for r in rows:
             f.write(json.dumps(r, ensure_ascii=False, sort_keys=True) + '\n')
-    print(f'\n{len(rows)}행 → {args.out}')
+    print(f'\n{len(rows)} rows -> {args.out}')
 
 
 if __name__ == '__main__':

@@ -5,7 +5,7 @@ Hand-written SVG rather than matplotlib PNGs, because the report is published as
 an artifact that renders in whichever theme the reader is using: colours come from
 CSS custom properties so light and dark are one document, and text stays selectable.
 
-Three series only -- 원본 / 구 / 신 -- which is the largest set that clears the
+Three series only -- original / old / new -- which is the largest set that clears the
 all-pairs CVD and normal-vision floors in both modes. The note staircase is drawn
 as recessive structure, not as a fourth series, because that is what it is.
 Every series is direct-labelled as well as legended, which is also the relief the

@@ -10,7 +10,7 @@ in note_seq. Verified against the old repo's notes.jsonl in smoke.py (gate G2).
 
 This matters more than it looks. Both models were conditioned on the same ROSVOT
 notes, so a single staircase serves both sides, which removes what would
-otherwise have been the largest confound in the 시김새 decomposition.
+otherwise have been the largest confound in the sigimsae decomposition.
 """
 
 import sys
@@ -93,7 +93,7 @@ def boundaries(item, n_frames, timestep=C.TIMESTEP):
     """Interior note boundaries as (frame, midi_before, midi_after, step_cents).
 
     Only boundaries between two sounding notes -- a rest edge is a phrase
-    boundary, not a 꺾기, and treating it as one would inflate every transition
+    boundary, not a kkeokgi, and treating it as one would inflate every transition
     statistic with silence.
     """
     onsets, midi = note_grid(item)
@@ -110,23 +110,23 @@ def boundaries(item, n_frames, timestep=C.TIMESTEP):
 
 def main():
     import argparse
-    p = argparse.ArgumentParser(description='노트 격자 확인')
+    p = argparse.ArgumentParser(description='inspect the note grid')
     p.add_argument('item', nargs='?', default='8b4d0824_0000')
     args = p.parse_args()
 
     onsets, midi = note_grid(args.item)
     row = I.row_of(args.item)
     ph_total = sum(float(x) for x in row['ph_dur'].split())
-    print(f'{args.item}  화자 {I.speaker_of(args.item)}')
-    print(f'노트 {len(midi)}개, 총 {onsets[-1]:.4f}s / ph_dur 합 {ph_total:.4f}s '
-          f'(차이 {abs(onsets[-1] - ph_total) * 1000:.2f} ms)')
+    print(f'{args.item}  speaker {I.speaker_of(args.item)}')
+    print(f'{len(midi)} notes, total {onsets[-1]:.4f}s / sum(ph_dur) {ph_total:.4f}s '
+          f'(difference {abs(onsets[-1] - ph_total) * 1000:.2f} ms)')
     print(f'note_seq: {row["note_seq"]}')
-    print('온셋:', ' '.join(f'{o:.3f}' for o in onsets))
+    print('onsets:', ' '.join(f'{o:.3f}' for o in onsets))
     print('MIDI :', ' '.join(str(m) for m in midi))
     n = int(round(onsets[-1] / C.TIMESTEP))
     nid, stair = frame_notes(args.item, n)
-    print(f'프레임 {n}개, 유음 프레임 {int((stair > 0).sum())}개, '
-          f'내부 경계 {len(boundaries(args.item, n))}개')
+    print(f'{n} frames, {int((stair > 0).sum())} sounding frames, '
+          f'{len(boundaries(args.item, n))} interior boundaries')
 
 
 if __name__ == '__main__':

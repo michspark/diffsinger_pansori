@@ -595,7 +595,7 @@ def f0_verdict(f0data):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='리포트 생성')
+    parser = argparse.ArgumentParser(description='render the pipeline report')
     parser.add_argument('--out', default='pansori/examples/report.html')
     parser.add_argument('--chart-item', default='8b4d0824_0078')
     args = parser.parse_args()

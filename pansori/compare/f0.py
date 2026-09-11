@@ -121,11 +121,11 @@ def truncate(*series):
 
 def main():
     import argparse
-    p = argparse.ArgumentParser(description='f0 추출 확인')
+    p = argparse.ArgumentParser(description='inspect f0 extraction')
     p.add_argument('wav')
     args = p.parse_args()
     f0, v = contour(args.wav)
-    print(f'{len(f0)} 프레임 ({len(f0) * C.TIMESTEP:.3f}s), 유성 {v.mean():.1%}, '
+    print(f'{len(f0)} frames ({len(f0) * C.TIMESTEP:.3f}s), voiced {v.mean():.1%}, '
           f'{f0[v].min():.1f}-{f0[v].max():.1f} Hz')
 
 

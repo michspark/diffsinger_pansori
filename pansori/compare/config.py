@@ -60,8 +60,8 @@ OLD_PRIMARY = 'aux'
 #   --pred_dur defaults False, so 5_pred_own used ground-truth durations.
 RUNG_PAIRS = [
     # (label, old rung, new rung, what it isolates)
-    ('보코더 천장', '2_gt_crepe', '0_vocoder', 'GT mel + GT f0 -- vocoder and extractor only'),
-    ('모델 출력', '5_pred_own', '3_pitch', 'GT dur + own f0 + own mel -- the A/B pair'),
+    ('vocoder ceiling', '2_gt_crepe', '0_vocoder', 'GT mel + GT f0 -- vocoder and extractor only'),
+    ('model output', '5_pred_own', '3_pitch', 'GT dur + own f0 + own mel -- the A/B pair'),
 ]
 NEW_RUNGS = ('0_vocoder', '2_resynth', '3_pitch', '4_full')
 
@@ -70,13 +70,13 @@ NEW_RUNGS = ('0_vocoder', '2_resynth', '3_pitch', '4_full')
 # frame-aligned metric and from correlation with ground truth.
 FRAME_ALIGNED = ('0_vocoder', '2_resynth', '3_pitch')
 
-# ---------------------------------------------------------------- 시김새 params
+# --------------------------------------------------------------- sigimsae params
 
 NOTE_MIN_VOICED = 5      # notes with fewer voiced frames are skipped
 NOTE_TRIM = 0.2          # core mask trims max(1, round(0.2*L)) frames each end
 TRANSITION_MS = 120      # +-120 ms around a note boundary
 SLOPE_FLOOR = 200.0      # cents/s; below this a boundary is too flat to have a direction
-KKEOKGI_CENTS = 80.0     # excursion against the note step that counts as a 꺾기
+KKEOKGI_CENTS = 80.0     # excursion against the note step that counts as a kkeokgi
 KKEOKGI_RETURN_MS = 100
 WOBBLE_MEDIAN_MS = 150   # detrending baseline for ornamental wobble
 

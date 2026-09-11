@@ -34,30 +34,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from pansori.compare import config as C  # noqa: E402
 
 # metric -> (label, better direction). 'gt' means "closest to ground truth wins",
-# which is the correct direction for every 시김새 amplitude: a model that moves
+# which is the correct direction for every sigimsae amplitude: a model that moves
 # MORE than the singer is not more expressive, it is unstable.
 DIRECTION = {
-    'within_std_ratio': ('노트내 변동비 (1.0 이 정답)', 'gt'),
-    'within_std_core_ratio': ('노트내 변동비 core', 'gt'),
-    'motion_ratio': ('모션비', 'gt'),
-    'wobble_ratio': ('wobble 비', 'gt'),
-    'within_corr': ('노트내 GT 상관', 'up'),
-    'transition_dir_agree': ('전이 방향 일치율', 'up'),
-    'transition_dir_agree_release': ('전이 방향 일치율 (release)', 'up'),
+    'within_std_ratio': ('within-note variation ratio (1.0 is correct)', 'gt'),
+    'within_std_core_ratio': ('within-note variation ratio, core', 'gt'),
+    'motion_ratio': ('motion ratio', 'gt'),
+    'wobble_ratio': ('wobble ratio', 'gt'),
+    'within_corr': ('within-note correlation with GT', 'up'),
+    'transition_dir_agree': ('transition direction agreement', 'up'),
+    'transition_dir_agree_release': ('transition direction agreement (release)', 'up'),
     'rpa50': ('RPA-50', 'up'),
     'rca50': ('RCA-50', 'up'),
-    'voiced_agree': ('유무성 일치', 'up'),
+    'voiced_agree': ('voiced agreement', 'up'),
     'f0_rmse_cent': ('f0 RMSE (cents)', 'down'),
-    'gross_error': ('총오차율', 'down'),
-    'octave_jump': ('옥타브 점프율', 'down'),
-    'bias_rms': ('노트편향 RMS', 'down'),
-    'within_std_wasserstein': ('노트내 std 분포거리', 'down'),
+    'gross_error': ('gross error rate', 'down'),
+    'octave_jump': ('octave jump rate', 'down'),
+    'bias_rms': ('note-bias RMS', 'down'),
+    'within_std_wasserstein': ('within-note std distribution distance', 'down'),
     'mcd_db': ('MCD (dB)', 'down'),
     'lsd': ('LSD', 'down'),
-    'mel_l1_common': ('공통 mel L1', 'down'),
-    'slope_mag_ratio': ('전이 기울기 크기비', 'gt'),
-    'kkeokgi_rate': ('꺾기율', 'gt'),
-    'octave_snap_rate': ('옥타브 스냅률', 'down'),
+    'mel_l1_common': ('common-basis mel L1', 'down'),
+    'slope_mag_ratio': ('transition slope magnitude ratio', 'gt'),
+    'kkeokgi_rate': ('kkeokgi rate', 'gt'),
+    'octave_snap_rate': ('octave snap rate', 'down'),
 }
 
 
@@ -162,12 +162,12 @@ def fmt(x, nd=3):
 
 
 def main():
-    p = argparse.ArgumentParser(description='쌍체 통계')
+    p = argparse.ArgumentParser(description='paired statistics')
     p.add_argument('--results', default=str(C.OUT / 'results.jsonl'))
     p.add_argument('--old', default=f'OLD_{C.OLD_PRIMARY}')
     p.add_argument('--json', default=str(C.OUT / 'summary.json'))
     p.add_argument('--extended', default=str(C.OUT / 'results_ext.jsonl'),
-                   help='홀드아웃 확장 표본 결과 (없으면 건너뛴다)')
+                   help='the hold-out extension sample\'s results (skipped if absent)')
     args = p.parse_args()
 
     rows, table = load(args.results)
@@ -178,7 +178,7 @@ def main():
     gt = {m: per_item(table, ('GT', '1_orig', m))
           for m in ('within_std', 'within_std_core', 'bias_rms', 'motion_cps',
                     'wobble_iqr', 'octave_snap_rate', 'n_notes', 'above_11k_frac')}
-    print('기준 (GT, RMVPE, 옥타브 스냅 적용) — 19항목 중앙값')
+    print('reference (GT, RMVPE, octave snap applied) — median over 19 items')
     for k, v in gt.items():
         if v:
             print(f'  {k:20s} {np.median(list(v.values())):8.3f}')
@@ -188,10 +188,10 @@ def main():
     if swap.get('f0_rmse_cent'):
         gt_w = np.median(list(gt['within_std'].values()))
         cr_w = np.median(list(swap['within_std'].values()))
-        print(f'\n기준 교체 진단 (CREPE vs RMVPE)')
+        print(f'\nreference-swap diagnostic (CREPE vs RMVPE)')
         print(f'  cents RMSE   {np.median(list(swap["f0_rmse_cent"].values())):8.1f}')
-        print(f'  유무성 일치   {np.median(list(swap["voiced_agree"].values())):8.3f}')
-        print(f'  노트내 변동   CREPE {cr_w:.1f} vs RMVPE {gt_w:.1f}  (비 {cr_w / gt_w:.3f})')
+        print(f'  voiced agreement  {np.median(list(swap["voiced_agree"].values())):8.3f}')
+        print(f'  within-note var   CREPE {cr_w:.1f} vs RMVPE {gt_w:.1f}  (ratio {cr_w / gt_w:.3f})')
 
     # ---- primary endpoints ----------------------------------------------
     results, ceilings = [], {}
@@ -230,25 +230,25 @@ def main():
 
     def show(title, rs):
         print(f'\n{title}')
-        print(f'{"지표":26s} {"구":>9s} {"신":>9s} {"차이(중앙)":>11s} '
-              f'{"95% CI":>17s} {"p":>8s} {"시드IQR":>8s} {"천장차":>8s} {"판정":>6s}')
+        print(f'{"metric":36s} {"old":>9s} {"new":>9s} {"median Δ":>11s} '
+              f'{"95% CI":>17s} {"p":>8s} {"seed IQR":>9s} {"ceil gap":>9s} {"verdict":>8s}')
         print('-' * 118)
         for r in rs:
             ci = f'[{fmt(r["ci_lo"])}, {fmt(r["ci_hi"])}]'
-            verdict = ('개선' if r.get('claim') else
+            verdict = ('improved' if r.get('claim') else
                        '—' if 'claim' in r else '')
             pv = r.get('p_holm', r['p'])
             print(f'{r["label"]:26s} {fmt(r["old_median"]):>9s} {fmt(r["new_median"]):>9s} '
                   f'{fmt(r["delta_median"]):>11s} {ci:>17s} {fmt(pv, 4):>8s} '
                   f'{fmt(r["seed_iqr"]):>8s} {fmt(r["ceiling_delta"]):>8s} {verdict:>6s}')
 
-    show(f'1차 종점 (사전 등록, Holm 보정) — 구 {args.old} 5_pred_own vs 신 3_pitch, n={results[0]["n"] if results else 0}',
+    show(f'primary endpoints (pre-registered, Holm-corrected) — old {args.old} 5_pred_own vs new 3_pitch, n={results[0]["n"] if results else 0}',
          results)
-    show('탐색적 지표 (다중비교 보정 없음, 참고용)', explore)
+    show('exploratory metrics (no multiple-comparison correction, for reference)', explore)
 
-    # ---- the 시김새 table, in the shape docs/SIGIMSAE_PLAN.md §1 used -----
-    print('\n시김새 분해 표 (docs/SIGIMSAE_PLAN.md §1 과 같은 모양)')
-    print(f'{"":28s} {"노트편향 RMS":>13s} {"노트내 변동":>12s} {"(core)":>9s} {"GT 상관":>9s}')
+    # ---- the sigimsae table, in the shape docs/SIGIMSAE_PLAN.md §1 used ----
+    print('\nsigimsae decomposition (the same shape as docs/SIGIMSAE_PLAN.md §1)')
+    print(f'{"":30s} {"note-bias RMS":>14s} {"within-note":>12s} {"(core)":>9s} {"GT corr":>9s}')
     print('-' * 76)
 
     def line(name, sys_rung, corr_metric=True):
@@ -264,22 +264,22 @@ def main():
               f'{(np.median(list(cr.values())) if cr else 1.0):9.3f}')
 
     line('GT (RMVPE)', ('GT', '1_orig'))
-    print(f'{"노트 계단":28s} {0.0:13.1f} {0.0:12.1f} {0.0:9.1f} {"—":>9s}')
-    line(f'구 {args.old} (5_pred_own)', OLD)
-    line('신 (3_pitch, 5시드 중앙)', NEW)
-    line('신 (2_resynth, GT f0)', ('NEW', '2_resynth'))
-    line('신 (0_vocoder 천장)', CEIL_NEW)
-    line(f'구 (2_gt_crepe 천장)', CEIL_OLD)
-    print('\n※ 노트내 변동은 GT 에 가까울수록 좋다. 클수록 좋은 값이 아니다.')
+    print(f'{"note staircase":30s} {0.0:14.1f} {0.0:12.1f} {0.0:9.1f} {"—":>9s}')
+    line(f'old {args.old} (5_pred_own)', OLD)
+    line('new (3_pitch, median of 5 seeds)', NEW)
+    line('new (2_resynth, GT f0)', ('NEW', '2_resynth'))
+    line('new (0_vocoder ceiling)', CEIL_NEW)
+    line(f'old (2_gt_crepe ceiling)', CEIL_OLD)
+    print('\n* within-note variation is better the closer it is to GT. Larger is not better.')
 
     # ---- spectral: the only rung where f0 is ground truth on both sides ----
-    print('\n대역 제한 스펙트럼 (24 kHz / 0–11 kHz 공통 분석)')
-    print(f'{"":30s} {"MCD (dB)":>10s} {"LSD":>8s} {"공통 mel L1":>12s}')
+    print('\nband-limited spectrum (24 kHz / 0-11 kHz common analysis)')
+    print(f'{"":32s} {"MCD (dB)":>10s} {"LSD":>8s} {"common mel L1":>14s}')
     print('-' * 64)
-    for name, key in ((f'구 천장 (2_gt_crepe)', CEIL_OLD),
-                      ('신 천장 (0_vocoder)', CEIL_NEW),
-                      (f'구 모델 (5_pred_own)', OLD),
-                      ('신 모델 (3_pitch)', NEW)):
+    for name, key in ((f'old ceiling (2_gt_crepe)', CEIL_OLD),
+                      ('new ceiling (0_vocoder)', CEIL_NEW),
+                      (f'old model (5_pred_own)', OLD),
+                      ('new model (3_pitch)', NEW)):
         v = [per_item(table, (*key, m)) for m in ('mcd_db', 'lsd', 'mel_l1_common')]
         if not v[0]:
             continue
@@ -288,13 +288,13 @@ def main():
             f'{np.median(list(x.values())):>8.3f}' if i == 1 else
             f'{np.median(list(x.values())):>12.3f}'
             for i, x in enumerate(v)))
-    print('※ 천장 두 줄만이 공정한 음색 비교다 — 양쪽 다 GT mel 과 GT f0 로 구동된다.')
-    print('  모델 두 줄의 스펙트럼 거리는 f0 오차가 지배하므로 Tier 1 과 독립적인 정보가 아니다.')
+    print('* only the two ceiling rows are a fair timbre comparison -- both are driven by GT mel and GT f0.')
+    print('  The model rows\' spectral distance is dominated by f0 error, so it is not information independent of Tier 1.')
 
     ab = per_item(table, ('GT', '1_orig', 'above_11k_frac'))
     if ab:
-        print(f'※ 원본의 11 kHz 초과 에너지 비중 중앙값 {np.median(list(ab.values())):.4%} — '
-              f'이 아카이브 녹음은 이미 대역이 좁아, 대역 제한이 버리는 것이 거의 없다.')
+        print(f'* median share of the original\'s energy above 11 kHz: {np.median(list(ab.values())):.4%} -- '
+              f'these archive recordings are already narrowband, so band-limiting discards almost nothing.')
 
 
     # ---- extended holdout sample: absolute level + representativeness ----
@@ -330,8 +330,8 @@ def main():
             })
         extended = {'n': len(set(vals)), 'overlap': len(paired_set & set(vals)),
                     'rows': rows}
-        print(f'\n홀드아웃 확장 ({extended["n"]}발화, 19쌍과 겹침 {extended["overlap"]})')
-        print(f'{"지표":26s} {"19쌍":>9s} {"나머지":>9s} {"IQR":>9s} {"MW p":>8s}')
+        print(f'\nhold-out extension ({extended["n"]} utterances, {extended["overlap"]} overlapping the 19 pairs)')
+        print(f'{"metric":36s} {"19 pairs":>9s} {"the rest":>9s} {"IQR":>9s} {"MW p":>8s}')
         print('-' * 66)
         for r in rows:
             print(f'{r["label"]:26s} {fmt(r["paired_median"]):>9s} '

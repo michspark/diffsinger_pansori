@@ -46,7 +46,7 @@ def g1_sr_invariance(item):
     exists at 24 kHz, so if the extractor's answer depends on sample rate, every
     cross-system pitch number is an artifact of the resampler.
     """
-    print('\nG1 SR 무관성')
+    print('\nG1 sample-rate invariance')
     import librosa, soundfile as sf
     src = I.wav_of(item)
     f0_a, v_a = F.contour(src)
@@ -65,8 +65,8 @@ def g1_sr_invariance(item):
     ratio = s_b['within_std'] / s_a['within_std']
 
     gate('cents RMSE < 5', m['f0_rmse_cent'] < 5, f'{m["f0_rmse_cent"]:.2f} cents')
-    gate('유무성 일치 > 0.99', m['voiced_agree'] > 0.99, f'{m["voiced_agree"]:.4f}')
-    gate('노트내 std 비 ∈ [0.97, 1.03]', 0.97 <= ratio <= 1.03,
+    gate('voiced agreement > 0.99', m['voiced_agree'] > 0.99, f'{m["voiced_agree"]:.4f}')
+    gate('within-note std ratio in [0.97, 1.03]', 0.97 <= ratio <= 1.03,
          f'{ratio:.4f}  (44.1k {s_a["within_std"]:.1f} vs 24k {s_b["within_std"]:.1f} cents)')
 
 
@@ -76,13 +76,13 @@ def g2_note_grid(fair):
     """cumsum(note_dur) must reproduce the old repo's absolute note timeline.
 
     Both models were conditioned on the same ROSVOT notes. If that is true, one
-    staircase serves both sides; if it is not, the 시김새 decomposition is
+    staircase serves both sides; if it is not, the sigimsae decomposition is
     measuring two different things and calling them one.
     """
-    print('\nG2 노트 격자 동일성 (구 notes.jsonl 대조)')
+    print('\nG2 note-grid identity (against the old notes.jsonl)')
     path = C.OLD_REPO / 'pansori' / 'data' / 'full' / 'notes.jsonl'
     if not path.exists():
-        gate('구 notes.jsonl 존재', False, str(path))
+        gate('old notes.jsonl exists', False, str(path))
         return
     want = set(fair)
     old = {}
@@ -95,7 +95,7 @@ def g2_note_grid(fair):
     worst_ms, mismatched, checked = 0.0, [], 0
     for item in fair:
         if item not in old:
-            mismatched.append(f'{item}(구 라벨 없음)')
+            mismatched.append(f'{item}(no old label)')
             continue
         onsets, midi = N.note_grid(item)
         sounding = [(int(m), float(a), float(b)) for m, a, b in old[item]]
@@ -103,7 +103,7 @@ def g2_note_grid(fair):
                 for i in range(len(midi)) if midi[i] > 0]
         checked += 1
         if len(ours) != len(sounding):
-            mismatched.append(f'{item}({len(ours)}!={len(sounding)}노트)')
+            mismatched.append(f'{item}({len(ours)}!={len(sounding)} notes)')
             continue
         for (m1, a1, b1), (m2, a2, b2) in zip(ours, sounding):
             if m1 != m2:
@@ -111,9 +111,9 @@ def g2_note_grid(fair):
                 break
             worst_ms = max(worst_ms, abs(a1 - a2) * 1000, abs(b1 - b2) * 1000)
 
-    gate(f'{checked}/{len(fair)}항목 MIDI·노트수 일치', not mismatched,
-         '전부 일치' if not mismatched else ', '.join(mismatched[:4]))
-    gate('온셋 차이 < 1 ms', worst_ms < 1.0, f'최대 {worst_ms:.3f} ms')
+    gate(f'{checked}/{len(fair)} items agree on MIDI and note count', not mismatched,
+         'all agree' if not mismatched else ', '.join(mismatched[:4]))
+    gate('onset difference < 1 ms', worst_ms < 1.0, f'max {worst_ms:.3f} ms')
 
 
 # ---------------------------------------------------------------- G3
@@ -122,14 +122,14 @@ def g3_rung_semantics(fair):
     """Old `5_pred_own` should be the original's length -- the observable
     signature of ground-truth durations, which is what makes it pairable with
     the new `3_pitch` rung."""
-    print('\nG3 단 의미 (구 5_pred_own 이 GT 길이를 썼는가)')
+    print('\nG3 rung semantics (did the old 5_pred_own use GT durations?)')
     d = C.OLD_LADDER[C.OLD_PRIMARY]
     worst, worst_item = 0, None
     for item in fair:
         a = d / f'{item}__1_orig.wav'
         b = d / f'{item}__5_pred_own.wav'
         if not (a.exists() and b.exists()):
-            gate('사다리 파일 존재', False, f'{item} 누락')
+            gate('ladder files exist', False, f'{item} missing')
             return
         import soundfile as sf
         fa = sf.info(a).frames / sf.info(a).samplerate
@@ -137,13 +137,13 @@ def g3_rung_semantics(fair):
         gap = abs(fa - fb) / C.TIMESTEP
         if gap > worst:
             worst, worst_item = gap, item
-    gate('길이 차 ≤ 3프레임', worst <= 3, f'최대 {worst:.1f}프레임 ({worst_item})')
+    gate('length difference <= 3 frames', worst <= 3, f'max {worst:.1f} frames ({worst_item})')
 
 
 # ---------------------------------------------------------------- G4
 
 def g4_exclusion(excluded):
-    print('\nG4 학습 데이터 제외')
+    print('\nG4 training data excluded')
     ok = True
     for item in excluded:
         try:
@@ -151,15 +151,15 @@ def g4_exclusion(excluded):
             ok = False
         except I.NotHeldOut:
             pass
-    gate(f'{len(excluded)}개 전부 예외 발생', ok and len(excluded) == 5,
-         f'제외 {len(excluded)}개: {", ".join(excluded)}')
+    gate(f'all {len(excluded)} raise', ok and len(excluded) == 5,
+         f'{len(excluded)} excluded: {", ".join(excluded)}')
 
 
 # ---------------------------------------------------------------- null controls
 
 def null_controls(item):
     """Sign and indexing bugs mostly die here."""
-    print('\n널 대조')
+    print('\nnull controls')
     f0_r, v_r = F.contour(I.wav_of(item))
 
     m = S.evaluate(f0_r, v_r, f0_r, v_r, item)
@@ -168,56 +168,56 @@ def null_controls(item):
          f'{m["within_std_ratio"]:.6f}')
     gate('sys:=ref → within_corr 1.000', abs(m['within_corr'] - 1) < 1e-9,
          f'{m["within_corr"]:.6f}')
-    gate('sys:=ref → 전이 방향 일치 1.000', abs(m['transition_dir_agree'] - 1) < 1e-9,
-         f'{m["transition_dir_agree"]:.6f} (경계 {m["transition_n"]}개)')
-    gate('sys:=ref → RPA-50 == 유성비율', abs(p['rpa50'] - 1.0) < 1e-9,
+    gate('sys:=ref -> transition direction agreement 1.000', abs(m['transition_dir_agree'] - 1) < 1e-9,
+         f'{m["transition_dir_agree"]:.6f} ({m["transition_n"]} boundaries)')
+    gate('sys:=ref -> RPA-50 == voiced fraction', abs(p['rpa50'] - 1.0) < 1e-9,
          f'{p["rpa50"]:.6f}')
     gate('sys:=ref → f0 RMSE 0', p['f0_rmse_cent'] < 1e-9, f'{p["f0_rmse_cent"]:.2e}')
 
     note_id, stair = N.frame_notes(item, len(f0_r))
     v_s = stair > 0
     s = S.note_stats(stair, v_s, item)
-    gate('sys:=계단 → 노트내 std 0', s['within_std'] < 1e-6, f'{s["within_std"]:.2e}')
-    gate('sys:=계단 → 노트편향 RMS 0', s['bias_rms'] < 1e-6, f'{s["bias_rms"]:.2e}')
-    gate('sys:=계단 → 모션 0', S.motion(stair, v_s) < 1e-6, f'{S.motion(stair, v_s):.2e}')
+    gate('sys:=staircase -> within-note std 0', s['within_std'] < 1e-6, f'{s["within_std"]:.2e}')
+    gate('sys:=staircase -> note-bias RMS 0', s['bias_rms'] < 1e-6, f'{s["bias_rms"]:.2e}')
+    gate('sys:=staircase -> motion 0', S.motion(stair, v_s) < 1e-6, f'{S.motion(stair, v_s):.2e}')
 
     x = P.cross_check(f0_r, v_r, f0_r, v_r)
     if x:
-        gate('mir_eval 교차확인 RPA 1.000', abs(x['mir_rpa'] - 1) < 1e-6,
+        gate('mir_eval cross-check RPA 1.000', abs(x['mir_rpa'] - 1) < 1e-6,
              f'{x["mir_rpa"]:.6f}')
 
 
 # ---------------------------------------------------------------- reference
 
 def reference_preview(item):
-    """What the reference contour itself looks like -- the row the whole 시김새
+    """What the reference contour itself looks like -- the row the whole sigimsae
     table is measured against."""
-    print('\n기준 미리보기 (GT, RMVPE)')
+    print('\nreference preview (GT, RMVPE)')
     f0_r, v_r = F.contour(I.wav_of(item))
     s = S.note_stats(f0_r, v_r, item)
-    print(f'  {item}: 노트 {s["n_notes"]}개, 유성 {s["n_voiced"]}프레임')
-    print(f'  노트편향 RMS {s["bias_rms"]:7.1f} cents')
-    print(f'  노트내 변동   {s["within_std"]:7.1f} cents   (core {s["within_std_core"]:.1f})')
-    print(f'  모션         {S.motion(s["_f0_snapped"], s["_voiced"]):7.1f} cents/s')
+    print(f'  {item}: {s["n_notes"]} notes, {s["n_voiced"]} voiced frames')
+    print(f'  note-bias RMS   {s["bias_rms"]:7.1f} cents')
+    print(f'  within-note var {s["within_std"]:7.1f} cents   (core {s["within_std_core"]:.1f})')
+    print(f'  motion          {S.motion(s["_f0_snapped"], s["_voiced"]):7.1f} cents/s')
     print(f'  wobble IQR   {S.wobble(s["_f0_snapped"], s["_voiced"]):7.1f} cents')
-    print(f'  옥타브 스냅   {s["octave_snap_rate"]:7.1%} 프레임 (RMVPE 옥타브 오류 보정)')
+    print(f'  octave snap     {s["octave_snap_rate"]:7.1%} of frames (correcting RMVPE octave errors)')
 
     crepe = F.crepe_contour(item, len(f0_r))
     if crepe is not None:
         f0_c, v_c = crepe
         sc = S.note_stats(f0_c, v_c, item)
         m = P.evaluate(f0_c, v_c, f0_r, v_r)
-        print(f'  [기준 교체] CREPE vs RMVPE: cents RMSE {m["f0_rmse_cent"]:.1f}, '
-              f'유무성 일치 {m["voiced_agree"]:.3f}')
-        print(f'              노트내 변동 CREPE {sc["within_std"]:.1f} vs '
+        print(f'  [reference swap] CREPE vs RMVPE: cents RMSE {m["f0_rmse_cent"]:.1f}, '
+              f'voiced agreement {m["voiced_agree"]:.3f}')
+        print(f'              within-note var CREPE {sc["within_std"]:.1f} vs '
               f'RMVPE {s["within_std"]:.1f} cents '
-              f'(비 {sc["within_std"] / s["within_std"]:.3f})')
+              f'(ratio {sc["within_std"] / s["within_std"]:.3f})')
 
 
 def main():
     fair, excluded = I.paired_items()
     item = fair[0]
-    print(f'스모크 대상: {item} ({I.speaker_of(item)}), 공정 쌍 {len(fair)}개')
+    print(f'smoke target: {item} ({I.speaker_of(item)}), {len(fair)} fair pairs')
 
     g1_sr_invariance(item)
     g2_note_grid(fair)
@@ -228,9 +228,9 @@ def main():
 
     print()
     if FAILED:
-        print(f'실패 {len(FAILED)}건: {", ".join(FAILED)}')
+        print(f'{len(FAILED)} failures: {", ".join(FAILED)}')
         sys.exit(1)
-    print('게이트 전부 통과.')
+    print('all gates passed.')
 
 
 if __name__ == '__main__':
