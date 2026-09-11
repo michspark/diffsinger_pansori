@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Stage 1: Extract sung (창) segments from pansori songs and split them into
+Stage 1: Extract sung (chang) segments from pansori songs and split them into
 DiffSinger-sized utterances.
 
 Input:
-  - Pansori_Data/labels_2.json   (human-annotated 악조/아니리 spans, seconds)
+  - Pansori_Data/labels_2.json   (human-annotated modal / aniri spans, seconds)
   - Pansori_Data/Audio/*.wav     (demucs-separated vocals, 44.1kHz stereo)
   - Pansori_Data/rosvot_midi/*_vocal.mid  (note timeline; only consulted when a
                                            run has no internal silence to cut on)
@@ -47,7 +47,7 @@ TARGET_UTTERANCE_SEC: float = 4.5
 # A pause this long between two non-silent runs is treated as a real breath
 # boundary and always becomes a cut. Measured gap distribution on the pilot
 # songs: median 0.13s, p90 0.66s -- so 0.4s separates breaths from the short
-# pauses inside 시김새 ornamentation.
+# pauses inside sigimsae ornamentation.
 SILENCE_GAP_THRESHOLD_SEC: float = 0.4
 
 # Silence detection threshold (dB below peak). Higher = more aggressive
@@ -58,7 +58,7 @@ SILENCE_TOP_DB: int = 35
 def load_sung_spans(labels_path: Path) -> Dict[str, List[Tuple[float, float, str]]]:
     """Parse labels_2.json into {uuid: [(start_sec, end_sec, mode_label), ...]}.
 
-    Only sung spans are kept; 아니리 and 창조 are filtered out here.
+    Only sung spans are kept; aniri and changjo are filtered out here.
     """
     tasks = json.load(open(labels_path, encoding="utf-8"))
     spans_by_uuid: Dict[str, List[Tuple[float, float, str]]] = {}
@@ -115,7 +115,7 @@ def find_largest_note_gap(
 
     This is the fallback split point when a stretch of audio has no detectable
     silence but is still too long. Splitting between notes avoids cutting
-    through a sustained note (시김새).
+    through a sustained note (sigimsae).
     """
     # Keep only notes that lie within the window.
     inside = note_intervals[

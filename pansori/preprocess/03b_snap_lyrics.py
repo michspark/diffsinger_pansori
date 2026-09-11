@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Stage 3b: snap Whisper's transcription onto the 창본 text -> lyrics_snapped.jsonl.
+"""Stage 3b: snap Whisper's transcription onto the changbon text -> lyrics_snapped.jsonl.
 
-Whisper cannot hold pansori. On 01ed19bb (김소희 · 춘향가 군로사령) it produced
-'굴러 살인길 나간다 살인길 나간다' where the 창본 reads '군로사령이 나간다 사령군로가
-나간다'. That matters because the lyrics are not the deliverable -- they are MFA's
+Whisper cannot hold pansori. On 01ed19bb (Kim So-hee, Chunhyangga, the constables)
+it produced '굴러 살인길 나간다 살인길 나간다' where the changbon reads '군로사령이
+나간다 사령군로가 나간다'. That matters because the lyrics are not the deliverable -- they are MFA's
 input, and a wrong word makes MFA drop the span to silence and pin its phones to
 the 0.03s floor (pansori/docs/SEGMENTATION_VERDICT.md §2).
 
@@ -13,7 +13,7 @@ one song's Whisper text into a single string, lay it over the book, and slide.
 Anchor once and the rest follows, because the order cannot cross.
 
 Two passes:
-  B. anchor  -- jamo 5-gram density picks the 창본 and the region, per song
+  B. anchor  -- jamo 5-gram density picks the changbon and the region, per song
   C. snap    -- difflib's monotone opcodes carry each segment to its own span
 
 Nothing is overwritten: lyrics.jsonl stays as it is and every row records both
@@ -43,27 +43,27 @@ CORPUS_PATH = PANSORI_DIR / "lyricbook" / "corpus.jsonl"
 NGRAM = 5              # jamo n-gram; ~1.8 syllables, short enough to survive errors
 WINDOW_FACTOR = 2.0    # search window = this many times the query's jamo length
 MIN_QUERY_JAMO = 60    # a song this short cannot be anchored with confidence
-MIN_WORK_MARGIN = 1.5  # best 바탕 must beat the other 바탕's mean by this factor
+MIN_WORK_MARGIN = 1.5  # the best bata must beat the other bata's mean by this factor
 # Density cannot be judged against a fixed number, because chance agreement
 # grows with the query: the window is a multiple of the query's length, so a
 # long song sweeps up common n-grams no matter which book it is held against.
-# Measured floor across the other four 바탕 -- books that cannot be the answer:
+# Measured floor across the other four bata -- books that cannot be the answer:
 #
-#   query jamo    background     the right 바탕
-#          757   0.037-0.052   0.224   (군로사령)
-#        1,388   0.067-0.087   0.359   (청이 밥 빌러)
-#        7,495   0.160-0.186   0.342   (어사 변복)
+#   query jamo    background     the right bata
+#          757   0.037-0.052   0.224   (the constables)
+#        1,388   0.067-0.087   0.359   (Cheong goes begging for rice)
+#        7,495   0.160-0.186   0.342   (the inspector in disguise)
 #
 # The floor triples while the signal does not, so an absolute cut of 0.15 waved
 # long songs through on noise and failed short ones at 0.148. Every book sees
-# the same query, so the other 바탕 measure that song's own noise floor; the
+# the same query, so the other bata measure that song's own noise floor; the
 # test is how far the winner stands above it.
 #
 # 1.5 is where that ratio starts telling the truth. Running all 387 songs with
-# the gate open, and scoring the chosen 창본 against the 바탕 named in the
+# the gate open, and scoring the chosen changbon against the bata named in the
 # filename -- which never feeds the matching, so it is a held-out answer key:
 #
-#   background ratio    songs   바탕 correct   segments snapped
+#   background ratio    songs   bata correct   segments snapped
 #         0.0 - 1.2        31           36%              3.1%
 #         1.2 - 1.5        61           75%              7.8%
 #         1.5 - 1.8        39           95%             16.3%
@@ -91,12 +91,12 @@ MAX_SYLLABLE_RATE = 8.0
 # rate is a sane 2/sec with a p99 of 7.2, while a slipped window drags in whole
 # paragraphs and shows up as 100+/sec. So the cap only has to trim the tail
 # above the honest distribution, and 8.0 is where that sits. An earlier 5.0
-# threw away correct 자진모리 spans (ratio 0.86 at 6.2 syllables/sec) -- 판소리
-# really is sung that fast when the 장단 is fast.
+# threw away correct jajinmori spans (ratio 0.86 at 6.2 syllables/sec) -- pansori
+# really is sung that fast when the jangdan is fast.
 
 
 class Book:
-    """One 창본, flattened to its sung syllables with an index back to blocks."""
+    """One changbon, flattened to its sung syllables with an index back to blocks."""
 
     def __init__(self, name, work, blocks):
         self.name = name
@@ -137,12 +137,12 @@ class Book:
 
 
 def load_books():
-    # corpus.jsonl is not tracked -- it is the text of six published 창본. Say so
+    # corpus.jsonl is not tracked -- it is the text of six published changbon. Say so
     # here rather than letting read_jsonl raise a bare FileNotFoundError.
     if not CORPUS_PATH.exists():
         raise SystemExit(
-            f"창본 코퍼스가 없다: {CORPUS_PATH}\n"
-            f"  Pansori_Data/Lyrics 를 두고 먼저 실행할 것: "
+            f"no changbon corpus at: {CORPUS_PATH}\n"
+            f"  put Pansori_Data/Lyrics in place and run this first: "
             f"python pansori/lyricbook/build_corpus.py")
 
     blocks_by_book = defaultdict(list)
@@ -188,7 +188,7 @@ def anchor(book, query_jamo):
 
 
 def choose_book(books, query_jamo):
-    """Score every 창본; return (best, density, position, margin, reason).
+    """Score every changbon; return (best, density, position, margin, reason).
 
     The gate can afford to be generous. A wrong anchor does not put wrong words
     in the output -- it puts the alignment somewhere the per-segment similarity
@@ -205,9 +205,9 @@ def choose_book(books, query_jamo):
     margin = density / background if background > 0 else float("inf")
 
     if len(query_jamo) < MIN_QUERY_JAMO:
-        return best, density, position, margin, "너무_짧음"
+        return best, density, position, margin, "too_short"
     if margin < MIN_WORK_MARGIN:
-        return best, density, position, margin, "신호부족"
+        return best, density, position, margin, "weak_signal"
     return best, density, position, margin, None
 
 
@@ -304,8 +304,8 @@ def snap_row(row, book, mapping, window_start, window_end, cursor,
     rate = syllables / row["duration"] if row["duration"] > 0 else 99.0
 
     if syllables < MIN_SYLLABLES or ratio < MIN_RATIO or rate > MAX_SYLLABLE_RATE:
-        rejections.append(f"    기각 {row['item_name']} 유사도={ratio:.2f} "
-                          f"음절={syllables} 속도={rate:.1f}  후보: {text[:40]}")
+        rejections.append(f"    rejected {row['item_name']} similarity={ratio:.2f} "
+                          f"syllables={syllables} rate={rate:.1f}  candidate: {text[:40]}")
         return passthrough(row), last
 
     snapped = passthrough(row)
@@ -336,7 +336,7 @@ def passthrough(row):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Stage 3b: snap lyrics to the 창본")
+    parser = argparse.ArgumentParser(description="Stage 3b: snap lyrics to the changbon")
     parser.add_argument("--set", default="full", help="data/{set} working dir")
     parser.add_argument("--limit-songs", type=int, default=0,
                         help="only process this many songs (0 = all)")
@@ -362,11 +362,11 @@ def main() -> None:
         random.Random(args.seed).shuffle(order)
         order = order[:args.limit_songs]
 
-    print(f"창본 로드 중... ({CORPUS_PATH})")
+    print(f"loading changbon... ({CORPUS_PATH})")
     books = load_books()
-    print(f"  창본 {len(books)}개 / 창 음절 "
-          f"{sum(len(b.syllables) for b in books):,}자\n")
-    print(f"곡 {len(order)}개, 세그먼트 {sum(len(songs[s]) for s in order):,}개 처리\n")
+    print(f"  {len(books)} changbon / "
+          f"{sum(len(b.syllables) for b in books):,} sung syllables\n")
+    print(f"processing {len(order)} songs, {sum(len(songs[s]) for s in order):,} segments\n")
 
     results, song_report = [], []
     for count, stem in enumerate(order, start=1):
@@ -381,19 +381,19 @@ def main() -> None:
 
     summarize(song_report, results)
     if args.dry_run:
-        print("\n(--dry-run: 파일을 쓰지 않았습니다)")
+        print("\n(--dry-run: nothing was written)")
         return
 
     results.sort(key=lambda r: r["item_name"])
     write_jsonl(out_dir / "lyrics_snapped.jsonl", results)
-    print(f"\n저장: {out_dir / 'lyrics_snapped.jsonl'}")
+    print(f"\nsaved: {out_dir / 'lyrics_snapped.jsonl'}")
 
 
 def report_song(stem, rows, info, taken, show_rejections):
     print(f"\n{'=' * 78}\n{stem}")
-    verdict = info["reason"] or f"채택 {taken}/{len(rows)}"
-    print(f"  창본={info['book']}  밀도={info['density']}  "
-          f"배경대비={info['margin']}  {verdict}")
+    verdict = info["reason"] or f"adopted {taken}/{len(rows)}"
+    print(f"  changbon={info['book']}  density={info['density']}  "
+          f"vs-background={info['margin']}  {verdict}")
     if info["reason"]:
         return
     for row in rows[:14]:
@@ -407,20 +407,20 @@ def report_song(stem, rows, info, taken, show_rejections):
 def summarize(song_report, rows):
     taken = sum(1 for r in rows if r["source"] == "book")
     print(f"\n{'=' * 78}")
-    print(f"세그먼트 채택 {taken:,}/{len(rows):,} ({taken / max(1, len(rows)):.1%})")
+    print(f"segments adopted {taken:,}/{len(rows):,} ({taken / max(1, len(rows)):.1%})")
 
-    reasons = Counter(s["reason"] or "처리됨" for s in song_report)
-    print("곡 판정:", "  ".join(f"{k} {v}" for k, v in reasons.most_common()))
+    reasons = Counter(s["reason"] or "processed" for s in song_report)
+    print("per-song verdicts:", "  ".join(f"{k} {v}" for k, v in reasons.most_common()))
 
     by_book = Counter(s["book"] for s in song_report if not s["reason"])
-    print("선택된 창본:", "  ".join(f"{k[:18]} {v}" for k, v in by_book.most_common()))
+    print("changbon chosen:", "  ".join(f"{k[:18]} {v}" for k, v in by_book.most_common()))
 
-    # A 바탕 in the filename that disagrees with the 창본 we picked is the
+    # A bata in the filename that disagrees with the changbon we picked is the
     # cheapest bug detector there is: the filename never fed the matching.
     mismatched = [s for s in song_report if not s["reason"]
                   and (work := re.search(r"춘향가|심청가|수궁가|적벽가|흥보가", s["stem"]))
                   and work.group() not in s["book"]]
-    print(f"파일명 바탕과 불일치: {len(mismatched)}곡")
+    print(f"disagreeing with the filename's bata: {len(mismatched)} songs")
     for song in mismatched[:10]:
         print(f"    {song['stem'][:58]:<58} -> {song['book']}")
 

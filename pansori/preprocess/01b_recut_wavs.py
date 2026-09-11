@@ -73,8 +73,8 @@ def main() -> None:
         else:
             to_cut[record["song_stem"]].append(record)
 
-    print(f"링크 {linked:,}개 / 잘라야 할 것 {sum(len(v) for v in to_cut.values()):,}개 "
-          f"({len(to_cut)}곡)")
+    print(f"{linked:,} linked / {sum(len(v) for v in to_cut.values()):,} still to cut "
+          f"(from {len(to_cut)} songs)")
 
     missing_audio, cut = [], 0
     for stem in tqdm(sorted(to_cut), desc="songs"):
@@ -98,10 +98,10 @@ def main() -> None:
             cut += 1
 
     total = len(list(wav_dir.iterdir()))
-    print(f"\n{wav_dir}: {total:,}개 (링크 {linked:,} + 신규 {cut:,}) / "
-          f"segments {len(segments):,}개")
+    print(f"\n{wav_dir}: {total:,} files ({linked:,} linked + {cut:,} newly cut) / "
+          f"{len(segments):,} segments")
     if missing_audio:
-        print(f"⚠ 원본 오디오 없음: {len(missing_audio)}곡  예) {missing_audio[:3]}")
+        print(f"⚠ source audio missing for {len(missing_audio)} songs  e.g. {missing_audio[:3]}")
 
 
 if __name__ == "__main__":

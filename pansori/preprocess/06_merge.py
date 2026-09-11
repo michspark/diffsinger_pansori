@@ -8,7 +8,7 @@ copy after the first was flagged `is_slur=1`.
 
 openvpi keeps the two axes separate (`preprocessing/variance_binarizer.py`): notes
 carry their own durations and are aligned to frames independently of the phonemes.
-So the duplication and the slur flag are gone. 시김새 — one syllable held across
+So the duplication and the slur flag are gone. Sigimsae -- one syllable held across
 several notes — is now expressed directly as several notes over one word.
 
 What is kept from the old assembly, because it is about *this data*, not the format:
@@ -22,10 +22,10 @@ What is kept from the old assembly, because it is about *this data*, not the for
 
 New in this version: `ph_num`, the phones-per-word grouping the variance duration
 predictor needs. It comes from the MFA `words` tier (stage 4 now emits it). Words
-are whitespace tokens, so a 2-syllable 어절 arrives as one unit; where the phones
+are whitespace tokens, so a 2-syllable eojeol arrives as one unit; where the phones
 match what the dictionary predicts for its syllables, the unit is split so that
 one word = one syllable, matching how notes are grouped at inference time. Where
-sandhi changed the phone count (굴러 -> `g u L eo`, not `g u L r eo`) the 어절 is
+sandhi changed the phone count (굴러 -> `g u L eo`, not `g u L r eo`) the eojeol is
 left whole rather than split on a guess.
 
 Fields: name, ph_seq, ph_dur, ph_num, note_seq, note_dur
@@ -263,9 +263,9 @@ def main() -> None:
         writer.writerows(rows)
 
     split = sum(1 for r in rows if len(r["ph_num"].split()) > len(r["note_seq"].split()))
-    print(f"조립 {len(rows)}개 → {out_path}  (음표없음 등 제외 {skipped}개)")
-    print(f"  평균 단어수 {sum(len(r['ph_num'].split()) for r in rows) / max(len(rows), 1):.1f}, "
-          f"평균 노트수 {sum(len(r['note_seq'].split()) for r in rows) / max(len(rows), 1):.1f}")
+    print(f"composed {len(rows)} -> {out_path}  ({skipped} excluded, e.g. no notes)")
+    print(f"  mean words {sum(len(r['ph_num'].split()) for r in rows) / max(len(rows), 1):.1f}, "
+          f"mean notes {sum(len(r['note_seq'].split()) for r in rows) / max(len(rows), 1):.1f}")
 
 
 if __name__ == "__main__":

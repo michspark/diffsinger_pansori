@@ -81,51 +81,51 @@ def main() -> None:
             note_dur = [float(x) for x in row["note_dur"].split()]
 
             if len(ph_seq) != len(ph_dur):
-                fail("ph_seq/ph_dur 길이 불일치", item, f"{len(ph_seq)} vs {len(ph_dur)}")
+                fail("ph_seq/ph_dur length mismatch", item, f"{len(ph_seq)} vs {len(ph_dur)}")
             if sum(ph_num) != len(ph_seq):
                 fail("sum(ph_num) != len(ph_seq)", item, f"{sum(ph_num)} vs {len(ph_seq)}")
             if len(note_seq) != len(note_dur):
-                fail("note_seq/note_dur 길이 불일치", item, f"{len(note_seq)} vs {len(note_dur)}")
+                fail("note_seq/note_dur length mismatch", item, f"{len(note_seq)} vs {len(note_dur)}")
             if not any(n != "rest" for n in note_seq):
-                fail("전부 rest", item)
+                fail("all rest", item)
             if any(d < 0 for d in ph_dur):
-                fail("음수 ph_dur", item)
+                fail("negative ph_dur", item)
             if any(d < 0 for d in note_dur):
-                fail("음수 note_dur", item)
+                fail("negative note_dur", item)
 
             for phoneme in ph_seq:
                 if phoneme not in legal:
                     unknown_phonemes[phoneme] += 1
-                    fail("사전에 없는 음소", item, phoneme)
+                    fail("phoneme not in the dictionary", item, phoneme)
 
             zero_frame += sum(1 for d in ph_dur if round(d / FRAME_SEC) == 0)
 
             ph_total, note_total = sum(ph_dur), sum(note_dur)
             if abs(ph_total - note_total) > DUR_TOLERANCE:
-                fail("ph_dur 합 != note_dur 합", item, f"{ph_total:.3f} vs {note_total:.3f}")
+                fail("sum(ph_dur) != sum(note_dur)", item, f"{ph_total:.3f} vs {note_total:.3f}")
             if item in durations and abs(ph_total - durations[item]) > DUR_TOLERANCE:
-                fail("ph_dur 합 != 세그먼트 길이", item,
+                fail("sum(ph_dur) != segment length", item,
                      f"{ph_total:.3f} vs {durations[item]:.3f}")
 
-    print(f"검사 대상: {csv_path}  ({total:,} 항목)")
+    print(f"checking: {csv_path}  ({total:,} items)")
     if durations:
-        print(f"세그먼트 길이 대조: {seg_path.name}")
+        print(f"cross-checked against segment lengths: {seg_path.name}")
     else:
-        print("세그먼트 길이 대조: 생략 (segments.jsonl 없음)")
+        print("segment-length cross-check: skipped (no segments.jsonl)")
 
     if zero_frame:
-        print(f"⚠ 0프레임으로 반올림되는 음소 {zero_frame:,}개 "
-              f"(hop {FRAME_SEC * 1000:.1f} ms) — 토큰 낭비, 치명적이지는 않음")
+        print(f"⚠ {zero_frame:,} phonemes round to zero frames "
+              f"(hop {FRAME_SEC * 1000:.1f} ms) — a wasted token, not fatal")
 
     if failures:
         print("\nFAIL")
         for kind, count in failures.most_common():
-            print(f"  {kind}: {count:,}건   예) {examples[kind]}")
+            print(f"  {kind}: {count:,}   e.g. {examples[kind]}")
         if unknown_phonemes:
-            print(f"  미등록 음소 종류: {dict(unknown_phonemes)}")
+            print(f"  unregistered phoneme kinds: {dict(unknown_phonemes)}")
         sys.exit(1)
 
-    print("\nPASS — binarize 가능")
+    print("\nPASS — safe to binarize")
 
 
 if __name__ == "__main__":

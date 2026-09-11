@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """Stage 4: force-align, then emit Coda-36 phones with local-time spans.
 
-정렬기는 두 개 중에 고른다 (preprocess/align.yaml 의 `aligner`, 또는 --aligner):
+The aligner is picked between two (`aligner` in preprocess/align.yaml, or --aligner):
 
-    mfa   korean_mfa. 사전이 IPA 를 내므로 pansori_lib.convert_phone 의 문맥
-          규칙(on-glide 분리, 비음/유음 위치)을 거쳐 Coda 가 된다.
-    sofa  노래 전용 정렬기. dictionaries/korean-coda.txt 를 그대로 사전으로
-          쓰므로 Coda 가 바로 나오고, breath_ap 를 켜면 들숨(AP)까지 라벨된다.
+    mfa   korean_mfa. Its dictionary emits IPA, so it becomes Coda by passing
+          through pansori_lib.convert_phone's contextual rules (on-glide
+          separation, nasal and liquid position).
+    sofa  An aligner built for singing. It uses dictionaries/korean-coda.txt
+          directly as its dictionary, so Coda comes out natively, and with
+          breath_ap on it labels breaths (AP) as well.
 
-무엇을 골랐든 aligned{suffix}/*.TextGrid 를 남기고 phones{suffix}.jsonl 을 쓴다.
-무음은 여기서 'sil' 자리표시자로 두고, Stage 6 이 ROSVOT 노트를 보고 held vowel
-인지 진짜 SP 인지 정한다. 백엔드의 속은 aligners.py 에 있다.
+Whichever is chosen, it leaves aligned{suffix}/*.TextGrid and writes
+phones{suffix}.jsonl. Silence is left here as a 'sil' placeholder, and Stage 6
+decides from the ROSVOT notes whether it is a held vowel or a real SP. The
+backends themselves live in aligners.py.
 
 Input : data/{set}/segments.jsonl + lyrics.jsonl + wavs/*.wav
         (--lyrics picks another lyrics file, e.g. 03b's lyrics_snapped.jsonl;
@@ -20,8 +23,8 @@ Output: data/{set}/phones.jsonl   {item_name, phones:[[coda,start,end],...],
                                    words:[[word,start,end],...]}
         (+ data/{set}/{mfa,sofa}_corpus/, data/{set}/aligned/ as intermediates)
 
-Run in the `aligner` env (praatio; mfa CLI for the MFA arm). SOFA 는 자기
-conda env 로 셸아웃하므로 이 env 에 torch 가 없어도 된다.
+Run in the `aligner` env (praatio; the mfa CLI for the MFA arm). SOFA shells
+out to its own conda env, so this env does not need torch.
 """
 
 import argparse
@@ -31,11 +34,12 @@ from aligners import get_aligner
 from pansori_lib import load_align_config, read_jsonl, set_dir, write_jsonl
 
 
-# ---------------------------------------------------------------- 호환 진입점
-# pansori/eval/intelligibility.py 가 이 파일을 importlib 로 열어 아래 두 이름을
-# 직접 부른다 ("04_align.py 는 숫자로 시작해 import 문으로 못 부른다"). 거기서
-# MFA 는 *측정 도구* 이므로 — 과거 수치와의 비교선을 지키려면 정렬기가 바뀌면
-# 안 된다 — 설정과 무관하게 MFA 로 고정한 얇은 위임으로 남긴다.
+# ------------------------------------------------------- compatibility entry points
+# pansori/eval/intelligibility.py opens this file with importlib and calls the two
+# names below directly ("04_align.py starts with a digit and cannot be reached by an
+# import statement"). There, MFA is a *measuring instrument* -- the aligner must not
+# change if the comparison line with earlier numbers is to hold -- so these stay as
+# thin delegations pinned to MFA regardless of the config.
 
 def _mfa():
     return get_aligner("mfa", load_align_config())
@@ -49,8 +53,8 @@ def run_mfa(corpus: Path, aligned: Path) -> None:
 def textgrid_to_coda(tg_path: Path, mapping=None) -> dict:
     """One MFA TextGrid -> {"phones": [...], "words": [...]}.
 
-    `mapping` 은 예전 시그니처를 지키려고 남겨 둔 자리다. MfaAligner 가 필요할 때
-    스스로 load_ipa_to_coda() 를 부르므로 넘기지 않아도 된다.
+    `mapping` is kept only to preserve the old signature. MfaAligner calls
+    load_ipa_to_coda() itself when it needs it, so there is no need to pass one.
     """
     return _mfa().parse(Path(tg_path))
 
@@ -60,7 +64,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Stage 4: force-align + Coda phones")
     parser.add_argument("--set", default="pilot_6s")
     parser.add_argument("--aligner", default=None, choices=["mfa", "sofa"],
-                        help=f"기본값은 align.yaml 의 aligner ({config['aligner']})")
+                        help=f"defaults to align.yaml's aligner ({config['aligner']})")
     parser.add_argument("--skip_align", "--skip_mfa", dest="skip_align",
                         action="store_true",
                         help="reuse an existing aligned/ dir, only re-parse")
@@ -83,7 +87,7 @@ def main() -> None:
         segments = [r for r in segments if r["item_name"] in wanted]
         lyrics = [r for r in lyrics if r["item_name"] in wanted]
 
-    print(f"정렬기: {aligner.name}")
+    print(f"aligner: {aligner.name}")
     if not args.skip_align:
         corpus = aligner.build_corpus(out_dir, segments, lyrics, args.suffix)
         aligner.run(corpus, aligned)
@@ -96,11 +100,11 @@ def main() -> None:
     aligned_n = len(rows)
     oov = sorted({p[0] for r in rows for p in r["phones"] if p[0].startswith("<OOV")})
     breath = sum(1 for r in rows for p in r["phones"] if p[0] == "AP")
-    print(f"정렬 완료 {aligned_n}/{len(segments)} → phones{args.suffix}.jsonl")
+    print(f"aligned {aligned_n}/{len(segments)} -> phones{args.suffix}.jsonl")
     if breath:
-        print(f"들숨(AP) {breath:,}개")
+        print(f"breaths (AP): {breath:,}")
     if oov:
-        print(f"⚠ OOV 발생: {oov}")
+        print(f"⚠ OOV encountered: {oov}")
 
 
 if __name__ == "__main__":

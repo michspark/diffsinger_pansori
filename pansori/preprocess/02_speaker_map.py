@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Stage 2: map each utterance to a speaker (명창) for multi-speaker training.
+"""Stage 2: map each utterance to a speaker (myeongchang) for multi-speaker training.
 
-Filename form: {uuid8}-{track}-{명창}-{바탕}_{대목}
-About a third of the songs omit the 명창 field; those become unknown_{uuid} so
+Filename form: {uuid8}-{track}-{myeongchang}-{bata}_{passage}
+About a third of the songs omit the myeongchang field; those become unknown_{uuid} so
 they are still a single consistent speaker per song (one song = one singer).
 
 Input : data/{set}/segments.jsonl   (item_name, song_stem)
@@ -17,7 +17,7 @@ from pansori_lib import read_jsonl, set_dir, extract_uuid
 
 
 def singer_from_stem(stem: str) -> str:
-    """Return the 명창 if the 3rd dash-field is a Hangul name, else 'unknown'.
+    """Return the myeongchang if the 3rd dash-field is a Hangul name, else 'unknown'.
 
     Songs without a singer in the filename are pooled into ONE 'unknown'
     speaker rather than one-per-song: per-song ids would create ~122 singleton
@@ -45,9 +45,9 @@ def main() -> None:
                   f, ensure_ascii=False, indent=1)
 
     named = sum(1 for s in speakers if not s.startswith("unknown_"))
-    print(f"발화 {len(item2spk)}개 → 화자 {len(speakers)}명 "
-          f"(명창 {named}명 + unknown {len(speakers) - named}명)")
-    print(f"저장: {out_dir / 'spk_map.json'}")
+    print(f"{len(item2spk)} utterances -> {len(speakers)} speakers "
+          f"({named} myeongchang + {len(speakers) - named} unknown)")
+    print(f"saved: {out_dir / 'spk_map.json'}")
 
 
 if __name__ == "__main__":

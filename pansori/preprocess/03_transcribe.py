@@ -65,7 +65,7 @@ def main() -> None:
 
     out_dir = set_dir(args.set)
     records = read_jsonl(out_dir / "segments.jsonl")
-    print(f"{len(records)}개 세그먼트 전사 시작 ({MODEL_ID})")
+    print(f"transcribing {len(records)} segments ({MODEL_ID})")
 
     model, processor, device, torch_dtype = load_model()
 
@@ -85,7 +85,7 @@ def main() -> None:
 
     write_jsonl(out_dir / "lyrics.jsonl", rows)
     collapsed = sum(1 for r in rows if r["text"] != r["text_raw"])
-    print(f"저장: {out_dir / 'lyrics.jsonl'}  (반복접기 적용 {collapsed}개)")
+    print(f"saved: {out_dir / 'lyrics.jsonl'}  ({collapsed} had repeats collapsed)")
 
 
 if __name__ == "__main__":

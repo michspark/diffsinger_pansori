@@ -32,15 +32,17 @@ MIDI_DIR = PANSORI_DATA / "rosvot_midi"
 
 
 def load_align_config(path: Optional[Path] = None) -> Dict:
-    """Stage 4 의 정렬기 설정. 경로 값은 ~ 확장 + repo 기준 절대경로로 돌려준다.
+    """Stage 4's aligner config. Path values come back ~-expanded and absolute
+    against the repo root.
 
-    두 정렬기(MFA / SOFA)는 서로 다른 conda env 에 살고 각자 체크포인트·사전
-    경로를 들고 다닌다. 그걸 스크립트 상수로 두면 정렬기를 바꿀 때마다 코드를
-    고쳐야 하므로 align.yaml 한 곳으로 모았다. 여기서 경로를 미리 풀어 두는 이유는
-    04_align.py 가 conda run 으로 다른 cwd 에서 도구를 부르기 때문이다 — 상대경로가
-    거기까지 살아 남지 못한다.
+    The two aligners (MFA / SOFA) live in different conda envs and each carries
+    its own checkpoint and dictionary paths. Keeping those as script constants
+    would mean editing code to switch aligners, so they are gathered into
+    align.yaml alone. Paths are resolved here because 04_align.py invokes tools
+    through conda run from a different cwd -- a relative path does not survive
+    the trip.
     """
-    import yaml  # aligner/pansori/dsp 세 env 모두에 있다 (MFA·lightning 의존성)
+    import yaml  # present in all three envs, aligner/pansori/dsp (an MFA and lightning dep)
 
     cfg_path = Path(path) if path else PREPROCESS_DIR / "align.yaml"
     cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
@@ -155,7 +157,7 @@ def hangul_only(text: str) -> str:
 def to_jamo(text: str) -> str:
     """Hangul syllables -> their NFD jamo, non-Hangul dropped.
 
-    Matching Whisper's pansori output against a 창본 syllable-by-syllable fails:
+    Matching Whisper's pansori output against a changbon syllable-by-syllable fails:
     '굴러' and '군로' share no syllable at all. In jamo they are ㄱㅜㄹㄹㅓ vs
     ㄱㅜㄴㄹㅗ, which overlaps most of the way -- Whisper's errors are usually one
     jamo off, not one syllable off, so the finer unit is what carries the signal.

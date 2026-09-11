@@ -4,7 +4,7 @@
 Reuses the whole-song ROSVOT MIDI (no re-run). For every aligned segment we
 cut the notes inside its absolute song-time window and shift them to local
 time. This is what lets Stage 6 give a held vowel its true length and mark
-시김새 with is_slur where several notes ride one vowel (pansori/docs/SEGMENTATION_VERDICT.md).
+sigimsae with is_slur where several notes ride one vowel (pansori/docs/SEGMENTATION_VERDICT.md).
 
 Input : data/{set}/segments.jsonl + phones.jsonl (which items survived align)
 Output: data/{set}/notes.jsonl   {item_name, notes:[[pitch,start,end],...]}
@@ -37,7 +37,7 @@ def main() -> None:
                      "notes": [[p, round(s, 4), round(e, 4)] for p, s, e in notes]})
 
     write_jsonl(out_dir / "notes.jsonl", rows)
-    print(f"음표 슬라이스 {len(rows)}개 → notes.jsonl (음표 없음 {empty}개)")
+    print(f"{len(rows)} note slices -> notes.jsonl ({empty} had no notes)")
 
 
 if __name__ == "__main__":

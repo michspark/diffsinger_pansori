@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
-"""Stage 4 의 정렬기 백엔드 — MFA 와 SOFA 를 같은 자리에 끼운다.
+"""Stage 4's aligner backends — MFA and SOFA behind the same seam.
 
-두 정렬기는 하는 일이 같다: (wav + 가사) 를 받아 `aligned{suffix}/*.TextGrid` 를
-남기고, 그 TextGrid 를 Coda-36 음소열로 읽는다. 다른 것은 그 세 단계의 속이다.
+Both aligners do the same job: take (wav + lyrics), leave
+`aligned{suffix}/*.TextGrid`, and read that TextGrid back as a Coda-36 phoneme
+sequence. What differs is the inside of those three steps.
 
-    MFA   speech 용 HMM-GMM. korean_mfa 사전이 IPA 를 내므로 ipa_to_coda.csv 와
-          convert_phone 의 문맥 규칙을 거쳐야 Coda 가 된다 (일치율 89.59%).
-    SOFA  노래 전용. DictionaryG2P 가 사전 값을 그대로 음소로 쓰므로
-          dictionaries/korean-coda.txt 를 주면 **Coda 가 바로 나온다** — 변환
-          단계가 없어진다. 게다가 학습 라벨과 추론 g2p 가 같은 표를 쓰게 된다.
+    MFA   An HMM-GMM for speech. The korean_mfa dictionary emits IPA, so it has
+          to pass through ipa_to_coda.csv and convert_phone's contextual rules to
+          become Coda (89.59% agreement).
+    SOFA  Built for singing. DictionaryG2P uses the dictionary's values directly
+          as phonemes, so handing it dictionaries/korean-coda.txt makes **Coda
+          come out natively** -- the conversion step disappears. On top of that,
+          the training labels and the inference g2p end up using the same table.
 
-선택은 align.yaml 의 `aligner` 한 줄. 모양은 modules/pe/__init__.py 의
-initialize_pe() 를 따랐다 — config 문자열로 고르는 얇은 팩토리.
+The choice is one `aligner` line in align.yaml. The shape follows
+initialize_pe() in modules/pe/__init__.py — a thin factory selected by a config
+string.
 
-SOFA·FoxBreatheLabeler 는 이 저장소 밖에 살고 각자 conda env 가 필요하다
-(aligner env 는 py3.14 + MFA 라 torch 를 같이 넣을 수 없다). 그래서 셸아웃한다.
+SOFA and FoxBreatheLabeler live outside this repository and each needs its own
+conda env (the aligner env is py3.14 + MFA, so torch cannot go in alongside).
+Hence the shell-out.
 """
 
 import os
@@ -33,7 +38,7 @@ def hangul_syllables(text: str) -> List[str]:
 
 
 def _open_tiers(tg_path: Path):
-    """TextGrid -> (phones, words) 구간 리스트. 두 백엔드가 같은 티어 이름을 쓴다."""
+    """TextGrid -> lists of (phones, words) spans. Both backends use the same tier names."""
     from praatio import textgrid as tgio
 
     grid = tgio.openTextgrid(str(tg_path), includeEmptyIntervals=True)
@@ -42,13 +47,13 @@ def _open_tiers(tg_path: Path):
 
 
 def _words_tier(words) -> List[list]:
-    """비음성 라벨을 뺀 words 티어. ph_num 의 근거가 된다 (06_merge.group_words)."""
+    """The words tier minus non-speech labels. This is what ph_num rests on (06_merge.group_words)."""
     return [[label, start, end] for label, start, end in words
             if label.lower() not in SILENCE_LABELS and label not in ("SP", "AP")]
 
 
 class Aligner:
-    """corpus 를 짓고, 정렬기를 돌리고, TextGrid 를 Coda 음소열로 읽는다."""
+    """Build the corpus, run the aligner, read the TextGrid back as a Coda phoneme sequence."""
 
     name = ""
     corpus_dirname = "corpus"
@@ -60,11 +65,11 @@ class Aligner:
     # -- 1. corpus ---------------------------------------------------------
 
     def lab_text(self, text: str) -> str:
-        """가사 한 줄 -> 이 정렬기가 .lab 에서 기대하는 형태."""
+        """One line of lyrics -> the form this aligner expects in a .lab."""
         return text.strip()
 
     def build_corpus(self, out_dir: Path, segments, lyrics, suffix: str = "") -> Path:
-        """{corpus}/{item}.wav (심링크) + {item}.lab 를 쓴다."""
+        """Writes {corpus}/{item}.wav (a symlink) and {item}.lab."""
         corpus = out_dir / f"{self.corpus_dirname}{suffix}"
         corpus.mkdir(exist_ok=True)
         text_by_item = {r["item_name"]: r["text"] for r in lyrics}
@@ -82,8 +87,8 @@ class Aligner:
             os.symlink(wav_src, wav_link)
             (corpus / f"{item}.lab").write_text(self.lab_text(text), encoding="utf-8")
             n += 1
-        print(f"{self.name} 코퍼스: {n}개 "
-              f"(텍스트 부족분 제외 {len(segments) - n}개) → {corpus}")
+        print(f"{self.name} corpus: {n} items "
+              f"({len(segments) - n} excluded for too little text) -> {corpus}")
         return corpus
 
     # -- 2. run / 3. parse -------------------------------------------------
@@ -96,7 +101,7 @@ class Aligner:
 
 
 class MfaAligner(Aligner):
-    """korean_mfa + IPA→Coda 변환. 이 파이프라인이 처음부터 쓰던 경로."""
+    """korean_mfa + IPA->Coda conversion. The path this pipeline used from the start."""
 
     name = "MFA"
     corpus_dirname = "mfa_corpus"
@@ -147,11 +152,12 @@ class MfaAligner(Aligner):
 
 
 class SofaAligner(Aligner):
-    """SOFA (+ 선택적으로 FoxBreatheLabeler 의 AP 덧씌우기).
+    """SOFA (+ optionally FoxBreatheLabeler's AP overlay).
 
-    사전을 korean-coda.txt 로 주므로 phones 티어가 이미 Coda-36 이다. parse 는
-    변환하지 않고 통과시키기만 한다 — MFA 팔의 89.59% 변환 일치율이 100% 가
-    되는 게 아니라, 틀릴 단계 자체가 없어진다.
+    Since the dictionary handed over is korean-coda.txt, the phones tier is
+    already Coda-36. parse does not convert, it only passes through -- it is not
+    that the MFA arm's 89.59% conversion agreement becomes 100%, it is that the
+    step which could be wrong no longer exists.
     """
 
     name = "SOFA"
@@ -168,21 +174,23 @@ class SofaAligner(Aligner):
         self.lab_unit = sofa.get("lab_unit", "syllable")
         self.mode = sofa.get("mode", "force")
         self.breath = cfg.get("breath_ap", {}) or {}
-        # FBL 은 AP 가 없는 tg 위에서만 동작한다 (FoxBreatheLabeler readme).
+        # FBL only works over a tg that has no AP (FoxBreatheLabeler readme).
         self.ap_detector = ("NoneAPDetector" if self.breath.get("enabled")
                             else sofa.get("ap_detector",
                                           "LoudnessSpectralcentroidAPDetector"))
         if self.lab_unit not in ("syllable", "eojeol"):
-            sys.exit(f"sofa.lab_unit 은 syllable 또는 eojeol 이어야 합니다: {self.lab_unit}")
+            sys.exit(f"sofa.lab_unit must be syllable or eojeol: {self.lab_unit}")
 
     # -- corpus ------------------------------------------------------------
 
     def lab_text(self, text: str) -> str:
-        """SOFA 의 DictionaryG2P 는 공백 토큰마다 사전을 찾고 뒤에 SP 를 넣는다.
+        """SOFA's DictionaryG2P looks up the dictionary per whitespace token and
+        inserts an SP after each.
 
-        syllable 이면 음절 하나가 곧 사전 표제어이므로 words 티어가 음절 단위로
-        나온다 — 06_merge.group_words 가 휴리스틱으로 되돌리던 분할이 없어진다.
-        eojeol 이면 SP 가 어절 경계에만 생기는 대신 어절 사전이 필요하다.
+        With `syllable`, one syllable is itself a dictionary headword, so the
+        words tier comes out per syllable -- the split that 06_merge.group_words
+        had to undo heuristically disappears. With `eojeol`, SP only appears at
+        eojeol boundaries, but an eojeol dictionary is required.
         """
         syllables = hangul_syllables(text)
         if self.lab_unit == "syllable":
@@ -197,11 +205,13 @@ class SofaAligner(Aligner):
         return corpus
 
     def _write_eojeol_dictionary(self, corpus: Path) -> Path:
-        """코퍼스에 실제로 나온 어절만 음절 사전에서 이어 붙여 새 사전을 만든다.
+        """Build a new dictionary by concatenating, from the syllable dictionary,
+        only the eojeol that actually occur in the corpus.
 
-        SOFA 사전은 표제어 하나당 한 줄이라 어절 단위로 정렬하려면 어절 표제어가
-        있어야 한다. build_dictionary.py 의 산출물을 그대로 이어 붙이므로 음소셋은
-        바뀌지 않는다 (sandhi 도 그대로 없다 — 추론 g2p 와 같은 상태).
+        A SOFA dictionary has one line per headword, so aligning per eojeol needs
+        eojeol headwords. Since build_dictionary.py's output is concatenated
+        as-is, the phoneme set does not change (and sandhi stays absent, exactly
+        as in the inference g2p).
         """
         table = {}
         with open(self.dictionary, encoding="utf-8") as f:
@@ -218,17 +228,17 @@ class SofaAligner(Aligner):
                     missing += 1
                     continue
                 f.write(f"{word}\t{' '.join(table[ch] for ch in word)}\n")
-        print(f"어절 사전 {len(words) - missing:,}개 → {out}"
-              + (f"  (사전에 없는 음절 포함 {missing}개 제외)" if missing else ""))
+        print(f"eojeol dictionary: {len(words) - missing:,} entries -> {out}"
+              + (f"  ({missing} excluded for containing a syllable not in the dictionary)" if missing else ""))
         return out
 
     # -- run ---------------------------------------------------------------
 
     def _conda(self, env: str, root: Path, script: str, args: List[str]) -> None:
-        """다른 env 에서 도구를 부른다. cwd 는 그 저장소여야 한다.
+        """Invoke a tool in a different env. cwd has to be that repository.
 
-        SOFA 의 infer.py 는 modules.* 를 상대 임포트하므로 cwd=root 가 아니면
-        임포트에서 죽는다. 그래서 넘기는 경로는 전부 절대경로여야 한다.
+        SOFA's infer.py imports modules.* relatively, so it dies at import
+        unless cwd=root. Which means every path passed in must be absolute.
         """
         command = ["conda", "run", "--no-capture-output", "-n", env,
                    "python", script] + args
@@ -237,9 +247,9 @@ class SofaAligner(Aligner):
 
     def run(self, corpus: Path, aligned: Path) -> None:
         if not self.ckpt.exists():
-            sys.exit(f"SOFA 체크포인트가 없습니다: {self.ckpt}\n"
-                     f"  align.yaml 의 sofa.ckpt 를 확인하거나 "
-                     f"04b_sofa_data.py 로 학습 데이터를 만들어 먼저 학습하십시오.")
+            sys.exit(f"No SOFA checkpoint at: {self.ckpt}\n"
+                     f"  Check sofa.ckpt in align.yaml, or build training data with "
+                     f"04b_sofa_data.py and train SOFA first.")
 
         self._conda(self.conda_env, self.root, "infer.py", [
             "--ckpt", str(self.ckpt),
@@ -252,11 +262,11 @@ class SofaAligner(Aligner):
             "--out_formats", "textgrid",
         ])
 
-        # SOFA 는 wav 와 같은 디렉터리의 TextGrid/ 아래에 쓴다. 하류(06, eval,
-        # alignment/*)는 전부 aligned{suffix}/ 를 보므로 그리로 옮긴다.
+        # SOFA writes into TextGrid/ beside the wavs. Everything downstream (06,
+        # eval, alignment/*) looks at aligned{suffix}/, so move it there.
         produced = corpus / "TextGrid"
         if not produced.is_dir():
-            sys.exit(f"SOFA 출력이 없습니다: {produced}")
+            sys.exit(f"No SOFA output at: {produced}")
         if self.breath.get("enabled"):
             self._add_breath(corpus, produced, aligned)
         else:
@@ -271,19 +281,19 @@ class SofaAligner(Aligner):
             shutil.move(str(path), aligned / path.name)
             n += 1
         shutil.rmtree(produced, ignore_errors=True)
-        print(f"TextGrid {n:,}개 → {aligned}")
+        print(f"{n:,} TextGrids -> {aligned}")
 
     def _add_breath(self, corpus: Path, produced: Path, aligned: Path) -> None:
-        """FoxBreatheLabeler 로 SP 구간 위에 AP(들숨) 를 덧씌운다.
+        """Overlay AP (breath) onto the SP spans using FoxBreatheLabeler.
 
-        FBL 은 SP/빈 라벨 위에만 AP 를 쓰므로, 앞선 infer 는 NoneAPDetector 로
-        돌려 AP 없는 tg 를 만들어 둔 상태다 (__init__ 에서 강제).
+        FBL only writes AP over SP or empty labels, so the preceding infer was
+        run with NoneAPDetector to leave a tg with no AP (forced in __init__).
         """
         ckpt = Path(self.breath["ckpt"])
         if not ckpt.exists():
-            sys.exit(f"FoxBreatheLabeler 체크포인트가 없습니다: {ckpt}\n"
-                     f"  align.yaml 의 breath_ap.ckpt 를 확인하거나 "
-                     f"breath_ap.enabled 를 false 로 두십시오.")
+            sys.exit(f"No FoxBreatheLabeler checkpoint at: {ckpt}\n"
+                     f"  Check breath_ap.ckpt in align.yaml, or set "
+                     f"breath_ap.enabled to false.")
         if aligned.exists():
             shutil.rmtree(aligned)
         aligned.mkdir(parents=True)
@@ -298,16 +308,17 @@ class SofaAligner(Aligner):
                         "--sp_dur", str(self.breath.get("sp_dur", 0.1)),
                     ])
         shutil.rmtree(produced, ignore_errors=True)
-        print(f"들숨 라벨 완료 → {aligned}  ({len(list(aligned.glob('*.TextGrid'))):,}개)")
+        print(f"breath labelling done -> {aligned}  ({len(list(aligned.glob('*.TextGrid'))):,} files)")
 
     # -- parse -------------------------------------------------------------
 
     def parse(self, tg_path: Path) -> dict:
-        """변환 없음. 사전이 이미 Coda 를 내므로 라벨을 그대로 통과시킨다.
+        """No conversion. The dictionary already emits Coda, so labels pass through.
 
-        sil 은 MFA 팔과 같이 자리표시자로 남긴다 — 노트가 덮은 무음을 held vowel
-        로 볼지 SP 로 볼지는 Stage 6 이 ROSVOT 노트를 보고 정한다. AP 는 실제
-        들숨이므로 그대로 음소로 흘려보낸다.
+        sil is left as a placeholder, as in the MFA arm -- whether a note-covered
+        silence is a held vowel or an SP is decided by Stage 6, looking at the
+        ROSVOT notes. AP is a real breath, so it flows straight through as a
+        phoneme.
         """
         intervals, words = _open_tiers(tg_path)
         phones = []
@@ -328,5 +339,5 @@ ALIGNERS = {"mfa": MfaAligner, "sofa": SofaAligner}
 
 def get_aligner(name: str, cfg: dict) -> Aligner:
     if name not in ALIGNERS:
-        raise ValueError(f" [x] Unknown aligner: {name} (있는 것: {sorted(ALIGNERS)})")
+        raise ValueError(f" [x] Unknown aligner: {name} (available: {sorted(ALIGNERS)})")
     return ALIGNERS[name](cfg)
