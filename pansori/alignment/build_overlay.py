@@ -134,7 +134,7 @@ def render_segment(item_name, seg, notes, phone_list, audio_uri, lab, note_only)
         )
     phone_row = (
         f'<div class="phones">{phone_divs}</div>' if phone_list
-        else '<div class="phones empty">MFA 정렬: 지속음이 침묵 처리됨 — 위 ROSVOT 음표가 실제 소리</div>'
+        else '<div class="phones empty">MFA alignment: the sustained tone was treated as silence — the ROSVOT notes above are the real sound</div>'
     )
 
     # second-tick scale
@@ -144,14 +144,14 @@ def render_segment(item_name, seg, notes, phone_list, audio_uri, lab, note_only)
     )
 
     note_note = "" if not note_only else \
-        ' <span class="tag">MFA 없음 · ROSVOT만</span>'
+        ' <span class="tag">no MFA · ROSVOT only</span>'
 
     return f"""
 <article class="seg">
   <header>
     <code>{html.escape(item_name)}</code>
     <span class="badge">{dur:.2f}s · {html.escape(seg['mode'])}</span>
-    <span class="badge">음표 {len(notes)}개 · 음역 {librosa.midi_to_note(lo)}~{librosa.midi_to_note(hi)}</span>
+    <span class="badge">{len(notes)} notes · range {librosa.midi_to_note(lo)}~{librosa.midi_to_note(hi)}</span>
     {note_note}
   </header>
   <div class="lyric">{html.escape(lab)}</div>
@@ -182,7 +182,7 @@ def main() -> None:
             note_only=(aligned_subdir == "aligned_norm"),
         ))
 
-    page = f"""<title>ROSVOT 음표 × MFA 음소 겹쳐보기</title>
+    page = f"""<title>ROSVOT notes x MFA phonemes, overlaid</title>
 <style>
   :root {{ --bg:#fff; --fg:#18181b; --muted:#71717a; --line:#e4e4e7; --card:#fafafa;
            --ok:#2563eb; --floor:#dc2626; --sil:#e4e4e7; }}
@@ -234,11 +234,12 @@ def main() -> None:
   .ticks span {{ position:absolute; font-size:.62rem; color:var(--muted);
                  transform:translateX(-50%); }}
 </style>
-<h1>ROSVOT 음표 × MFA 음소 겹쳐보기</h1>
+<h1>ROSVOT notes x MFA phonemes, overlaid</h1>
 <div class="legend">
-  위=ROSVOT 음표(피아노롤, 높을수록 위·색은 음높이), 아래=MFA 음소 정렬.
-  같은 시간축이라 세로로 겹칩니다. <b>음표나 음소를 클릭하면 그 구간만 재생</b>됩니다.<br>
-  파란 음소=정상, 빨강=0.03초 하한선(정렬 포기), 회색=침묵.
+  Top = ROSVOT notes (a piano roll; higher is higher, colour is pitch), bottom = the MFA
+  phoneme alignment. They share a time axis, so they line up vertically.
+  <b>Click a note or a phoneme to play just that span.</b><br>
+  Blue phoneme = normal, red = the 0.03 s floor (the aligner gave up), grey = silence.
 </div>
 {''.join(cards)}
 <script>
@@ -265,7 +266,7 @@ document.querySelectorAll('.seg').forEach(function (seg) {{
 """
     out = PANSORI / "review" / "note_overlay.html"
     out.write_text(page, encoding="utf-8")
-    print(f"저장: {out}  ({out.stat().st_size/1024/1024:.1f} MB)")
+    print(f"saved: {out}  ({out.stat().st_size/1024/1024:.1f} MB)")
 
 
 if __name__ == "__main__":

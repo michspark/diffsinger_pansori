@@ -87,14 +87,14 @@ def main() -> None:
         rows.append(analyze_one(tg_path, durations[tg_path.stem]))
 
     header = (
-        f"{'item':16s} {'길이':>6s} {'음소':>4s} {'발화s':>6s} {'침묵%':>6s} "
-        f"{'커버%':>6s} {'끝여백':>6s} {'평균ms':>7s} {'최장음소':>12s}"
+        f"{'item':16s} {'len':>6s} {'ph':>4s} {'speech s':>9s} {'silence%':>9s} "
+        f"{'cover%':>7s} {'tail gap':>9s} {'mean ms':>8s} {'longest ph':>13s}"
     )
     print(header)
     print("-" * len(header))
     for row in rows:
         if row.get("failed"):
-            print(f"{row['item']:16s}  정렬 실패")
+            print(f"{row['item']:16s}  alignment failed")
             continue
         print(
             f"{row['item']:16s} {row['clip_sec']:6.2f} {row['n_phones']:4d} "
@@ -109,10 +109,10 @@ def main() -> None:
 
     ok = [r for r in rows if not r.get("failed")]
     print()
-    print(f"정렬 성공: {len(ok)}/{len(rows)}")
-    print(f"평균 침묵 비율: {sum(r['silence_pct'] for r in ok)/len(ok):.1f}%")
-    print(f"평균 커버율:    {sum(r['covered_pct'] for r in ok)/len(ok):.1f}%")
-    print(f"평균 음소 길이: {sum(r['mean_phone_ms'] for r in ok)/len(ok):.0f} ms")
+    print(f"aligned successfully: {len(ok)}/{len(rows)}")
+    print(f"mean silence fraction: {sum(r['silence_pct'] for r in ok)/len(ok):.1f}%")
+    print(f"mean coverage:         {sum(r['covered_pct'] for r in ok)/len(ok):.1f}%")
+    print(f"mean phoneme length:   {sum(r['mean_phone_ms'] for r in ok)/len(ok):.0f} ms")
 
 
 if __name__ == "__main__":

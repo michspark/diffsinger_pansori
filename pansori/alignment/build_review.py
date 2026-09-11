@@ -121,7 +121,7 @@ def build_rows() -> List[Dict]:
             "intervals": intervals,
             "floor_pct": 100.0 * floor_count / max(1, speech_count),
             "big_silence": big_silence,
-            "verdict": "붕괴" if big_silence >= BIG_SILENCE_SEC else "양호",
+            "verdict": "collapsed" if big_silence >= BIG_SILENCE_SEC else "ok",
         })
     return rows
 
@@ -142,34 +142,34 @@ def render(rows: List[Dict]) -> str:
             f'<span class="word" data-start="{w["start"]:.4f}" data-dur="{w["dur"]:.4f}">'
             f'{html.escape(w["label"])}<em>{w["dur"]:.2f}s</em></span>'
             for w in row["words"]
-        ) or '<span class="none">(단어 티어 없음)</span>'
+        ) or '<span class="none">(no words tier)</span>'
         phone_chips = "".join(
             f'<span class="chip {iv["kind"]}" data-start="{iv["start"]:.4f}" '
             f'data-dur="{iv["dur"]:.4f}">{html.escape(iv["label"])}'
             f'<em>{iv["dur"]:.2f}</em></span>'
             for iv in row["intervals"] if iv["kind"] != "sil"
         )
-        badge = "bad" if row["verdict"] == "붕괴" else "good"
+        badge = "bad" if row["verdict"] == "collapsed" else "good"
         cards.append(f"""
 <article class="card" data-card="{card_index}">
   <header>
     <code>{html.escape(row['name'])}</code>
     <span class="badge">{row['clip']:.2f}s</span>
-    <span class="badge">하한선 {row['floor_pct']:.0f}%</span>
-    <span class="badge">1s+침묵 {row['big_silence']:.2f}s</span>
+    <span class="badge">floor {row['floor_pct']:.0f}%</span>
+    <span class="badge">1s+ silence {row['big_silence']:.2f}s</span>
     <span class="badge {badge}">{row['verdict']}</span>
   </header>
   <div class="lyric">{html.escape(row['text'])}</div>
   <audio controls preload="none" src="{row['audio']}"></audio>
   <div class="track">{bars}<div class="cursor"></div></div>
-  <div class="hint">단어를 클릭하면 <b>MFA가 그 단어에 배정한 구간만</b> 재생됩니다. 가사와 들리는 소리가 맞으면 정렬이 맞는 것입니다.</div>
+  <div class="hint">Click a word to play <b>only the span MFA assigned to it</b>. If the lyrics and what you hear agree, the alignment is right.</div>
   <div class="words">{word_chips}</div>
-  <details><summary>음소 단위 ({len([i for i in row['intervals'] if i['kind']!='sil'])}개)</summary>
+  <details><summary>per phoneme ({len([i for i in row['intervals'] if i['kind']!='sil'])})</summary>
     <div class="chips">{phone_chips}</div>
   </details>
 </article>""")
 
-    return f"""<title>MFA 판소리 정렬 검토</title>
+    return f"""<title>MFA pansori alignment review</title>
 <style>
   :root {{ --bg:#fff; --fg:#18181b; --muted:#71717a; --line:#e4e4e7; --card:#fafafa;
            --ok:#2563eb; --floor:#dc2626; --sil:#d4d4d8; --bigsil:#f59e0b; }}
@@ -224,13 +224,13 @@ def render(rows: List[Dict]) -> str:
   .chip em {{ font-style:normal; color:var(--muted); margin-left:.25rem; font-size:.68rem; }}
   .chip.floor {{ border-color:var(--floor); color:var(--floor); }}
 </style>
-<h1>MFA 판소리 정렬 검토</h1>
+<h1>MFA pansori alignment review</h1>
 <div class="legend">
-  <span class="key" style="background:var(--ok)"></span>정상 음소
-  <span class="key" style="background:var(--floor)"></span>0.03초 하한선 (정렬 포기)
-  <span class="key" style="background:var(--sil)"></span>짧은 침묵
-  <span class="key" style="background:var(--bigsil)"></span>1초 이상 침묵 (버려진 구간)
-  <br>길이 오름차순. 막대에 마우스를 올리면 IPA → Coda 대응이 보입니다.
+  <span class="key" style="background:var(--ok)"></span>normal phoneme
+  <span class="key" style="background:var(--floor)"></span>0.03 s floor (the aligner gave up)
+  <span class="key" style="background:var(--sil)"></span>short silence
+  <span class="key" style="background:var(--bigsil)"></span>silence of 1 s or more (a discarded span)
+  <br>Ascending by length. Hover a bar to see the IPA -&gt; Coda correspondence.
 </div>
 {''.join(cards)}
 <script>
@@ -319,7 +319,7 @@ def main() -> None:
     review_dir.mkdir(exist_ok=True)
     out = review_dir / f"alignment_review{_suffix}.html"
     out.write_text(render(rows), encoding="utf-8")
-    print(f"저장: {out}  ({out.stat().st_size/1024/1024:.1f} MB)")
+    print(f"saved: {out}  ({out.stat().st_size/1024/1024:.1f} MB)")
 
 
 if __name__ == "__main__":

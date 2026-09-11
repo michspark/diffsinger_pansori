@@ -100,7 +100,7 @@ def describe(name, values):
     print(
         f"{name:30s} n={arr.size:4d}  median={np.median(arr):5.2f}  "
         f"p90={np.percentile(arr,90):5.2f}  max={arr.max():5.2f}  "
-        f"총{arr.sum()/3600:5.2f}h  >15s={int((arr>MAX_SEC).sum()):3d}"
+        f"total{arr.sum()/3600:5.2f}h  >15s={int((arr>MAX_SEC).sum()):3d}"
     )
 
 
@@ -142,11 +142,11 @@ def main() -> None:
                         if end - start >= MIN_SEC:
                             results[(gap_threshold, target_sec)].append(end - start)
 
-    print("=== gap 우선 분할 + 긴 구간 재귀 분할 (파일럿 5곡) ===\n")
+    print("=== gap-first splitting + recursive splitting of long spans (5 pilot songs) ===\n")
     for config in configs:
         describe(f"gap>={config[0]}s, target {config[1]}s", results[config])
 
-    print("\n=== 길이 히스토그램 ===")
+    print("\n=== length histogram ===")
     bins = [2, 4, 6, 8, 10, 12, 15]
     header = "".join(f"{bins[i]}-{bins[i+1]}s".rjust(9) for i in range(len(bins) - 1))
     print(f"{'':30s}{header}")

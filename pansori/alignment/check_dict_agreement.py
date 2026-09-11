@@ -104,17 +104,17 @@ def convert_span(intervals, lo, hi, mapping):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="사전 대조로 IPA 매핑 점수 매기기")
+    parser = argparse.ArgumentParser(description="score the IPA mapping against the dictionary")
     parser.add_argument("--set", default="full")
     parser.add_argument("--dictionary", default="dictionaries/korean-coda.txt")
     parser.add_argument("--top", type=int, default=25,
-                        help="출력할 불일치 패턴 수")
+                        help="how many mismatch patterns to print")
     parser.add_argument("--focus", nargs="*", default=[],
-                        help="이 IPA 기호가 포함된 음절만 따로 집계")
+                        help="tally separately the syllables containing this IPA symbol")
     parser.add_argument("--syllables", type=int, default=1,
-                        help="대조할 어절 음절 수 (0 = 길이 무관)")
+                        help="syllable count of the eojeol to compare (0 = any length)")
     parser.add_argument("--limit", type=int, default=0,
-                        help="TextGrid 표본 수 (0 = 전체)")
+                        help="number of TextGrids to sample (0 = all)")
     args = parser.parse_args()
 
     aligned = REPO / "pansori" / "data" / args.set / "aligned"
@@ -122,14 +122,14 @@ def main():
     if args.limit:
         grids = grids[:args.limit]
     if not grids:
-        parser.error(f"TextGrid 없음: {aligned}")
+        parser.error(f"no TextGrid at: {aligned}")
 
     mapping = load_ipa_to_coda()
     dictionary = load_dictionary(REPO / args.dictionary)
 
     total = match = 0
-    mismatches = Counter()      # (음절, 관측열, 사전열) -> 건수
-    focus_stats = {sym: [0, 0] for sym in args.focus}   # sym -> [일치, 전체]
+    mismatches = Counter()      # (syllable, observed, dictionary) -> count
+    focus_stats = {sym: [0, 0] for sym in args.focus}   # sym -> [matched, total]
     oov_syllables = Counter()
 
     for n, grid in enumerate(grids):
@@ -167,27 +167,27 @@ def main():
             print(f"  {n + 1}/{len(grids)} grids", file=sys.stderr, flush=True)
 
     if not total:
-        print("대조 가능한 어절이 없음")
+        print("no comparable eojeol")
         return
 
-    unit = f"{args.syllables}음절" if args.syllables else "전체"
-    print(f"\n{unit} 어절 {total:,}개 · 일치 {match:,}개 · "
-          f"일치율 {100 * match / total:.2f}%")
+    unit = f"{args.syllables}-syllable" if args.syllables else "all"
+    print(f"\n{unit} eojeol: {total:,} · matched {match:,} · "
+          f"agreement {100 * match / total:.2f}%")
 
-    print(f"\n불일치 상위 {args.top}:")
-    print(f"  {'음절':<4} {'관측':<16} {'사전':<16} {'건수':>7}")
+    print(f"\ntop {args.top} mismatches:")
+    print(f"  {'syl':<4} {'observed':<16} {'dictionary':<16} {'count':>7}")
     for (syl, got, exp), count in mismatches.most_common(args.top):
         print(f"  {syl:<4} {got:<16} {exp:<16} {count:>7,}")
 
     if args.focus:
-        print("\n기호별:")
+        print("\nby symbol:")
         for sym, (ok, n) in focus_stats.items():
             rate = f"{100 * ok / n:.2f}%" if n else "—"
             print(f"  {sym:<5} {ok:>7,}/{n:>7,}  {rate}")
 
     if oov_syllables:
-        print(f"\n사전에 없는 음절 {len(oov_syllables)}종 "
-              f"({sum(oov_syllables.values()):,}건): "
+        print(f"\n{len(oov_syllables)} distinct syllables not in the dictionary "
+              f"({sum(oov_syllables.values()):,} occurrences): "
               + " ".join(s for s, _ in oov_syllables.most_common(10)))
 
 

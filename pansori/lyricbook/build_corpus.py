@@ -1,25 +1,28 @@
 #!/usr/bin/env python3
-"""Turn the 15 hand-collected 창본 into one block-per-line corpus.jsonl.
+"""Turn the 15 hand-collected changbon into one block-per-line corpus.jsonl.
 
-The books come from three sources and mark 장단 three different ways:
+The books come from three sources and mark jangdan (the rhythmic cycle) three
+different ways:
 
     <중중모리>      angle brackets on their own line
     중중모리        bare, on its own line          (춘향가_김소희)
     【중중몰이】     lenticular brackets            (춘향가_성우향)
 
-Nine of them were scraped off the 한국판소리보존회 site and carry ~120 lines of
-site navigation before the text starts; everything before the first 장단 line
+Nine of them were scraped off the Korean Pansori Preservation Society's site and
+carry ~120 lines of site navigation before the text starts; everything before the
+first jangdan line
 is dropped.
 
 Blocks tagged 아니리 / 창조 / 무장단 (spoken, not sung) are kept but marked
 is_sung=False. Stage 1 already drops those spans from the audio
 (01_segment.py EXCLUDED_LABELS), so 03b matches against sung blocks only.
 
-The 15 files are only 6 distinct 창본: within each 바탕 the copies agree to
+The 15 files are only 6 distinct changbon: within each bata (the repertoire
+piece) the copies agree to
 0.998-0.9997 (심청가 and 심청가_성창순 are byte-identical), the sole exception
 being 춘향가_성우향_김세종제, which shares 0.37 with the other 춘향가. Near
 duplicates are folded to one representative -- it cuts 03b's matching cost 2.5x
-and makes "pick the best-scoring 창본" mean something instead of choosing at
+and makes "pick the best-scoring changbon" mean something instead of choosing at
 random between three copies of one text.
 
 Output: lyricbook/corpus.jsonl   {book, work, block, jangdan, is_sung, text,
@@ -34,19 +37,19 @@ from pathlib import Path
 LYRICS_DIR = Path("/home/sangheon/Desktop/Pansori_Data/Lyrics")
 OUT_PATH = Path(__file__).resolve().parent / "corpus.jsonl"
 
-# The five 바탕. Every filename contains exactly one of them.
+# The five bata. Every filename contains exactly one of them.
 WORKS = ("춘향가", "심청가", "수궁가", "적벽가", "흥보가")
 
-# Spoken (not sung) 장단 labels. Same set 01_segment.py excludes from the audio,
-# plus the 무장단 ("no rhythm") variants the books use for the same thing.
+# Spoken (not sung) jangdan labels. The same set 01_segment.py excludes from the
+# audio, plus the 무장단 ("no rhythm") variants the books use for the same thing.
 SPOKEN = {"아니리", "창조", "무장단", "무장단 창조"}
 
-# A 장단 line names a rhythm: it ends in 모리/몰이/머리, or is one of these.
+# A jangdan line names a rhythm: it ends in 모리/몰이/머리, or is one of these.
 BARE_JANGDAN = SPOKEN | {"진양", "진양조", "세마치"}
 
 
 def parse_jangdan(line: str):
-    """Return the normalized 장단 name if this line is a section header, else None.
+    """Return the normalized jangdan name if this line is a section header, else None.
 
     Strips the three bracket styles and any '=조' suffix ('중머리=평계면').
     Length and punctuation guards keep prose out -- one book has a 24-char

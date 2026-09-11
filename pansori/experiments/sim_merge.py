@@ -92,7 +92,7 @@ def describe(name, values):
     print(
         f"{name:34s} n={arr.size:4d}  median={np.median(arr):5.2f}  "
         f"p90={np.percentile(arr,90):5.2f}  max={arr.max():5.2f}  "
-        f"총{arr.sum()/3600:5.2f}h  <2s={under_min:3d}  >15s={over_max:3d}"
+        f"total{arr.sum()/3600:5.2f}h  <2s={under_min:3d}  >15s={over_max:3d}"
     )
 
 
@@ -143,11 +143,11 @@ def main() -> None:
                     if end - start >= MIN_SEC
                 )
 
-    print("=== 병합 전략 비교 (파일럿 5곡, 라벨 창 구간 총 0.42h) ===\n")
+    print("=== merge strategies compared (5 pilot songs, 0.42h of labelled sung spans) ===\n")
     for name, _, _ in configs:
         describe(name, results[name])
 
-    print("\n=== 길이 히스토그램 ===")
+    print("\n=== length histogram ===")
     bins = [2, 4, 6, 8, 10, 12, 15]
     header = "".join(f"{bins[i]}-{bins[i+1]}s".rjust(9) for i in range(len(bins) - 1))
     print(f"{'':34s}{header}")

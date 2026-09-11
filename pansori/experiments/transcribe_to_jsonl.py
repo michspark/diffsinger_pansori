@@ -29,7 +29,7 @@ def main() -> None:
     out_path = Path(sys.argv[2])
 
     records = [json.loads(line) for line in open(seg_dir / "segments.jsonl")]
-    print(f"{len(records)}개 세그먼트 전사 시작")
+    print(f"transcribing {len(records)} segments")
 
     model, processor, device, torch_dtype = t03.load_model()
 
@@ -47,7 +47,7 @@ def main() -> None:
             if index % 40 == 0 or index == len(records):
                 print(f"  [{index}/{len(records)}]")
 
-    print(f"저장: {out_path}")
+    print(f"saved: {out_path}")
 
 
 if __name__ == "__main__":

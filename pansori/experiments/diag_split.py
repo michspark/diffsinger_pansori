@@ -114,21 +114,21 @@ def main() -> None:
             f"max={arr.max():7.2f}   >15s={int((arr>15).sum()):4d}"
         )
 
-    print("=== (a) 에너지 기반 무음 검출: 연속 발성 구간 길이 ===")
+    print("=== (a) energy-based silence detection: length of continuous phonation ===")
     for top_db in top_db_candidates:
         describe(f"top_db={top_db} run length", run_lengths[top_db])
 
-    print("\n=== (a) 무음 갭 길이 ===")
+    print("\n=== (a) silence gap lengths ===")
     for top_db in top_db_candidates:
         describe(f"top_db={top_db} gap length", gap_lengths[top_db])
 
-    print("\n=== (b) MIDI 노트 갭 / 노트 런 ===")
+    print("\n=== (b) MIDI note gaps / note runs ===")
     describe("MIDI gap length", midi_gap_lengths)
     describe("MIDI run (gap>0.15s cut)", midi_run_lengths)
 
     if midi_gap_lengths:
         arr = np.asarray(midi_gap_lengths)
-        print("\nMIDI 갭 분위수:")
+        print("\nMIDI gap quantiles:")
         for q in [50, 75, 90, 95, 99]:
             print(f"  p{q}: {np.percentile(arr, q):.3f}s")
 

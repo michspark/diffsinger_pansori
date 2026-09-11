@@ -81,22 +81,22 @@ def main() -> None:
         print("=" * 64)
         print(f"{item_name}  ({seg['duration']:.2f}s, {seg['mode']})  "
               f"\"{lyrics.get(item_name, '')[:30]}\"")
-        print(f"  ROSVOT 음표 {len(notes)}개:")
+        print(f"  {len(notes)} ROSVOT notes:")
         for pitch, start, end in notes:
             name = librosa.midi_to_note(pitch)
             bar = "#" * max(1, int((end - start) * 30))
             print(f"    {start:5.2f}-{end:5.2f}s  {name:>4s}({pitch})  {bar}")
 
         if onsets is None:
-            print("  MFA 정렬 없음 (지속음 세그먼트 — 정규화본 참조)")
+            print("  no MFA alignment (a sustained-tone segment -- see the normalised copy)")
         else:
-            print(f"  MFA 모음 시작점 {len(onsets)}개:")
+            print(f"  {len(onsets)} MFA vowel onsets:")
             print("    " + "  ".join(f"{lab}@{t:.2f}" for lab, t in onsets))
 
         # Pitch range sanity: pansori spans roughly A2..A5.
         if notes:
             pitches = [p for p, _, _ in notes]
-            print(f"  음역: {librosa.midi_to_note(min(pitches))}~"
+            print(f"  range: {librosa.midi_to_note(min(pitches))}~"
                   f"{librosa.midi_to_note(max(pitches))}")
 
 
