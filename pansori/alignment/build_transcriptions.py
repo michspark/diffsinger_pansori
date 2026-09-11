@@ -2,7 +2,7 @@
 """Assemble transcriptions.txt 7-field lines for a handful of segments and
 self-check them. This is the last safety pin before the 394-song expansion:
 prove the verified pieces (IPA->Coda, silence->vowel absorption, ROSVOT notes)
-compose into length-consistent fields that express 시김새 via is_slur.
+compose into length-consistent fields that express sigimsae via is_slur.
 
 7 fields: item_name | text | ph_seq | note_seq | midi_dur | ph_durs | is_slur
 Read-only on existing artifacts (aligned_*, corpus_*, ROSVOT midi). Non-destructive.
@@ -362,24 +362,24 @@ def main() -> None:
     # console summary
     npass = sum(1 for r in reports if r["parity"] and r["dur_ok"] and not r["oov"]
                 and r["note_ok"] and r["slur_ok"])
-    print(f"조립 {len(reports)}개, 전체검증 PASS {npass}/{len(reports)}")
+    print(f"composed {len(reports)}, fully verified PASS {npass}/{len(reports)}")
     for r in reports:
         flags = []
-        if not r["parity"]: flags.append("길이불일치")
-        if not r["dur_ok"]: flags.append(f"합{r['dur_sum']:.2f}≠{r['audio_len']:.2f}")
+        if not r["parity"]: flags.append("length mismatch")
+        if not r["dur_ok"]: flags.append(f"sum{r['dur_sum']:.2f}!={r['audio_len']:.2f}")
         if r["oov"]: flags.append(f"OOV{r['oov']}")
-        if not r["note_ok"]: flags.append("note파싱")
-        if not r["slur_ok"]: flags.append("slur오류")
+        if not r["note_ok"]: flags.append("note parse")
+        if not r["slur_ok"]: flags.append("slur error")
         status = "PASS" if not flags else "FAIL:" + ",".join(flags)
-        print(f"  {r['item']:16s} 음표{r['n_notes']:2d} slur{r['n_slur']:2d}  {status}")
+        print(f"  {r['item']:16s} notes{r['n_notes']:2d} slur{r['n_slur']:2d}  {status}")
 
 
 def write_report(reports) -> None:
-    lines = ["# transcriptions.txt 7필드 조립 검증 리포트", ""]
+    lines = ["# transcriptions.txt 7-field composition verification report", ""]
     npass = sum(1 for r in reports if r["parity"] and r["dur_ok"] and not r["oov"]
                 and r["note_ok"] and r["slur_ok"])
-    lines += [f"**{len(reports)}개 중 전체검증 PASS {npass}개**", ""]
-    lines += ["| item | 유형 | 길이정합 | ph_durs합 | is_slur | OOV | note |",
+    lines += [f"**{npass} of {len(reports)} passed every check**", ""]
+    lines += ["| item | type | length parity | ph_durs sum | is_slur | OOV | note |",
               "|---|---|---|---|---|---|---|"]
     for r in reports:
         lines.append(
@@ -389,32 +389,33 @@ def write_report(reports) -> None:
             f"{'✅' if not r['oov'] else '❌'+str(r['oov'])} | {'✅' if r['note_ok'] else '❌'} |")
 
     # human-readable slur breakdown for the (c) cases
-    lines += ["", "## 슬러(시김새) 케이스 상세", ""]
+    lines += ["", "## Slur (sigimsae) cases in detail", ""]
     for r in reports:
         if r["n_slur"] == 0:
             continue
         ph, note, mdur, pdur, slur = r["fields"]
-        lines += [f"### {r['item']}  \"{r['text'][:24]}\"  (음 {r['n_notes']}개, slur {r['n_slur']}개)", "",
+        lines += [f"### {r['item']}  \"{r['text'][:24]}\"  ({r['n_notes']} notes, {r['n_slur']} slurs)", "",
                   "| # | ph | note | midi_dur | ph_dur | slur |", "|--|--|--|--|--|--|"]
         for i in range(len(ph)):
-            mark = " ⬅ 시김새" if slur[i] == 1 else ""
+            mark = " ⬅ sigimsae" if slur[i] == 1 else ""
             lines.append(f"| {i} | {ph[i]} | {note[i]} | {mdur[i]:.2f} | {pdur[i]:.2f} | {slur[i]}{mark} |")
         lines.append("")
 
     # verdict
     all_pass = npass == len(reports)
-    lines += ["## 최종 판정", ""]
+    lines += ["## Verdict", ""]
     if all_pass:
-        lines += ["**PASS — 394 확장 가능.** 모든 세그먼트가 길이 정합·ph_durs 합·is_slur·OOV·note 파싱을 통과했다."]
+        lines += ["**PASS — safe to scale to 394.** Every segment passed length parity, "
+                  "ph_durs sum, is_slur, OOV and note parsing."]
     else:
-        lines += ["**FAIL — 아래 항목을 고친 뒤 재검증.** 394로 넘어가지 말 것.", ""]
+        lines += ["**FAIL — fix the items below and re-verify.** Do not move on to 394.", ""]
         for r in reports:
             probs = []
-            if not r["parity"]: probs.append(f"길이불일치 {r['lens']}")
-            if not r["dur_ok"]: probs.append(f"ph_durs합 {r['dur_sum']:.3f}≠오디오 {r['audio_len']:.3f}")
+            if not r["parity"]: probs.append(f"length mismatch {r['lens']}")
+            if not r["dur_ok"]: probs.append(f"ph_durs sum {r['dur_sum']:.3f} != audio {r['audio_len']:.3f}")
             if r["oov"]: probs.append(f"OOV {r['oov']}")
-            if not r["note_ok"]: probs.append("note 파싱 실패")
-            if not r["slur_ok"]: probs.append("is_slur 위치 오류")
+            if not r["note_ok"]: probs.append("note parse failed")
+            if not r["slur_ok"]: probs.append("is_slur in the wrong position")
             if probs:
                 lines.append(f"- **{r['item']}**: {'; '.join(probs)}")
     (CHECK_DIR / "FIELD_CHECK.md").write_text("\n".join(lines) + "\n", encoding="utf-8")

@@ -1,28 +1,32 @@
-# A안 판정 — korean_mfa 강제정렬로 판소리 `ph_durs`를 얻을 수 있는가
+# Verdict on plan A — can korean_mfa forced alignment give us pansori `ph_durs`?
 
-**판정: 🔶 A안 조건부 성립** — 음소표는 문제없다. 정렬 품질이 **발화 길이에 강하게 의존**하며, **6초 이하로 자르면 성립하고 그 이상에서는 붕괴**한다.
+**Verdict: 🔶 plan A holds, conditionally** — the phoneme table is fine. Alignment quality
+**depends strongly on utterance length**, and **it holds when cut to 6 seconds or less and
+collapses above that**.
 
-검증 일자: 2026-07-20 / MFA 3.4.1 / korean_mfa acoustic·dictionary·g2p v3.0 (2024-02-17 학습)
+Verified 2026-07-20 / MFA 3.4.1 / korean_mfa acoustic · dictionary · g2p v3.0 (trained
+2024-02-17)
 
 ---
 
-## 1. 축 A — 음소표 대응: ✅ 성립
+## 1. Axis A — phoneme-table correspondence: ✅ holds
 
-`korean_mfa` 음향모델의 실제 음소는 **108개**(모음 15 + 자음 93). Coda 36 전체와 대조한 결과:
+The `korean_mfa` acoustic model has **108** actual phonemes (15 vowels + 93 consonants).
+Checked against all of Coda 36:
 
-| 등급 | 개수 | 뜻 |
+| Grade | Count | Meaning |
 |---|---:|---|
-| ✅ clean | 62 | 무조건 1:1 |
-| 🔶 needs_rule | 46 | 문맥 규칙 필요 |
-| ❌ unmapped | **0** | 없음 |
+| ✅ clean | 62 | Unconditional 1:1 |
+| 🔶 needs_rule | 46 | Needs a contextual rule |
+| ❌ unmapped | **0** | None |
 
-**Coda 36 심볼 중 도달 불가한 것은 없다.** 변환표는 `ipa_to_coda.csv`.
+**No Coda 36 symbol is unreachable.** The conversion table is `ipa_to_coda.csv`.
 
-### 반드시 지켜야 할 사항 3가지
+### Three things that must be respected
 
-**① 심볼 충돌 — 문자열 매칭 절대 금지**
+**① Symbol collisions — never do string matching**
 
-| MFA | 실제 자소 | Coda |
+| MFA | Actual grapheme | Coda |
 |---|---|---|
 | `k` | **ㄱ** | `g` |
 | `kʰ` | ㅋ | `k` |
@@ -30,62 +34,71 @@
 | `pʰ` | ㅍ | `p` |
 | `t` | **ㄷ** | `d` |
 
-MFA의 `k`는 ㄱ, Coda의 `k`는 ㅋ이다. 같은 글자가 정반대를 뜻하므로 반드시 명시적 대응표로만 변환한다.
+MFA's `k` is ㄱ; Coda's `k` is ㅋ. The same letter means opposite things, so conversion must
+go through an explicit correspondence table and nothing else.
 
-**② 온글라이드는 자음에 융합되어 있다 — 분해 규칙 필요**
+**② On-glides are fused into the consonant — a decomposition rule is required**
 
-초성이 **없으면** 반모음이 독립 음소로 나오고, **있으면** 선행 자음에 융합된다.
-
-```
-야    = j ɐ        → y a          (독립)
-향    = ç ɐ ŋ      → h y a NG     (ç = ㅎ+구개음화, y 삽입 필요)
-과일  = kʷ ɐ i ɭ   → g w a i L    (ʷ → w 분리)
-교육  = c oː j u   → g y o  y u   (c = ㄱ+구개음화)
-```
-
-⚠️ **함정**: 구개음화는 온글라이드(ㅑㅕㅛㅠ)뿐 아니라 **단순히 뒤에 ㅣ가 올 때도** 일어난다. 같은 심볼인데 출력이 다르다.
+With **no** onset the semivowel comes out as its own phoneme; **with** one it fuses into the
+preceding consonant.
 
 ```
-소리   = sʰ o ɾʲ i   → s o r i     (ɾʲ 뒤가 i → y 삽입 안 함)
-가려야 = k ɐ ɾʲ ʌ j ɐ → g a r y eo y a  (ɾʲ 뒤가 ʌ → y 삽입)
+야    = j ɐ        → y a          (independent)
+향    = ç ɐ ŋ      → h y a NG     (ç = ㅎ + palatalisation; y must be inserted)
+과일  = kʷ ɐ i ɭ   → g w a i L    (ʷ → split off as w)
+교육  = c oː j u   → g y o  y u   (c = ㄱ + palatalisation)
 ```
 
-→ **규칙: `Cʲ` 다음 모음이 `i`면 `y` 생략, 아니면 삽입.**
-
-**③ 비음의 초성/종성이 같은 심볼**
-
-`m`, `n`, `ɲ`은 위치를 구분하지 않는다. G2P 출력이 이를 증명한다.
+⚠️ **Trap**: palatalisation happens not only before an on-glide (ㅑㅕㅛㅠ) but also **simply
+when ㅣ follows**. Same symbol, different output.
 
 ```
-아니리  = ɐ ɲ i ɾ i          ← ɲ 이 초성 (뒤에 모음)
-계면조  = c eː mʲ ʌ ɲ dʑ o   ← ɲ 이 종성 (뒤에 자음)
+소리   = sʰ o ɾʲ i   → s o r i     (ɾʲ followed by i → do not insert y)
+가려야 = k ɐ ɾʲ ʌ j ɐ → g a r y eo y a  (ɾʲ followed by ʌ → insert y)
 ```
 
-→ **규칙: 뒤에 모음이 오면 초성(`n`/`m`), 아니면 종성(`N`/`M`).**
-`ŋ`은 한국어에서 종성에만 출현하므로 무조건 `NG` ✅.
+→ **Rule: if the vowel after `Cʲ` is `i`, drop the `y`; otherwise insert it.**
 
-### 부수 확인
+**③ Nasals use the same symbol for onset and coda**
 
-- 종성 파열음이 별도 기호로 구분됨: `k̚ t̚ p̚` → `K T P` ✅ (`박` = `p ɐ k̚`)
-- 연음 반영됨: `국악` = `k u ɡ ɐ k̚` ✅
-- 장모음·장자음(`iː`, `mː`)은 심볼에서 버려도 무방 — 길이는 `ph_durs`가 따로 들고 있다
-- 사전 21,009항목으로 판소리 어휘 커버리지는 낮지만, **G2P 모델이 OOV를 잘 처리**한다
-  (`시김새` → `ɕʰ iː ɟ i m sʰ ɛː`, `춘향` → `tɕʰ u n ʝ ɐ ŋ`)
+`m`, `n` and `ɲ` do not distinguish position. The G2P output proves it.
+
+```
+아니리  = ɐ ɲ i ɾ i          ← ɲ is an onset (a vowel follows)
+계면조  = c eː mʲ ʌ ɲ dʑ o   ← ɲ is a coda (a consonant follows)
+```
+
+→ **Rule: a following vowel makes it an onset (`n`/`m`), otherwise a coda (`N`/`M`).**
+`ŋ` only ever occurs as a coda in Korean, so it is unconditionally `NG` ✅.
+
+### Incidental confirmations
+
+- Coda plosives are distinguished by their own symbols: `k̚ t̚ p̚` → `K T P` ✅
+  (`박` = `p ɐ k̚`)
+- Liaison is reflected: `국악` = `k u ɡ ɐ k̚` ✅
+- Long vowels and long consonants (`iː`, `mː`) can be dropped from the symbol — length is
+  carried separately by `ph_durs`
+- At 21,009 entries the dictionary's coverage of pansori vocabulary is low, but **the G2P
+  model handles OOV well** (`시김새` → `ɕʰ iː ɟ i m sʰ ɛː`, `춘향` → `tɕʰ u n ʝ ɐ ŋ`)
 
 ---
 
-## 2. 축 B — 가창 정렬 품질: ⚠️ 길이 의존적
+## 2. Axis B — singing alignment quality: ⚠️ length-dependent
 
-**정렬 성공률은 10/10, 실패 0건.** 그러나 성공했다는 것과 정확하다는 것은 다르다.
+**Alignment succeeded 10/10, with 0 failures.** But succeeding and being accurate are not
+the same thing.
 
-### 붕괴 판정 지표 두 가지
+### Two indicators of collapse
 
-1. **0.03초 하한선 비율** — MFA는 정렬을 포기하면 음소를 최소 지속시간(0.03초)에 밀어 넣는다
-2. **1초 이상 침묵** — 무음 기준으로 잘라낸 창 구간 한복판에 1초 넘는 침묵이 있다면, 늘어지는 소리를 정렬하지 못하고 버린 것
+1. **Fraction at the 0.03 s floor** — when MFA gives up on aligning, it pushes the phoneme
+   into the minimum duration (0.03 s)
+2. **Silence of 1 second or more** — if there is more than a second of silence in the middle
+   of a sung section that was itself cut on silence, the aligner failed to align a sustained
+   sound and discarded it
 
-### 측정 결과
+### Measurements
 
-| 길이 | item | 음소 | 하한선% | 1s+침묵 |
+| Length | item | Phonemes | Floor % | 1s+ silence |
 |---:|---|---:|---:|---:|
 | 2.45 | 02b8fd02_0001 | 21 | 28.6% | 0.00s |
 | 3.07 | 039d6b6e_0000 | 21 | 9.5% | 0.00s |
@@ -98,84 +111,104 @@ MFA의 `k`는 ㄱ, Coda의 `k`는 ㅋ이다. 같은 글자가 정반대를 뜻�
 | 10.50 | 037e72a6_0079 | 34 | 50.0% | **4.42s** |
 | 14.46 | 01ed19bb_0006 | 40 | 57.5% | **10.46s** |
 
-| 구간 | 하한선 평균 | 1s+침묵 평균 |
+| Bucket | Mean floor % | Mean 1s+ silence |
 |---|---:|---:|
-| **6초 이하 (5개)** | 25.8% | **0.00s** |
-| **6초 초과 (5개)** | 39.9% | **4.06s** |
+| **6 s or under (5 items)** | 25.8% | **0.00s** |
+| **Over 6 s (5 items)** | 39.9% | **4.06s** |
 
-**경계가 6초에서 뚜렷하게 갈린다.** 6초 이하에서는 1초 이상 침묵이 단 한 건도 없다.
+**The boundary falls clearly at 6 seconds.** Under 6 s there is not a single instance of
+silence over one second.
 
-### 붕괴의 실제 모습 (`01ed19bb_0006`, 14.46초)
-
-```
-  0.31-  1.40   앞부분 음소들 (일부 정상)
-  1.40-  5.51   4.11초 침묵          ← 창 한복판. 버려진 구간
-  5.51-  5.68   k ʌː ʎː ʌ t̚ 전부 0.03초 ← "걸렸다"를 0.17초에 압축
-  8.69- 10.96   2.27초 침묵
- 11.40- 12.81   1.41초 침묵
- 13.04- 14.46   1.42초 침묵
-```
-
-40개 음소 중 23개(57.5%)가 하한선에 붙어 있고, 14.46초 중 10.46초가 침묵 처리됐다.
-
-### 성공 사례도 있다 (`02b8fd02_0012`, 4.10초)
+### What collapse actually looks like (`01ed19bb_0006`, 14.46 s)
 
 ```
-0.42-1.84   ŋ  1.42초   ← "대왕"의 종성 ㅇ을 1.42초 지속으로 정확히 포착
+  0.31-  1.40   the opening phonemes (some of them fine)
+  1.40-  5.51   4.11 s of silence      ← mid-song. A discarded span
+  5.51-  5.68   k ʌː ʎː ʌ t̚ all at 0.03 s ← "걸렸다" compressed into 0.17 s
+  8.69- 10.96   2.27 s of silence
+ 11.40- 12.81   1.41 s of silence
+ 13.04- 14.46   1.42 s of silence
 ```
 
-**늘여 부르는 소리를 제대로 잡아낸 사례가 존재한다.** 즉 음향모델이 가창에 원천적으로 무능한 것이 아니라, **길이가 길어질수록 누적 오차로 무너지는** 것이다.
+23 of the 40 phonemes (57.5%) sit on the floor, and 10.46 of the 14.46 seconds were treated
+as silence.
 
-### 평균 음소 길이 107ms의 의미
+### There are successes too (`02b8fd02_0012`, 4.10 s)
 
-10개 전체 평균이 107ms인데, 이는 **말하기 데이터의 전형적 수치**다. 가창이라면 모음이 초 단위로 늘어나야 한다. 음향모델이 판소리를 "빠르게 말한 것"으로 해석하려 든다는 방증이다.
+```
+0.42-1.84   ŋ  1.42 s   ← the coda ㅇ of "대왕" captured accurately as a 1.42 s sustain
+```
+
+**Sustained singing does get captured correctly in some cases.** So the acoustic model is
+not fundamentally incapable of singing; it **collapses under accumulated error as length
+grows**.
+
+### What a mean phoneme length of 107 ms means
+
+The overall mean across all 10 is 107 ms, which is **a typical figure for speech data**. In
+singing, vowels should stretch to seconds. It is evidence that the acoustic model is trying
+to interpret pansori as "speech, spoken fast".
 
 ---
 
-## 3. 이 판정의 한계 (정직하게)
+## 3. Limits of this verdict (stated honestly)
 
-- **표본 10개**로 작다. 6초 경계는 유력한 가설이지 확정된 임계값이 아니다.
-- **가사가 Whisper 전사**다. Whisper가 놓친 가사가 있으면 그 구간이 침묵으로 잡히므로, 일부 침묵은 MFA 탓이 아닐 수 있다. 다만 `01ed19bb_0006`의 10.46초 침묵은 이것만으로 설명되지 않는다.
-- **청취 검증은 아직 안 됐다.** `alignment_review.html`을 열어 직접 들어봐야 최종 확인이 된다.
-- 6초 이하에서도 **하한선 비율 25.8%**는 낮지 않다. "붕괴하지 않았다"는 것이지 "정확하다"는 뜻은 아니다.
-
----
-
-## 4. 권고 액션
-
-### 즉시 (A안 유지)
-
-1. **`01_segment.py`의 길이 상한을 낮춘다.** 현재 `MAX_UTTERANCE_SEC = 15.0` / `TARGET_UTTERANCE_SEC = 10.0` → **`MAX = 6.0` / `TARGET = 4.5`** 로 재분할.
-   - 현재 median 7.06초 / p90 12.67초는 붕괴 구간에 정면으로 들어간다
-   - 짧아지면 Whisper 정확도도 함께 올라간다 (문맥은 줄지만 오전사 확산이 억제됨)
-2. **재분할 후 50~100개 표본으로 재검증**해 6초 가설을 확정한다.
-3. **`ipa_to_coda.csv`의 46개 `needs_rule`을 실제 변환 함수로 구현**한다 (Stage 4 작업). 위 ①②③ 규칙이 전부.
-4. **하한선 비율을 Stage 7 검증 항목에 추가**한다. 발화별 하한선 비율이 임계(예: 40%)를 넘으면 폐기. 37시간이므로 버려도 된다.
-
-### 재검증 후에도 붕괴하면
-
-5. **`mfa adapt`** — 전체 재학습(B안) 전에, 사전학습 음향모델을 판소리로 **적응**시키는 중간 단계가 있다. B안보다 훨씬 싸다.
-6. 그래도 안 되면 계획서 **폴백 B** — 음절 단위까지만 정렬하고 음절 내부는 자모 비율로 균등 분배.
-
-### C안은 불필요
-
-`unmapped`가 0이고 Coda 36 전체가 도달 가능하므로, MFA 음소를 그대로 `ph_seq`에 쓰는 C안을 택할 이유가 없다. Coda 표기가 사람이 읽기 쉽고 OpenVPI 계열과 호환된다.
+- **A sample of 10** is small. The 6-second boundary is a strong hypothesis, not a
+  determined threshold.
+- **The lyrics are Whisper transcriptions.** If Whisper missed lyrics, those spans register
+  as silence, so some of the silence may not be MFA's fault. That said, the 10.46 s of
+  silence in `01ed19bb_0006` is not explained by this alone.
+- **Listening verification has not been done.** Final confirmation means opening
+  `alignment_review.html` and listening.
+- Even under 6 s, a **floor rate of 25.8%** is not low. It means "did not collapse", not
+  "is accurate".
 
 ---
 
-## 5. 산출물
+## 4. Recommended actions
 
-| 파일 | 내용 |
+### Immediately (keeping plan A)
+
+1. **Lower the length cap in `01_segment.py`.** Currently `MAX_UTTERANCE_SEC = 15.0` /
+   `TARGET_UTTERANCE_SEC = 10.0` → re-split at **`MAX = 6.0` / `TARGET = 4.5`**.
+   - The current median of 7.06 s and p90 of 12.67 s land squarely in the collapse range
+   - Shorter segments also raise Whisper's accuracy (less context, but less spread of
+     mis-transcription)
+2. **Re-verify on 50–100 samples after re-splitting** to settle the 6-second hypothesis.
+3. **Implement the 46 `needs_rule` entries of `ipa_to_coda.csv` as an actual conversion
+   function** (Stage 4 work). Rules ①②③ above are all of it.
+4. **Add the floor rate to the Stage 7 validation checks.** Discard any utterance whose floor
+   rate exceeds a threshold (say 40%). There are 37 hours, so discarding is affordable.
+
+### If it still collapses after re-verification
+
+5. **`mfa adapt`** — before full retraining (plan B), there is an intermediate step of
+   *adapting* the pre-trained acoustic model to pansori. Far cheaper than plan B.
+6. Failing that, the plan's **fallback B** — align only down to the syllable and distribute
+   within the syllable by jamo proportion.
+
+### Plan C is unnecessary
+
+Since `unmapped` is 0 and all of Coda 36 is reachable, there is no reason to take plan C and
+use MFA phonemes directly as `ph_seq`. Coda notation is easier for a human to read and is
+compatible with the OpenVPI family.
+
+---
+
+## 5. Outputs
+
+| File | Contents |
 |---|---|
-| `mfa_phone_inventory.txt` | korean_mfa 음소 108개 |
-| `mfa_acoustic_inspect.txt` | `mfa model inspect` 원본 출력 |
-| `dict_samples.txt` | 한글→IPA 사전 예시 + OOV G2P 결과 |
-| `ipa_to_coda.csv` | 변환표 108행 (clean 62 / needs_rule 46 / unmapped 0) |
-| `build_mapping.py` | 변환표 생성 스크립트 (규칙이 코드로 문서화됨) |
-| `alignment_stats.json` | 정렬 품질 지표 원본 |
-| `analyze_alignment.py` | 품질 측정 스크립트 |
-| `alignment_review.html` | **청취 검증용** — 오디오 + 음소 경계 시각화 |
-| `aligned/*.TextGrid` | MFA 정렬 결과 10개 |
-| `corpus/` | 입력 (wav + lab) |
+| `mfa_phone_inventory.txt` | The 108 korean_mfa phonemes |
+| `mfa_acoustic_inspect.txt` | Raw `mfa model inspect` output |
+| `dict_samples.txt` | Hangul→IPA dictionary examples + OOV G2P results |
+| `ipa_to_coda.csv` | The conversion table, 108 rows (clean 62 / needs_rule 46 / unmapped 0) |
+| `build_mapping.py` | The script that generates the table (the rules documented as code) |
+| `alignment_stats.json` | Raw alignment-quality metrics |
+| `analyze_alignment.py` | The quality measurement script |
+| `alignment_review.html` | **For listening verification** — audio + phoneme-boundary visualisation |
+| `aligned/*.TextGrid` | The 10 MFA alignment results |
+| `corpus/` | The input (wav + lab) |
 
-**다음 행동: `alignment_review.html`을 브라우저로 열어 6초 이하 5개가 실제로 귀에 맞는지 확인할 것.** 맞으면 위 권고 1번(재분할)으로 진행한다.
+**Next action: open `alignment_review.html` in a browser and check that the five items under
+6 s actually sound right.** If they do, proceed with recommendation 1 (re-splitting).
