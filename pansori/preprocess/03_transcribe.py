@@ -5,7 +5,7 @@ The raw transcription is kept for review, and a repeat-collapsed version
 (pansori_lib.normalize_repeats) is what downstream alignment uses -- a held
 sung note makes Whisper emit '지이이이…이(x200)', which the collapse folds back
 to '지이'. Whisper is imperfect on pansori; the goal is that the *phonemes*
-line up in time, not perfect lyrics (see alignment/VERDICT.md).
+line up in time, not perfect lyrics (see pansori/docs/SEGMENTATION_VERDICT.md).
 
 Input : data/{set}/segments.jsonl + data/{set}/wavs/*.wav
 Output: data/{set}/lyrics.jsonl   {item_name, duration, text_raw, text}

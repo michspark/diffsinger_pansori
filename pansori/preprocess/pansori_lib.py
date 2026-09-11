@@ -72,7 +72,7 @@ TARGET_SAMPLE_RATE: int = 44100
 # MFA marks non-speech intervals with these (or an empty label).
 SILENCE_LABELS = {"", "sil", "sp", "spn", "<eps>"}
 
-# The Coda-36 target inventory (see alignment/VERDICT.md).
+# The Coda-36 target inventory (see pansori/docs/SEGMENTATION_VERDICT.md).
 CODA_VOWELS = {"a", "eo", "o", "u", "eu", "i", "e"}
 CODA_36 = {
     "g", "n", "d", "r", "m", "b", "s", "j", "ch", "k", "t", "p", "h",

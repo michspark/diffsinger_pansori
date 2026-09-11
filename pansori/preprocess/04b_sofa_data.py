@@ -14,7 +14,7 @@
     정렬 자체가 없음                  ->  no_label     오디오만 쓴다
 
 버리는 게 아니라 강등이다 — 나쁜 타이밍을 지우고도 오디오와 음소열은 계속 쓴다.
-alignment/VERDICT.md 가 권고했지만 구현되지 않은 "발화별 floor-rate 기준"이 여기다.
+pansori/docs/SEGMENTATION_VERDICT.md 가 권고했지만 구현되지 않은 "발화별 floor-rate 기준"이 여기다.
 
 Input : data/{set}/{phones,segments,lyrics}.jsonl + spk_map.json + wavs/*.wav
 Output: {out}/full_label/{화자}/wavs/*.wav + transcriptions.csv   (name,ph_seq,ph_dur)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Bundle the A/B renders into one self-contained listening-test page.
 
-`lyricbook/VERDICT.md` §6 and §9-4 both end at the same missing step: nobody has
+`pansori/docs/LYRICBOOK_VERDICT.md` §6 and §9-4 both end at the same missing step: nobody has
 listened. §2 says the 창본 corrections are right, but that is agreement with a book,
 not with the recording; §9 says the corrected labels make the model's voiced/unvoiced
 decisions worse, but that is a number, not a judgement. Both need an ear.

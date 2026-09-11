@@ -5,7 +5,7 @@
 
 - 실행법 요약은 [`../README.md`](../README.md), 이식 경위는 [`PORTING.md`](PORTING.md),
   **학습 한 스텝 안에서 벌어지는 일**은 [`TRAINING.md`](TRAINING.md),
-  6초 제약의 근거는 [`../alignment/VERDICT.md`](../alignment/VERDICT.md), 남은 일은 [`NEXT.md`](NEXT.md).
+  6초 제약의 근거는 [`SEGMENTATION_VERDICT.md`](SEGMENTATION_VERDICT.md), 남은 일은 [`NEXT.md`](NEXT.md).
 - 브랜치 `feat/pansori`. **upstream 파일은 한 줄도 고치지 않았다.**
 
 ```

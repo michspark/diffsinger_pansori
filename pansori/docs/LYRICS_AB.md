@@ -1,13 +1,13 @@
 # 가사 A/B — 창본 보정을 하고 / 안 하고
 
 두 라벨로 각각 학습시켜 합성음을 비교한 실험의 **절차와 결과**다. 판정의 근거와 한계는
-[`../lyricbook/VERDICT.md`](../lyricbook/VERDICT.md), 실행법 요약은
+[`LYRICBOOK_VERDICT.md`](LYRICBOOK_VERDICT.md), 실행법 요약은
 [`../README.md`](../README.md).
 
 ---
 
 `03b_snap_lyrics.py` 는 Whisper 전사를 창본(`lyricbook/corpus.jsonl`)에 맞춰 교정한다.
-[`VERDICT.md`](../lyricbook/VERDICT.md) 는 **MFA 정렬 지표로는** 이 교정이 오히려
+[`LYRICBOOK_VERDICT.md`](LYRICBOOK_VERDICT.md) 는 **MFA 정렬 지표로는** 이 교정이 오히려
 나쁘다고 판정했지만, 같은 문서 §4 가 그 판정의 한계를 명시한다 — MFA 는 오디오에서 파생된
 텍스트를 구조적으로 편애하므로 "어느 가사가 **학습에** 좋은가"는 답할 수 없다. 그 질문은
 두 라벨로 각각 학습시켜 합성음을 비교해야 답이 나온다. 이 절이 그 절차다.
@@ -96,7 +96,7 @@ python pansori/examples/measure.py --out pansori/examples/out_snap \
 **보정은 도움이 되지 않았다.** 홀드아웃 60쌍 × 3시드를 `2_resynth` 단에서 재면, 분리되는
 지표는 하나뿐이고 그것이 **가사가 실제로 바뀐 발화에서만** 나온다 — 유무성 일치가
 whisper 21승 6패 3무(p = 0.006), 대조군(음소열이 동일한 30쌍)에서는 10승 12패 8무
-(p = 0.83). 전체 수치와 해석은 [`VERDICT.md`](../lyricbook/VERDICT.md) §9.
+(p = 0.83). 전체 수치와 해석은 [`LYRICBOOK_VERDICT.md`](LYRICBOOK_VERDICT.md) §9.
 
 ```sh
 python pansori/examples/ab_ladder.py --n 60 --seeds 3      # 두 팔을 한 번에, ~5분

@@ -4,7 +4,7 @@
 Reuses the whole-song ROSVOT MIDI (no re-run). For every aligned segment we
 cut the notes inside its absolute song-time window and shift them to local
 time. This is what lets Stage 6 give a held vowel its true length and mark
-시김새 with is_slur where several notes ride one vowel (alignment/VERDICT.md).
+시김새 with is_slur where several notes ride one vowel (pansori/docs/SEGMENTATION_VERDICT.md).
 
 Input : data/{set}/segments.jsonl + phones.jsonl (which items survived align)
 Output: data/{set}/notes.jsonl   {item_name, notes:[[pitch,start,end],...]}

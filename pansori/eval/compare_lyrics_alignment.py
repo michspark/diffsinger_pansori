@@ -2,7 +2,7 @@
 """Does snapping the lyrics to the 창본 actually improve MFA's alignment?
 
 Prettier text proves nothing. The lyrics exist to be MFA's input, so the test
-is MFA's own failure signature, the one alignment/VERDICT.md §2 established:
+is MFA's own failure signature, the one pansori/docs/SEGMENTATION_VERDICT.md §2 established:
 when the aligner gives up it pins phones to its 0.03s minimum and writes the
 rest of the clip off as silence. Both numbers should fall if the words are now
 the words that were sung.
@@ -36,7 +36,7 @@ from pansori_lib import (PANSORI_DATA, TARGET_SAMPLE_RATE, load_align_config,
                          read_jsonl, set_dir)
 
 # The per-phone minimum an aligner pins a phone to when it gives up. A phone
-# sitting on it is one the aligner declined to place; VERDICT.md measured 25.8%
+# sitting on it is one the aligner declined to place; pansori/docs/SEGMENTATION_VERDICT.md measured 25.8%
 # of phones pinned there on clips under 6s (MFA's floor is 0.03s).
 FLOOR_SEC = 0.031
 LONG_SILENCE_SEC = 1.0

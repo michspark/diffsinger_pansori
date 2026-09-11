@@ -66,7 +66,7 @@ python pansori/compare/stats.py     # results_ext.jsonl 이 있으면 자동으�
   `pansori_ds3` 는 샘플러라 스펙트럼 전용·단일 draw 표기.
 - **주장 규칙(사전 등록)**: 시드 IQR 의 2배 초과 **∧** Holm p < 0.05 **∧**
   보코더 천장 격차 초과. 세 값을 모두 표에 인쇄한다.
-- **사인 비브라토 적합은 넣지 않는다.** `docs/VIBRATO_VERDICT.md` 가 이 코퍼스에서
+- **사인 비브라토 적합은 넣지 않는다.** `pansori/docs/VIBRATO_VERDICT.md` 가 이 코퍼스에서
   반증했다 — 같은 사인이 무관한 노트의 잔차도 똑같이 잘 맞았고(대조 0.829 vs 실측 0.782),
   깨끗한 주기 성분을 가진 노트는 3.9% 뿐이다.
 - **PESQ/STOI 도 넣지 않는다.** 미설치이고, 협대역 전화음성 명료도용이라 판소리에서는

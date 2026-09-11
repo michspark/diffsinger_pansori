@@ -20,5 +20,5 @@ eval/out/
 .ua/
 
 # 창본 전문. 출판된 사설집을 옮긴 것이라 추적하지 않는다. 원본 Lyrics/ 가 있으면
-# build_corpus.py 로 재생성되고, VERDICT.md 가 그 수치를 들고 있다.
+# build_corpus.py 로 재생성되고, pansori/docs/LYRICBOOK_VERDICT.md 가 그 수치를 들고 있다.
 lyricbook/corpus.jsonl

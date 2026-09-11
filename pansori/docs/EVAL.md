@@ -50,7 +50,7 @@ python pansori/eval/label_report.py --corpus data/pansori data/pansori_sofa \
 몰려 있다 (`pp` 48% · `tt` 46% · `b` 42% · `g` 42%). 30 ms 는 hop 512 에서 2.6프레임이라,
 모델은 그 자음에 프레임 두세 개만 배정받고 그마저 자리가 틀렸을 수 있다.
 
-`lyricbook/VERDICT.md` §7-4 가 이미 같은 것을 지목했다 — *"가사를 바꾸는 것보다 정렬
+`LYRICBOOK_VERDICT.md` §7-4 가 이미 같은 것을 지목했다 — *"가사를 바꾸는 것보다 정렬
 자체를 고치는 쪽의 여지가 훨씬 크다."*
 
 ## 2. A — 학습중 wandb 지표

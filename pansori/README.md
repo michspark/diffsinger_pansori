@@ -15,8 +15,8 @@
 | [`docs/LYRICS_AB.md`](docs/LYRICS_AB.md) | 가사 A/B 실험 절차와 결과 |
 | [`docs/PORTING.md`](docs/PORTING.md) | MoonInTheRiver → openvpi 이식 경위 |
 | [`docs/NEXT.md`](docs/NEXT.md) | 남은 일 |
-| [`alignment/VERDICT.md`](alignment/VERDICT.md) | 왜 6초인가 — 세그멘테이션을 바꾸기 전에 |
-| [`lyricbook/VERDICT.md`](lyricbook/VERDICT.md) | 창본 보정 판정 |
+| [`docs/SEGMENTATION_VERDICT.md`](docs/SEGMENTATION_VERDICT.md) | 왜 6초인가 — 세그멘테이션을 바꾸기 전에 |
+| [`docs/LYRICBOOK_VERDICT.md`](docs/LYRICBOOK_VERDICT.md) | 창본 보정 판정 |
 | [`compare/README.md`](compare/README.md) | 구 모델 대비 정량 비교 |
 
 ---
@@ -28,7 +28,7 @@ pansori/
 ├── preprocess/          01~08 전처리. 단계 사이는 jsonl 로 이어져 개별 재실행 가능
 │   └── pansori_lib.py   공유 상수 · IPA→Coda 규칙 · 음소 부류 · jsonl IO
 ├── alignment/           MFA 타당성 검토 + IPA→Coda 매핑표
-│   ├── VERDICT.md               ★ 6초 제약의 근거
+│   ├── (VERDICT.md → docs/SEGMENTATION_VERDICT.md)
 │   ├── ipa_to_coda.csv          korean_mfa IPA(108) → Coda(34)
 │   └── check_dict_agreement.py  ★ 매핑을 고치기 전후로 반드시 돌릴 채점기
 ├── examples/            ★ 추론. 학습 후 여기서부터 돈다 (§5)
@@ -160,7 +160,7 @@ Stage 4 의 정렬기는 `preprocess/align.yaml` 의 **`aligner` 한 줄**이 �
 | 환경 | `aligner` | `sofa` (`conda run` 으로 셸아웃) |
 
 왜 바꾸는가: 정렬기 원본 TextGrid 기준 음소의 **34.03%** 가 0.03초 하한선에 박혀 있고
-([`lyricbook/VERDICT.md`](lyricbook/VERDICT.md)), 06 이 흡수하는 "무음인데 노트가 있는"
+([`docs/LYRICBOOK_VERDICT.md`](docs/LYRICBOOK_VERDICT.md)), 06 이 흡수하는 "무음인데 노트가 있는"
 구간이 코퍼스 시간의 **52.2%** 다. 둘 다 정렬기가 판소리의 지속음을 감당하지 못한다는
 같은 이야기다. 창본 보정으로 가사 축을 손대 본 결과가 그 판정문의 결론이다 —
 *"가사를 바꾸는 것보다 정렬 자체를 고치는 쪽의 여지가 훨씬 크다."*

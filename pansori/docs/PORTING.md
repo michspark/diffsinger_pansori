@@ -132,7 +132,7 @@ openvpi 는 두 축을 분리한다 (`preprocessing/variance_binarizer.py`). 노
 
 ## 5. 변하지 않는 제약
 
-`alignment/VERDICT.md`, `alignment/FIELD_CHECK.md` 의 결론은 판소리와 이 데이터에 관한 것이라
+`SEGMENTATION_VERDICT.md`, `alignment/FIELD_CHECK.md` 의 결론은 판소리와 이 데이터에 관한 것이라
 아키텍처를 바꿔도 그대로 유효하다.
 
 - **발화는 6초 이하.** korean_mfa 가 speech 로 학습돼 6초를 넘으면 정렬이 붕괴한다.

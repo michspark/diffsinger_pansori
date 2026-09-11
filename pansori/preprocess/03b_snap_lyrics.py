@@ -5,7 +5,7 @@ Whisper cannot hold pansori. On 01ed19bb (김소희 · 춘향가 군로사령) i
 '굴러 살인길 나간다 살인길 나간다' where the 창본 reads '군로사령이 나간다 사령군로가
 나간다'. That matters because the lyrics are not the deliverable -- they are MFA's
 input, and a wrong word makes MFA drop the span to silence and pin its phones to
-the 0.03s floor (alignment/VERDICT.md §2).
+the 0.03s floor (pansori/docs/SEGMENTATION_VERDICT.md §2).
 
 The fix does not need a better transcriber, only the book. segments.jsonl carries
 song_stem plus song_start, so a song's segments are already in time order: paste

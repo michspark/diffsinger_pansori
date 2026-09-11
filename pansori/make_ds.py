@@ -77,7 +77,7 @@ def extract_f0(wav_path, n_frames_hint=None):
 
     Reading it back off the wav rather than out of the binary keeps this usable
     for any wav, and guarantees the f0_min/f0_max of the config are applied --
-    the default 65 Hz would cut off male 통성 (see pansori/alignment/VERDICT.md).
+    the default 65 Hz would cut off male 통성 (see pansori/docs/SEGMENTATION_VERDICT.md).
     """
     import librosa
     import numpy as np
