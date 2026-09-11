@@ -10,16 +10,16 @@ better than the 243.8 cents the cascade stage-1 predictor scores, then the
 predictor is actively destroying information it was conditioned on, and the fix
 is to predict a *residual* on top of the staircase rather than absolute f0.
 
-**Does the predictor sing 시김새?**  Cents RMSE cannot answer that.  A contour
+**Does the predictor sing sigimsae?**  Cents RMSE cannot answer that.  A contour
 that nails every note center and holds each one dead flat scores well while
 sounding like a MIDI file.  So this script splits the deviation from the
 staircase into two parts:
 
     residual(t) = f0(t) - note(t)          in cents
                 = note_bias(n)             per-note constant -- tuning / octave
-                + within_note(t)           the part that moves -- 시김새
+                + within_note(t)           the part that moves -- sigimsae
 
-`within_note` is where 요성, 전성, 추성, 퇴성 live.  Three numbers decide it:
+`within_note` is where yoseong, jeonseong, chuseong and toeseong live.  Three numbers decide it:
 
     within-note std of CREPE     how much ornament real pansori actually has
     within-note std of the model how much the model produces
@@ -89,7 +89,7 @@ def render_staircase(pitch_midi, midi_dur, is_slur, mel2ph, n_frames):
 
 
 # --------------------------------------------------------------------------
-# 시김새 decomposition
+# sigimsae decomposition
 # --------------------------------------------------------------------------
 
 def decompose(f0, f0_note, note_id):
@@ -139,7 +139,7 @@ def note_core_mask(note_id, voiced, trim=0.2):
 
 
 def ornament_stats(f0, f0_note, note_id, ref_within=None):
-    """Per-utterance 시김새 numbers for one contour."""
+    """Per-utterance sigimsae numbers for one contour."""
     voiced, residual, bias, within = decompose(f0, f0_note, note_id)
     core = note_core_mask(note_id, voiced)
     out = {
@@ -191,11 +191,11 @@ def f0_figure_b64(item_name, crepe, stair, model, slur_f):
 
     show = lambda f0: np.where(np.asarray(f0, dtype=np.float64) > 0, f0, np.nan)
     fig, ax = plt.subplots(figsize=(13, 3.2))
-    ax.plot(show(stair), color='#888', lw=2.4, label='ROSVOT 노트 (계단)')
-    ax.plot(show(crepe), color='#d62728', lw=1.1, label='CREPE (정답)')
+    ax.plot(show(stair), color='#888', lw=2.4, label='ROSVOT notes (staircase)')
+    ax.plot(show(crepe), color='#d62728', lw=1.1, label='CREPE (ground truth)')
     if model is not None:
-        ax.plot(show(model), color='#2ca02c', lw=1.1, label='모델 f0')
-    # Shade the frames ROSVOT marked as slur -- that is where 시김새 is claimed.
+        ax.plot(show(model), color='#2ca02c', lw=1.1, label='model f0')
+    # Shade the frames ROSVOT marked as slur -- that is where sigimsae is claimed.
     if slur_f is not None and np.any(slur_f > 0):
         ax.fill_between(np.arange(len(slur_f)), 0, 1, where=(slur_f > 0),
                         transform=ax.get_xaxis_transform(),
@@ -217,8 +217,8 @@ def build_html(rows, out_path, title, summary_html):
     figs = ''.join(
         f'<figure><img src="data:image/png;base64,{r["fig"]}">'
         f'<figcaption>{r["item_name"]} &nbsp;|&nbsp; '
-        f'계단 {r["midi"]["cents_rmse"]:.0f} cents'
-        + (f' &nbsp;·&nbsp; 모델 {r["model"]["cents_rmse"]:.0f} cents'
+        f'staircase {r["midi"]["cents_rmse"]:.0f} cents'
+        + (f' &nbsp;·&nbsp; model {r["model"]["cents_rmse"]:.0f} cents'
            if r.get('model') else '')
         + '</figcaption></figure>'
         for r in rows if r.get('fig'))
@@ -236,10 +236,11 @@ figcaption{{color:#666;font-size:.85em;font-family:monospace}}
 </style>
 <h1>{title}</h1>
 {summary_html}
-<div class=note>회색 계단이 ROSVOT 노트, 빨강이 CREPE 정답, 초록이 모델 f0입니다.
-파란 음영은 ROSVOT가 slur로 표시한 구간 — 시김새가 있다고 주장하는 곳입니다.
-<b>초록이 회색 계단에 붙어 있으면 모델은 노트를 따라 부를 뿐 시김새를 내지 않는 것</b>이고,
-빨강처럼 노트 주위에서 움직이면 시김새를 낸다는 뜻입니다.</div>
+<div class=note>The grey staircase is the ROSVOT notes, red is the CREPE ground truth,
+green is the model's f0. The blue shading marks the spans ROSVOT flagged as slur -- where
+sigimsae is claimed to be. <b>If the green hugs the grey staircase, the model is merely
+following the notes and producing no sigimsae</b>; if it moves around the notes the way the
+red does, it is producing sigimsae.</div>
 {figs}
 """, encoding='utf-8')
 
@@ -249,18 +250,18 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--exp_name', default='',
-                        help='비우면 MIDI 계단만 측정 (모델/GPU 불필요)')
+                        help='leave empty to measure only the MIDI staircase (no model or GPU needed)')
     parser.add_argument('--target', default='aux', choices=['diffusion', 'aux'],
-                        help='aux = cascade 1단계 (FastSpeech2MIDI)')
+                        help='aux = cascade stage 1 (FastSpeech2MIDI)')
     parser.add_argument('--n', type=int, default=24,
-                        help='발화 수 (243.8 수치와 맞추려면 24)')
+                        help='number of utterances (use 24 to match the 243.8 figure)')
     parser.add_argument('--set', dest='set_name', default='test',
                         choices=['test', 'valid', 'train'])
-    parser.add_argument('--html', action='store_true', help='f0 오버레이 HTML 저장')
-    parser.add_argument('--json', default='', help='요약을 JSON으로도 저장할 경로')
+    parser.add_argument('--html', action='store_true', help='save an f0 overlay HTML page')
+    parser.add_argument('--json', default='', help='path to also save the summary as JSON')
     parser.add_argument('--dump_npz', default='',
-                        help='contour 원본을 npz 로 저장 — pansori/eval/contour_tokens.py 입력. '
-                             '토크나이저는 python 3.10 환경이 필요해 같은 프로세스에서 못 돌린다')
+                        help='save the raw contours as npz -- input for pansori/eval/contour_tokens.py. '
+                             'The tokenizer needs a python 3.10 env and cannot run in this process')
     args, _ = parser.parse_known_args()
 
     # set_hparams() reads --config / --exp_name off sys.argv itself, same as
@@ -273,7 +274,7 @@ def main():
 
     dataset = OpencpopDataset(args.set_name)
     # Same picking rule as resynth_ladder.py: the held-out set is six whole
-    # songs in order, so range(N) would sample one singer and one 대목.
+    # songs in order, so range(N) would sample one singer and one passage.
     picked = np.linspace(0, len(dataset) - 1,
                          min(args.n, len(dataset))).astype(int).tolist()
 
@@ -284,8 +285,8 @@ def main():
         from pansori.model_utils import build_model
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         if device == 'cpu':
-            print('| ⚠ CUDA_VISIBLE_DEVICES 가 비어 있어 CPU 로 추론합니다 (느림).')
-        print(f'| 모델 로드 ({args.target}) — {args.exp_name}')
+            print('| ⚠ CUDA_VISIBLE_DEVICES is empty; inferring on CPU (slow).')
+        print(f'| loading model ({args.target}) — {args.exp_name}')
         model = build_model(args.target).to(device)
         best = f'checkpoints/{args.exp_name}/model_ckpt_best.pt'
         utils.load_ckpt(model,
@@ -293,7 +294,7 @@ def main():
                         'model', strict=False)
         model.eval()
 
-    print(f'| {args.set_name} set {len(dataset)}개 중 {len(picked)}개 측정')
+    print(f'| measuring {len(picked)} of {len(dataset)} in the {args.set_name} set')
 
     rows, dump = [], {}
     for i in picked:
@@ -345,9 +346,9 @@ def main():
                     midi_dur=to_dev('midi_dur'), is_slur=to_dev('is_slur'))
             if out.get('f0_denorm') is None:
                 raise SystemExit(
-                    f"{args.exp_name} 는 f0_denorm 을 내지 않습니다 "
-                    f"(use_pitch_embed 가 꺼진 설정입니다). "
-                    f"cascade 설정(aux.yaml / cascade ds.yaml)으로 실행하세요.")
+                    f"{args.exp_name} does not emit f0_denorm "
+                    f"(use_pitch_embed is off in this config). "
+                    f"Run it with a cascade config (aux.yaml / cascade ds.yaml).")
             model_f0 = out['f0_denorm'][0].cpu().numpy().astype(np.float64)[:n_frames]
 
             m_stats, _ = ornament_stats(model_f0, stair, note_id, ref_within)
@@ -378,9 +379,9 @@ def main():
                 dump[f'{item_name}__model'] = model_f0
 
         rows.append(row)
-        msg = f'  {item_name}  계단 {row["midi"]["cents_rmse"]:7.1f} cents'
+        msg = f'  {item_name}  staircase {row["midi"]["cents_rmse"]:7.1f} cents'
         if 'model' in row:
-            msg += f'   모델 {row["model"]["cents_rmse"]:7.1f} cents'
+            msg += f'   model {row["model"]["cents_rmse"]:7.1f} cents'
         print(msg)
 
     # ---------------- report ----------------
@@ -391,10 +392,10 @@ def main():
         return f0_metrics.aggregate(sub(key))
 
     bar = '=' * 78
-    print(f'\n{bar}\n0-2 MIDI baseline — {args.set_name} {len(rows)}발화, CREPE 기준\n{bar}')
-    print(f'{"소스":<22}{"cents RMSE":>12}{"반음이상":>11}{"V/UV":>10}{"octave jump":>13}')
+    print(f'\n{bar}\n0-2 MIDI baseline — {args.set_name}, {len(rows)} utterances, against CREPE\n{bar}')
+    print(f'{"source":<22}{"cents RMSE":>12}{">semitone":>11}{"V/UV":>10}{"octave jump":>13}')
     lines = []
-    for key, label in [('midi', 'ROSVOT 노트 계단'), ('model', f'모델 f0 ({args.exp_name})')]:
+    for key, label in [('midi', 'ROSVOT note staircase'), ('model', f'model f0 ({args.exp_name})')]:
         if key == 'model' and not have_model:
             continue
         a = agg(key)
@@ -403,17 +404,17 @@ def main():
               f'{a["vuv_error"]*100:>9.1f}%{a["octave_jump"]*100:>12.2f}%')
 
     if have_model:
-        print(f'\n{bar}\n동일 프레임 재비교 — 셋 다 유성인 프레임에서만 (cents RMSE)\n{bar}')
-        print(f'{"ROSVOT 노트 계단":<22}{mean_of(rows, "fair_midi"):>12.1f}')
-        print(f'{"모델 f0":<22}{mean_of(rows, "fair_model"):>12.1f}')
-        print(f'{"(발화당 평균 프레임":<22}{mean_of(rows, "fair_frames"):>11.0f} 개)')
+        print(f'\n{bar}\nre-compared on identical frames -- only where all three are voiced (cents RMSE)\n{bar}')
+        print(f'{"ROSVOT note staircase":<22}{mean_of(rows, "fair_midi"):>12.1f}')
+        print(f'{"model f0":<22}{mean_of(rows, "fair_model"):>12.1f}')
+        print(f'{"(mean frames per utterance":<22}{mean_of(rows, "fair_frames"):>11.0f} )')
 
-    print(f'\n{bar}\n시김새 분해 — 노트 대비 편차를 편향과 움직임으로 나눔 (cents)\n{bar}')
-    print(f'{"소스":<22}{"노트편향 RMS":>14}{"노트내 변동":>14}{"(노트안쪽만)":>14}'
-          f'{"CREPE와 상관":>14}')
-    orn = [('crepe', 'CREPE (정답)'), ('midi', 'ROSVOT 노트 계단')]
+    print(f'\n{bar}\nsigimsae decomposition -- deviation from the notes, split into bias and movement (cents)\n{bar}')
+    print(f'{"source":<22}{"note-bias RMS":>15}{"within-note":>13}{"(interior)":>12}'
+          f'{"corr w/ CREPE":>15}')
+    orn = [('crepe', 'CREPE (ground truth)'), ('midi', 'ROSVOT note staircase')]
     if have_model:
-        orn.append(('model', f'모델 f0 ({args.exp_name})'))
+        orn.append(('model', f'model f0 ({args.exp_name})'))
     for key, label in orn:
         b = mean_of(sub(key), 'bias_rms')
         w = mean_of(sub(key), 'within_std')
@@ -422,57 +423,57 @@ def main():
         cs = '   —   ' if np.isnan(c) else f'{c:>12.3f}'
         print(f'{label:<22}{b:>14.1f}{w:>14.1f}{wc:>14.1f}{cs:>14}')
 
-    print(f'\n{bar}\nslur(시김새) 구간 vs 그 외 — cents RMSE\n{bar}')
-    print(f'{"소스":<22}{"slur 구간":>12}{"비-slur 구간":>15}')
-    print(f'{"ROSVOT 노트 계단":<22}{mean_of(rows, "midi_slur"):>12.1f}'
+    print(f'\n{bar}\nslur (sigimsae) spans vs the rest -- cents RMSE\n{bar}')
+    print(f'{"source":<22}{"slur spans":>12}{"non-slur spans":>16}')
+    print(f'{"ROSVOT note staircase":<22}{mean_of(rows, "midi_slur"):>12.1f}'
           f'{mean_of(rows, "midi_nonslur"):>15.1f}')
     if have_model:
-        print(f'{"모델 f0":<22}{mean_of(rows, "model_slur"):>12.1f}'
+        print(f'{"model f0":<22}{mean_of(rows, "model_slur"):>12.1f}'
               f'{mean_of(rows, "model_nonslur"):>15.1f}')
 
     # ---------------- verdict ----------------
-    print(f'\n{bar}\n판정\n{bar}')
+    print(f'\n{bar}\nverdict\n{bar}')
     midi_rmse = agg('midi')['cents_rmse']
     if have_model:
         # The fair (common-frame) numbers decide this, not the headline ones.
         fm, fd = mean_of(rows, 'fair_midi'), mean_of(rows, 'fair_model')
         if fm < fd:
-            print(f'▸ 동일 프레임에서 계단({fm:.1f})이 모델({fd:.1f})보다 낮습니다. '
-                  f'predictor 는 주어진 노트를 쓰느니만 못한 상태입니다.')
-            print(f'  → 절대 f0 대신 노트 위의 잔차를 예측하도록 바꾸는 처방의 '
-                  f'우선순위가 올라갑니다.')
+            print(f'▸ On identical frames the staircase ({fm:.1f}) is lower than the model ({fd:.1f}). '
+                  f'The predictor is worse than just using the notes it was given.')
+            print(f'  -> This raises the priority of switching to predicting the residual '
+                  f'above the notes instead of absolute f0.')
         else:
-            print(f'▸ 동일 프레임에서 모델({fd:.1f})이 계단({fm:.1f})보다 '
-                  f'{fm - fd:.1f} cents 낮습니다. '
-                  f'predictor 는 노트 이상의 음정 정보를 더하고 있습니다.')
+            print(f'▸ On identical frames the model ({fd:.1f}) is {fm - fd:.1f} cents lower '
+                  f'than the staircase ({fm:.1f}). '
+                  f'The predictor is adding pitch information beyond the notes.')
         # V/UV is the one axis a staircase cannot compete on: it voices
         # wherever a note sits and knows nothing about breath or consonants.
         mv, dv = agg('midi')['vuv_error'] * 100, agg('model')['vuv_error'] * 100
-        print(f'▸ V/UV 오차는 모델 {dv:.1f}% vs 계단 {mv:.1f}% — '
-              f'유성/무성 판정은 노트가 흉내낼 수 없는 영역입니다.')
+        print(f'▸ V/UV error is model {dv:.1f}% vs staircase {mv:.1f}% -- '
+              f'voiced/unvoiced decisions are something the notes cannot imitate.')
         gt_w = mean_of(sub('crepe'), 'within_std')
         md_w = mean_of(sub('model'), 'within_std')
         corr = mean_of(sub('model'), 'within_corr')
         ratio = md_w / gt_w if gt_w else float('nan')
-        print(f'▸ 노트 내 변동: 정답 {gt_w:.1f} cents vs 모델 {md_w:.1f} cents '
-              f'({ratio*100:.0f}%), 상관 {corr:.3f}')
+        print(f'▸ Within-note variation: ground truth {gt_w:.1f} cents vs model {md_w:.1f} cents '
+              f'({ratio*100:.0f}%), correlation {corr:.3f}')
         if ratio < 0.35:
-            print('  → 모델이 노트를 거의 평평하게 부릅니다. 시김새를 배우지 못했습니다.')
+            print('  -> The model sings the notes nearly flat. It has not learned sigimsae.')
         elif corr < 0.2:
-            print('  → 움직임의 크기는 비슷하지만 정답과 무관합니다. '
-                  '시김새가 아니라 잡음에 가깝습니다.')
+            print('  -> The magnitude of the movement is similar but unrelated to ground truth. '
+                  'Closer to noise than to sigimsae.')
         else:
-            print('  → 크기와 시점이 모두 어느 정도 맞습니다. 시김새를 배우는 중입니다.')
+            print('  -> Both magnitude and timing are somewhat right. It is learning sigimsae.')
     else:
-        print(f'▸ ROSVOT 노트 계단만으로 {midi_rmse:.1f} cents.')
-        print(f'  --exp_name 을 주면 모델과 같은 프레임에서 직접 비교합니다.')
-    print(f'▸ 정답 CREPE 의 노트 내 변동이 '
+        print(f'▸ The ROSVOT note staircase alone gives {midi_rmse:.1f} cents.')
+        print(f'  Pass --exp_name to compare directly against the model on the same frames.')
+    print(f'▸ The ground-truth CREPE within-note variation of '
           f'{mean_of(sub("crepe"), "within_std"):.1f} cents — '
-          f'판소리가 노트 위에서 실제로 움직이는 폭입니다.')
+          f'is how far pansori actually moves above the notes.')
 
     if args.html:
-        summary = (f'<table><tr><th>소스</th><th>cents RMSE</th>'
-                   f'<th>노트편향 RMS</th><th>노트내 변동</th><th>CREPE와 상관</th></tr>')
+        summary = (f'<table><tr><th>source</th><th>cents RMSE</th>'
+                   f'<th>note-bias RMS</th><th>within-note</th><th>corr w/ CREPE</th></tr>')
         for key, label in orn:
             a = agg(key) if key != 'crepe' else None
             summary += (
@@ -485,8 +486,8 @@ def main():
         summary += '</table>'
         out_html = PANSORI_DIR / 'review' / f'midi_baseline_{args.exp_name or "nomodel"}.html'
         build_html(rows, out_html,
-                   f'0-2 MIDI baseline — {args.exp_name or "계단만"}', summary)
-        print(f'\n그림: {out_html}')
+                   f'0-2 MIDI baseline — {args.exp_name or "staircase only"}', summary)
+        print(f'\nfigure: {out_html}')
 
     if args.json:
         Path(args.json).parent.mkdir(parents=True, exist_ok=True)
@@ -501,7 +502,7 @@ def main():
         Path(args.dump_npz).parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(args.dump_npz,
                             items=np.array([r['item_name'] for r in rows]), **dump)
-        print(f'NPZ:  {args.dump_npz}  ({len(rows)}발화)')
+        print(f'NPZ:  {args.dump_npz}  ({len(rows)} utterances)')
 
 
 if __name__ == '__main__':

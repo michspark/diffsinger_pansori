@@ -41,11 +41,11 @@ RAW_F0_DIR = PANSORI_DIR / 'data' / 'full' / 'f0'
 RAW_WAV_DIR = PANSORI_DIR / 'data' / 'full' / 'wavs'
 
 RUNGS = [
-    ('1_orig', '원본 wav', '진짜 기준'),
-    ('2_gt_crepe', 'GT mel + CREPE f0', 'vocoder 상한'),
+    ('1_orig', 'original wav', 'the real reference'),
+    ('2_gt_crepe', 'GT mel + CREPE f0', 'vocoder ceiling'),
     ('3_gt_pe', 'GT mel + PE f0', '= wandb gt_N'),
-    ('4_pred_pe', '예측 mel + PE f0', '현재 출력'),
-    ('5_pred_own', '예측 mel + 모델 f0', 'cascade'),
+    ('4_pred_pe', 'predicted mel + PE f0', 'current output'),
+    ('5_pred_own', 'predicted mel + model f0', 'cascade'),
 ]
 
 
@@ -79,7 +79,7 @@ def build_html(rows, out_path, exp_name):
             f'<span class=sub>{row["text"][:40]}</span></td>{audio}</tr>')
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(f"""<!doctype html><meta charset=utf-8>
-<title>판소리 재합성 사다리 — {exp_name}</title>
+<title>Pansori resynthesis ladder — {exp_name}</title>
 <style>
 body{{font-family:system-ui,sans-serif;margin:2rem;background:#fafafa}}
 table{{border-collapse:collapse;width:100%}}
@@ -88,10 +88,11 @@ th{{background:#f0f0f0}} .sub{{color:#777;font-size:.8em;font-weight:400}}
 .item{{font-family:monospace;font-size:.85em;white-space:nowrap}}
 audio{{width:200px}}
 </style>
-<h1>재합성 사다리 — {exp_name}</h1>
-<p>왼쪽에서 오른쪽으로 갈수록 오차가 하나씩 더해집니다.
-<b>2단이 나쁘면 vocoder가 병목</b>이고, 2단과 3단 차이가 크면 PitchExtractor가 원인입니다.</p>
-<table><tr><th>발화</th>{cells}</tr>{''.join(body)}</table>
+<h1>Resynthesis ladder — {exp_name}</h1>
+<p>Left to right, one more source of error is added at each rung.
+<b>If rung 2 is bad the vocoder is the bottleneck</b>; if the gap between rungs 2 and 3 is
+large, the PitchExtractor is the cause.</p>
+<table><tr><th>utterance</th>{cells}</tr>{''.join(body)}</table>
 """, encoding='utf-8')
 
 
@@ -104,14 +105,14 @@ def main():
     # sys.argv itself (same pattern as pansori/warm_start.py).
     parser = argparse.ArgumentParser()
     parser.add_argument('--exp_name', required=True)
-    parser.add_argument('--n', type=int, default=12, help='발화 수')
+    parser.add_argument('--n', type=int, default=12, help='number of utterances')
     parser.add_argument('--target', default='diffusion', choices=['diffusion', 'aux'],
-                        help='aux = cascade 1단계 (FastSpeech2MIDI)')
+                        help='aux = cascade stage 1 (FastSpeech2MIDI)')
     parser.add_argument('--pred_dur', action='store_true',
-                        help='GT duration 대신 예측 duration 사용 (기본은 GT — '
-                             'wandb 검증 오디오와 같은 조건이라 음정 문제만 분리해서 볼 수 있다)')
+                        help='use predicted durations instead of GT (default is GT -- the same '
+                             'condition as the wandb validation audio, so pitch can be isolated)')
     parser.add_argument('--save_wav', action='store_true',
-                        help='HTML 외에 wav 파일로도 저장 (infer_out/ladder_{exp_name}/)')
+                        help='also save wav files alongside the HTML (infer_out/ladder_{exp_name}/)')
     args, _ = parser.parse_known_args()
     exp_name, n_items, use_pred_dur = args.exp_name, args.n, args.pred_dur
 
@@ -127,17 +128,17 @@ def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     sample_rate = hparams['audio_sample_rate']
 
-    print('| 보코더 로드...')
+    print('| loading vocoder...')
     vocoder = HifiGAN()
 
     pe = None
     if hparams.get('pe_ckpt'):
-        print('| PitchExtractor 로드...')
+        print('| loading PitchExtractor...')
         pe = PitchExtractor().to(device)
         utils.load_ckpt(pe, hparams['pe_ckpt'], 'model', strict=True)
         pe.eval()
 
-    print(f'| 모델 로드 ({args.target})...')
+    print(f'| loading model ({args.target})...')
     model = build_model(args.target).to(device)
     best = f'checkpoints/{exp_name}/model_ckpt_best.pt'
     utils.load_ckpt(model, best if os.path.exists(best) else f'checkpoints/{exp_name}',
@@ -146,10 +147,10 @@ def main():
 
     dataset = OpencpopDataset('test')
     # Spread across the whole test set, not the first N: the held-out set is six
-    # whole songs in order, so range(N) would sample one singer and one 대목.
+    # whole songs in order, so range(N) would sample one singer and one passage.
     picked = np.linspace(0, len(dataset) - 1, min(n_items, len(dataset))).astype(int).tolist()
-    print(f'| test set {len(dataset)}개 중 {len(picked)}개 사용'
-          f' ({"예측" if use_pred_dur else "GT"} duration)')
+    print(f'| using {len(picked)} of {len(dataset)} in the test set'
+          f' ({"predicted" if use_pred_dur else "GT"} duration)')
 
     wav_dir = Path('infer_out') / f'ladder_{exp_name}'
     rows, metrics = [], {'3_gt_pe': [], '4_pred_pe': [], '5_pred_own': []}
@@ -209,16 +210,16 @@ def main():
     out_html = PANSORI_DIR / 'review' / f'ladder_{exp_name}.html'
     build_html(rows, out_html, exp_name)
 
-    print(f'\n{"="*74}\n재합성 사다리 — {exp_name}   (CREPE 기준, {len(rows)}발화)\n{"="*74}')
-    print(f'{"단":<14}{"cents RMSE":>12}{"반음이상오차":>14}{"V/UV오차":>11}{"octave jump":>13}')
+    print(f'\n{"="*74}\nresynthesis ladder — {exp_name}   (against CREPE, {len(rows)} utterances)\n{"="*74}')
+    print(f'{"rung":<14}{"cents RMSE":>12}{">semitone err":>15}{"V/UV err":>11}{"octave jump":>13}')
     for key, label, note in RUNGS:
         agg = f0_metrics.aggregate(metrics.get(key, []))
         if not agg:
             continue
         print(f'{key:<14}{agg["cents_rmse"]:>12.1f}{agg["gross_error"]*100:>13.1f}%'
               f'{agg["vuv_error"]*100:>10.1f}%{agg["octave_jump"]*100:>12.2f}%')
-    print(f'\nmel L1 (예측 vs GT)  {np.mean([r["mel_l1"] for r in rows]):.4f}')
-    print(f'청취: {out_html}')
+    print(f'\nmel L1 (predicted vs GT)  {np.mean([r["mel_l1"] for r in rows]):.4f}')
+    print(f'listen: {out_html}')
 
 
 if __name__ == '__main__':

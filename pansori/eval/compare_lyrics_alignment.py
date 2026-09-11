@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Does snapping the lyrics to the 창본 actually improve MFA's alignment?
+"""Does snapping the lyrics to the changbon actually improve MFA's alignment?
 
 Prettier text proves nothing. The lyrics exist to be MFA's input, so the test
 is MFA's own failure signature, the one pansori/docs/SEGMENTATION_VERDICT.md §2 established:
@@ -13,8 +13,9 @@ snapped text -- so the comparison is paired and nothing but the .lab differs.
 data/{set}/wavs is gone once the pipeline has run, so the sampled clips are
 re-cut from the source audio the way 01_segment.py cut them (44.1kHz mono).
 
-정렬기는 preprocess/align.yaml 이 정한 것을 쓴다 (--aligner 로 덮어쓸 수 있다).
-가사 축을 재는 자이므로 정렬기는 고정해야 한다 — 두 팔이 같은 정렬기를 통과한다.
+The aligner is whatever preprocess/align.yaml says (--aligner overrides it).
+This is a ruler for the lyrics axis, so the aligner has to be held fixed -- both
+arms pass through the same one.
 
 Run in the `aligner` env (needs praatio, librosa, soundfile, and the mfa CLI).
 
@@ -69,7 +70,7 @@ def cut_clips(rows, segments, wav_dir):
 def build_corpus(rows, wav_dir, corpus_dir, field, aligner):
     """wav symlink + .lab holding `field`'s text, for every sampled item.
 
-    The .lab formatting is the aligner's, not ours -- MFA reads 어절, SOFA reads
+    The .lab formatting is the aligner's, not ours -- MFA reads eojeol, SOFA reads
     whatever `sofa.lab_unit` says. Same text, the shape each one expects.
     """
     corpus_dir.mkdir(parents=True, exist_ok=True)
@@ -112,21 +113,21 @@ def report(before, after, rows):
     """Paired comparison over the items both runs aligned."""
     shared = sorted(set(before) & set(after))
     if not shared:
-        sys.exit("두 정렬에 공통으로 성공한 항목이 없습니다.")
+        sys.exit("no item succeeded in both alignments.")
 
     print(f"\n{'=' * 68}")
-    print(f"정렬 성공: whisper {len(before)} / snapped {len(after)} "
-          f"/ 공통 {len(shared)} (표본 {len(rows)})\n")
-    print(f"{'지표':<26}{'whisper':>11}{'snapped':>11}{'변화':>12}")
+    print(f"aligned: whisper {len(before)} / snapped {len(after)} "
+          f"/ in common {len(shared)} (sample {len(rows)})\n")
+    print(f"{'metric':<26}{'whisper':>11}{'snapped':>11}{'change':>12}")
 
     def mean(source, key):
         return sum(source[i][key] for i in shared) / len(shared)
 
     for key, label, unit in [
-            ("floor_pct", "0.03초 하한선 비율", "%"),
-            ("long_silence", "1초+ 침묵 (평균)", "s"),
-            ("silence_pct", "전체 침묵 비율", "%"),
-            ("n_phones", "음소 수 (평균)", "")]:
+            ("floor_pct", "fraction at the 0.03 s floor", "%"),
+            ("long_silence", "1s+ silence (mean)", "s"),
+            ("silence_pct", "overall silence fraction", "%"),
+            ("n_phones", "phonemes (mean)", "")]:
         a, b = mean(before, key), mean(after, key)
         delta = f"{b - a:+.2f}{unit}"
         if a:
@@ -135,27 +136,27 @@ def report(before, after, rows):
 
     better = sum(after[i]["floor_pct"] < before[i]["floor_pct"] for i in shared)
     worse = sum(after[i]["floor_pct"] > before[i]["floor_pct"] for i in shared)
-    print(f"\n하한선 비율이 개선된 클립 {better} / 악화 {worse} "
-          f"/ 동일 {len(shared) - better - worse}")
+    print(f"\nclips whose floor rate improved {better} / worsened {worse} "
+          f"/ unchanged {len(shared) - better - worse}")
 
     floor_before, floor_after = mean(before, "floor_pct"), mean(after, "floor_pct")
     silence_ok = mean(after, "long_silence") <= mean(before, "long_silence") + 0.05
     passed = floor_before and (floor_before - floor_after) / floor_before >= 0.10
-    print(f"\n합격선: 하한선 -10% 이상 그리고 1초+ 침묵 증가 없음  ->  "
-          f"{'통과' if passed and silence_ok else '미달'}")
+    print(f"\npass line: floor rate down 10% or more AND no increase in 1s+ silence  ->  "
+          f"{'PASS' if passed and silence_ok else 'FAIL'}")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="스냅 가사의 정렬 개선 검증")
+    parser = argparse.ArgumentParser(description="test whether snapped lyrics improve alignment")
     parser.add_argument("--set", default="full")
     parser.add_argument("--lyrics", default="lyrics_snapped.jsonl")
-    parser.add_argument("--n", type=int, default=200, help="표본 세그먼트 수")
+    parser.add_argument("--n", type=int, default=200, help="number of segments to sample")
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--work-dir", default="", help="기본: data/{set}/lyric_eval")
+    parser.add_argument("--work-dir", default="", help="default: data/{set}/lyric_eval")
     parser.add_argument("--reuse", action="store_true",
-                        help="이미 잘라둔 wav와 정렬 결과를 재사용하고 분석만")
+                        help="reuse already-cut wavs and alignment output; analyse only")
     parser.add_argument("--aligner", default=None, choices=["mfa", "sofa"],
-                        help="기본값은 preprocess/align.yaml 의 aligner")
+                        help="defaults to the aligner in preprocess/align.yaml")
     args = parser.parse_args()
 
     config = load_align_config()
@@ -168,19 +169,19 @@ def main() -> None:
 
     snapped = [r for r in lyrics if r["source"] == "book"]
     if not snapped:
-        sys.exit(f"{args.lyrics} 에 source=book 인 세그먼트가 없습니다.")
+        sys.exit(f"{args.lyrics} has no segments with source=book.")
     rows = random.Random(args.seed).sample(snapped, min(args.n, len(snapped)))
-    print(f"교정된 {len(snapped):,}개 중 {len(rows)}개 표본 "
-          f"(seed={args.seed}, 정렬기={aligner.name})")
+    print(f"sampling {len(rows)} of {len(snapped):,} corrected segments "
+          f"(seed={args.seed}, aligner={aligner.name})")
 
     work = Path(args.work_dir) if args.work_dir else out_dir / "lyric_eval"
     wav_dir = work / "wavs"
 
     if not args.reuse:
-        print("\n클립 재절단...")
+        print("\nre-cutting clips...")
         cut_clips(rows, segments, wav_dir)
         for field, tag in [("text_whisper", "whisper"), ("text", "snapped")]:
-            print(f"\n{aligner.name} 정렬 ({tag})...")
+            print(f"\n{aligner.name} aligning ({tag})...")
             build_corpus(rows, wav_dir, work / f"corpus_{tag}", field, aligner)
             aligner.run(work / f"corpus_{tag}", work / f"aligned_{tag}")
 
@@ -189,7 +190,7 @@ def main() -> None:
     report(before, after, rows)
     json.dump({"before": before, "after": after},
               open(work / "metrics.json", "w"), ensure_ascii=False, indent=1)
-    print(f"\n원본 지표: {work / 'metrics.json'}")
+    print(f"\nraw metrics: {work / 'metrics.json'}")
 
 
 if __name__ == "__main__":

@@ -1,67 +1,78 @@
 #!/usr/bin/env python3
-"""합성음의 **발음**을 잰다 — 사다리 각 단에서 어디가 무너지는지 가른다.
+"""Measures the synthesis's **pronunciation** -- isolating which rung of the
+ladder it collapses at.
 
-`pansori/compare/` 의 지표 22개는 전부 피치 아니면 스펙트럼이다. 가장 가까운
-`voiced_agree` 도 "이 프레임에서 소리를 내야 하는가"만 재므로, 자음을 통째로 빼먹거나
-`g` 를 `d` 로 발음해도 떨어지지 않는다 (홀드아웃에서 0.95~0.97 로 높게 나온다).
-그래서 지금까지의 모든 판정이 발음을 보지 못한 채 내려졌다. 이 스크립트가 그 구멍을 메운다.
+All 22 metrics in `pansori/compare/` are pitch or spectrum. Even the closest one,
+`voiced_agree`, only asks "should this frame make sound", so dropping a consonant
+entirely or pronouncing `g` as `d` does not move it (it sits high at 0.95-0.97 on
+the hold-out). Every verdict reached so far was therefore reached without being
+able to see pronunciation. This script fills that hole.
 
-## 사다리로 범인을 가린다
+## The ladder isolates the culprit
 
-    1_orig      원본 녹음                        — 널 대조 (아래 참고)
-    0_vocoder   GT mel + GT f0 → 보코더          — 보코더 천장
-    2_resynth   실제 ph_dur + 실제 f0 → acoustic — 라벨과 음향모델
-    3_pitch     실제 ph_dur, f0 예측
-    4_full      노트+가사만, dur/f0 둘 다 예측
+    1_orig      the original recording              -- null control (see below)
+    0_vocoder   GT mel + GT f0 -> vocoder           -- the vocoder ceiling
+    2_resynth   real ph_dur + real f0 -> acoustic   -- the labels and the acoustic model
+    3_pitch     real ph_dur, f0 predicted
+    4_full      notes + lyrics only, dur and f0 both predicted
 
-`2_resynth` 는 GT ph_dur 을 그대로 먹인다. 그 GT 가 바로 22% 가 MFA 하한선에 박혀 있는
-라벨이므로 (`pansori/eval/label_report.py`), 여기서 이미 무너지면 범인은 라벨이거나
-음향모델이고, `4_full` 에서만 무너지면 duration 예측이다. `0_vocoder` 가 이미 나쁘면
-그 아래 전부가 무의미하다.
+`2_resynth` is fed the GT ph_dur directly. That GT is exactly the labels where
+22% sit on MFA's floor (`pansori/eval/label_report.py`), so a collapse already at
+this rung means the culprit is the labels or the acoustic model, while a collapse
+only at `4_full` means duration prediction. If `0_vocoder` is already bad,
+everything below it is meaningless.
 
-## 두 자를 같이 쓴다 — 서로의 약점을 가려 준다
+## Two rulers together -- each covers the other's weakness
 
-**whisper**: 렌더 오디오를 whisper-large-v3 로 전사해 입력 가사와 CER. 사람이 알아듣는
-것에 가장 가깝지만, Whisper 는 언어모델을 갖고 있어 **없는 소리를 채워 넣는다**.
+**whisper**: transcribe the rendered audio with whisper-large-v3 and take CER
+against the input lyrics. Closest to what a person hears, but Whisper carries a
+language model and **fills in sounds that are not there**.
 
-**mfa**: 렌더 오디오와 아는 가사를 korean_mfa 로 다시 정렬하고, 정렬기가 **음향적 근거를
-찾았는지**를 본다. 두 가지다:
+**mfa**: re-align the rendered audio against the known lyrics with korean_mfa and
+look at whether the aligner **found acoustic evidence**. Two things:
 
-  - `floor_rate` — 재정렬 결과가 MFA 최소 길이(30 ms)에 박힌 비율. 소리에 그 음소가
-    없으면 정렬기는 최소값에 park 하고 넘어간다. 라벨 쪽을 재는
-    `pansori/eval/label_report.py` 와 정확히 같은 자를 합성음에 대는 것이다.
-  - `boundary_mae_ms` — GT 음소 경계와 재정렬 경계의 평균 차이.
+  - `floor_rate` -- the fraction of the re-alignment pinned to MFA's minimum
+    duration (30 ms). When the sound does not contain that phoneme, the aligner
+    parks it at the minimum and moves on. This applies to the synthesis exactly
+    the same ruler `pansori/eval/label_report.py` applies to the labels.
+  - `boundary_mae_ms` -- mean difference between the GT phoneme boundaries and
+    the re-aligned ones.
 
-**`spn` 은 단 비교에 쓰지 않는다.** 처음에는 "렌더된 소리에 그 자음이 없으면 MFA 가 spn 을
-낸다"고 보고 넣었는데, 실측해 보니 **같은 발화의 다섯 단에서 값이 완전히 동일했다**.
-spn 은 사전에 없는 단어(OOV)에 대해 나오는 것이라 오디오가 아니라 **가사의 성질**이다.
-(`pansori/docs/LYRICBOOK_VERDICT.md` §4 에서 spn 이 164→202 로 는 것도 텍스트가 바뀐 실험이었으므로
-모순되지 않는다.) 표본의 OOV 정도를 알려 주는 참고값으로만 한 번 인쇄한다.
+**`spn` is not used to compare rungs.** It went in on the theory "MFA emits spn
+when the rendered sound has no such consonant", but measured, **its value was
+completely identical across all five rungs of the same utterance**. spn is
+emitted for out-of-vocabulary words, so it is a property of the **lyrics**, not
+the audio. (That `pansori/docs/LYRICBOOK_VERDICT.md` §4 saw spn rise 164->202 is
+not a contradiction -- that was an experiment where the text changed.) It is
+printed once as a reference figure for how much OOV the sample contains.
 
-`phone_match` 도 같은 이유로 거의 상수다 — 음소열은 우리가 준 가사가 정한다. MFA 가
-음소를 삽입·삭제할 때만 움직이므로 참고로만 둔다.
+`phone_match` is near-constant for the same reason -- the phoneme sequence is
+fixed by the lyrics we supplied. It only moves when MFA inserts or deletes a
+phoneme, so it stays as a reference value.
 
-## `1_orig` 은 상한선이 아니다 — 널 대조다
+## `1_orig` is not a ceiling -- it is a null control
 
-CER 의 참조 텍스트는 `data/full/lyrics.jsonl` 인데, 그것 자체가 **Whisper 가 이 녹음에서
-뽑은 전사**다 (03_transcribe.py). 그래서 원본을 다시 전사하면 자기 자신과 비교하는 셈이라
-CER 이 0 에 가깝게 나온다. 이건 판소리를 잘 알아듣는다는 뜻이 **아니고**, Whisper 의 디코딩이
-재현된다는 뜻이다. 값이 0 근처가 아니면 그 뒤 숫자는 전부 무효다.
+The CER reference text is `data/full/lyrics.jsonl`, which is itself **Whisper's
+transcription of these very recordings** (03_transcribe.py). So re-transcribing
+the original compares it against itself and the CER comes out near zero. That
+does **not** mean pansori is well understood; it means Whisper's decoding
+reproduces. If the value is not near zero, every number after it is void.
 
-합성음의 실질적 천장은 `0_vocoder` 다. MFA 쪽에서는 반대로 `1_orig` 이 제대로 된 천장이다
-(정렬기는 오디오와 텍스트를 독립적으로 받으므로 순환이 없다).
+The real ceiling for synthesis is `0_vocoder`. On the MFA side it is the other
+way round: `1_orig` is a proper ceiling (the aligner receives audio and text
+independently, so there is no circularity).
 
-## 실행 — env 가 셋이라 단계를 나눈다
+## Running it -- split into stages because it needs three envs
 
     conda activate dsp     && PYTHONPATH=. python pansori/eval/intelligibility.py --stage render
     conda activate pansori && PYTHONPATH=. python pansori/eval/intelligibility.py --stage asr
     conda activate aligner && PYTHONPATH=. python pansori/eval/intelligibility.py --stage mfa
     conda activate dsp     && PYTHONPATH=. python pansori/eval/intelligibility.py --stage score
 
-`--stage all` 은 한 env 안에서 가능한 단계만 돌린다. 각 단계는 이미 만든 산출물을 건너뛰므로
-중간에 끊고 다시 시작해도 된다.
+`--stage all` runs only the stages possible inside the current env. Each stage skips
+artefacts it has already produced, so it is safe to interrupt and restart.
 
-출력: eval/out/{asr,mfa}.jsonl → eval/out/intelligibility.json + 콘솔 표
+Output: eval/out/{asr,mfa}.jsonl -> eval/out/intelligibility.json + a console table
 """
 
 import argparse
@@ -82,7 +93,7 @@ RENDER_DIR = REPO / 'pansori' / 'compare' / 'out' / 'new'
 LYRICS = REPO / 'pansori' / 'data' / 'full' / 'lyrics.jsonl'
 MFA_WORK = OUT_DIR / 'mfa_work'
 
-# 시드를 안 쓰는 단. 원본과 보코더 천장은 확률적 요소가 없다.
+# Rungs that use no seed. The original and the vocoder ceiling have no stochastic part.
 DETERMINISTIC = {'1_orig': None, '0_vocoder': 0}
 SAMPLED = ('2_resynth', '3_pitch', '4_full')
 RUNGS = ('1_orig', '0_vocoder') + SAMPLED
@@ -90,7 +101,7 @@ RUNGS = ('1_orig', '0_vocoder') + SAMPLED
 MFA_FLOOR = 0.030
 
 
-# ---------------------------------------------------------------- 공통
+# ---------------------------------------------------------------- shared
 
 def wav_path(item, rung, seed, items_mod):
     if rung == '1_orig':
@@ -99,7 +110,7 @@ def wav_path(item, rung, seed, items_mod):
 
 
 def plan(items, seeds):
-    """[(item, rung, seed), ...] — 존재 여부는 각 단계가 따로 확인한다."""
+    """[(item, rung, seed), ...] -- each stage checks existence for itself."""
     out = []
     for item in items:
         for rung in RUNGS:
@@ -112,7 +123,7 @@ def plan(items, seeds):
 
 def load_lyrics():
     if not LYRICS.exists():
-        sys.exit(f'가사 파일이 없다: {LYRICS}')
+        sys.exit(f'no lyrics file at: {LYRICS}')
     table = {}
     with open(LYRICS, encoding='utf-8') as f:
         for line in f:
@@ -136,7 +147,7 @@ def write_jsonl(path, rows):
 
 
 def edit_distance(a, b) -> int:
-    """Levenshtein. 시퀀스가 짧아(음소 ~30, 글자 ~30) 순수 파이썬으로 충분하다."""
+    """Levenshtein. The sequences are short (~30 phonemes, ~30 characters), so pure Python is enough."""
     if len(a) < len(b):
         a, b = b, a
     prev = list(range(len(b) + 1))
@@ -149,20 +160,20 @@ def edit_distance(a, b) -> int:
 
 
 def hangul_only(text: str) -> str:
-    """CER 의 비교 단위. 공백·문장부호·한자는 노래로 실현되지 않으므로 버린다."""
+    """The comparison unit for CER. Whitespace, punctuation and Hanja are not realised in singing, so they are dropped."""
     return ''.join(ch for ch in text if '가' <= ch <= '힣')
 
 
 # ---------------------------------------------------------------- 1. render
 
 def stage_render(items, seeds):
-    """compare/render_new.py 에 넘긴다 — 렌더 로직을 두 벌 두지 않는다."""
+    """Hand off to compare/render_new.py -- there is not a second copy of the render logic."""
     script = REPO / 'pansori' / 'compare' / 'render_new.py'
-    # render_new 의 --seeds 는 개수다 (C.SEEDS[:n] 를 자른다), 시드 값이 아니다.
+    # render_new's --seeds is a count (it slices C.SEEDS[:n]), not a seed value.
     cmd = [sys.executable, str(script), '--items', ','.join(items),
            '--seeds', str(len(seeds))]
     env = dict(os.environ, PYTHONPATH=str(REPO))
-    print(f'| render: {" ".join(cmd[:3])} … ({len(items)}항목 x {len(seeds)}시드)')
+    print(f'| render: {" ".join(cmd[:3])} … ({len(items)} items x {len(seeds)} seeds)')
     subprocess.run(cmd, check=True, cwd=str(REPO), env=env)
 
 
@@ -186,9 +197,9 @@ def stage_asr(items, seeds, force=False):
     todo = [k for k in plan(items, seeds) if k not in done]
     todo = [(i, r, s) for i, r, s in todo if Path(wav_path(i, r, s, I)).exists()]
     if not todo:
-        print(f'| asr: 새로 할 것 없음 ({len(done)}행)')
+        print(f'| asr: nothing new to do ({len(done)} rows)')
         return
-    print(f'| asr: {len(todo)}개 전사 (whisper-large-v3 로드 중)')
+    print(f'| asr: transcribing {len(todo)} (loading whisper-large-v3)')
 
     model, processor, device, dtype = transcribe_mod.load_model()
     rows = list(done.values())
@@ -208,7 +219,7 @@ def stage_asr(items, seeds, force=False):
 # ---------------------------------------------------------------- 3. mfa
 
 def _load_align_module():
-    """04_align.py 는 숫자로 시작해 import 문으로 못 부른다."""
+    """04_align.py starts with a digit and cannot be reached by an import statement."""
     import importlib.util
     spec = importlib.util.spec_from_file_location(
         'align', REPO / 'pansori' / 'preprocess' / '04_align.py')
@@ -237,7 +248,7 @@ def stage_mfa(items, seeds, force=False):
             continue
         todo.append((item, rung, seed, src))
     if not todo:
-        print(f'| mfa: 새로 할 것 없음 ({len(done)}행)')
+        print(f'| mfa: nothing new to do ({len(done)} rows)')
         return
 
     corpus.mkdir(parents=True, exist_ok=True)
@@ -251,7 +262,7 @@ def stage_mfa(items, seeds, force=False):
             link.unlink()
         os.symlink(src.resolve(), link)
         (corpus / f'{name}.lab').write_text(lyrics[item], encoding='utf-8')
-    print(f'| mfa: {len(todo)}개 정렬')
+    print(f'| mfa: aligning {len(todo)}')
 
     align.run_mfa(corpus, aligned)
 
@@ -266,11 +277,11 @@ def stage_mfa(items, seeds, force=False):
                      'phones': parsed['phones'], 'words': parsed['words'],
                      'spn': _count_spn(tg)})
     write_jsonl(out_path, rows)
-    print(f'→ {out_path}  (TextGrid {len(rows) - len(done)}개 파싱)')
+    print(f'-> {out_path}  ({len(rows) - len(done)} TextGrids parsed)')
 
 
 def _count_spn(tg_path) -> int:
-    """MFA 가 음향적으로 포기한 구간 수. textgrid_to_coda 는 'sil' 로 접어 버린다."""
+    """How many spans MFA acoustically gave up on. textgrid_to_coda folds them into 'sil'."""
     from praatio import textgrid as tgio
     grid = tgio.openTextgrid(str(tg_path), includeEmptyIntervals=True)
     return sum(1 for iv in grid.getTier('phones').entries
@@ -304,8 +315,9 @@ def score_mfa(rows, gt_rows):
         durs = [end - start for _, start, end in phones]
         floor = sum(1 for d in durs if d <= MFA_FLOOR + 1e-6) / len(durs)
 
-        # 경계 오차: GT 음소 경계와 재정렬 경계를 순서대로 짝지어 비교한다. 개수가
-        # 다르면 짧은 쪽까지만 — 길이 자체가 이미 phone_match 로 드러난다.
+        # Boundary error: pair the GT phoneme boundaries with the re-aligned ones in
+        # order. If the counts differ, go only as far as the shorter -- the length
+        # difference itself already shows up in phone_match.
         gt_bounds, hyp_bounds = _bounds(gt['phones']), _bounds(phones)
         n = min(len(gt_bounds), len(hyp_bounds))
         mae = (sum(abs(a - b) for a, b in zip(gt_bounds[:n], hyp_bounds[:n])) / n * 1000
@@ -329,7 +341,7 @@ def _bounds(phones):
 
 
 def gt_phones(items):
-    """학습 라벨의 음소열과 경계 — 재정렬 결과를 여기에 대고 잰다."""
+    """The training labels' phoneme sequence and boundaries -- what the re-alignment is measured against."""
     from pansori.compare import items as I
     out = {}
     for item in items:
@@ -346,11 +358,11 @@ def gt_phones(items):
 
 
 def _by_rung(scored, key=None):
-    """(item, rung, seed) -> 값  =>  rung -> [발화별 시드 중앙값]."""
+    """(item, rung, seed) -> value  =>  rung -> [per-utterance median over seeds]."""
     per_item = defaultdict(lambda: defaultdict(list))
     for (item, rung, _), value in scored.items():
         v = value if key is None else value[key]
-        if v == v:                       # NaN 제외
+        if v == v:                       # skip NaN
             per_item[rung][item].append(v)
     return {rung: [median(vs) for vs in items.values()]
             for rung, items in per_item.items()}
@@ -361,7 +373,7 @@ def stage_score(items, seeds):
     asr_rows = read_jsonl(OUT_DIR / 'asr.jsonl')
     mfa_rows = read_jsonl(OUT_DIR / 'mfa.jsonl')
     if not asr_rows and not mfa_rows:
-        sys.exit('잴 것이 없다 — --stage asr / --stage mfa 를 먼저 돌릴 것')
+        sys.exit('nothing to measure -- run --stage asr / --stage mfa first')
 
     report = {'n_items': len(items), 'seeds': list(seeds), 'whisper': {}, 'mfa': {}}
 
@@ -369,7 +381,7 @@ def stage_score(items, seeds):
         cer = _by_rung(score_asr(asr_rows, lyrics))
         null = median(cer['1_orig']) if cer.get('1_orig') else float('nan')
         print('\n── whisper CER ' + '─' * 46)
-        print(f"  {'단':<12} {'n':>4} {'CER':>8} {'0_vocoder 대비':>15}")
+        print(f"  {'rung':<12} {'n':>4} {'CER':>8} {'vs 0_vocoder':>15}")
         base = median(cer['0_vocoder']) if cer.get('0_vocoder') else float('nan')
         for rung in RUNGS:
             vals = cer.get(rung)
@@ -379,17 +391,17 @@ def stage_score(items, seeds):
             delta = '—' if rung in ('1_orig', '0_vocoder') else f'{m - base:+.3f}'
             print(f'  {rung:<12} {len(vals):>4} {m:>8.3f} {delta:>15}')
             report['whisper'][rung] = {'n': len(vals), 'cer_median': m}
-        print(f'\n  널 대조 (1_orig): {null:.3f}  ← 0 근처가 아니면 아래 숫자는 무효다')
-        print('  참조 텍스트가 원본의 Whisper 전사라서 1_orig 은 천장이 아니다.')
-        print('  합성음의 천장은 0_vocoder 다.')
+        print(f'\n  null control (1_orig): {null:.3f}  <- if not near 0, the numbers below are void')
+        print('  The reference text is Whisper\'s transcription of the original, so 1_orig is not a ceiling.')
+        print('  The synthesis ceiling is 0_vocoder.')
         report['whisper']['_null_control'] = null
 
     if mfa_rows:
         gt = gt_phones(items)
         scored = score_mfa(mfa_rows, gt)
-        print('\n── MFA 재정렬 ' + '─' * 47)
-        print(f"  {'단':<12} {'n':>4} {'하한선율':>9} {'경계MAE ms':>11} "
-              f"{'음소일치*':>10}")
+        print('\n── MFA re-alignment ' + '─' * 47)
+        print(f"  {'rung':<12} {'n':>4} {'floor':>9} {'bound MAE ms':>13} "
+              f"{'ph match*':>10}")
         keys = ('floor_rate', 'boundary_mae_ms', 'phone_match', 'spn_rate')
         grouped = {key: _by_rung(scored, key) for key in keys}
         for rung in RUNGS:
@@ -404,12 +416,12 @@ def stage_score(items, seeds):
                   f"{cells['boundary_mae_ms']:>11.0f} {cells['phone_match'] * 100:>9.1f}%")
             report['mfa'][rung] = cells
         oov = grouped['spn_rate'].get('1_orig')
-        print(f"\n  하한선율 = 재정렬이 30ms 에 박힌 비율. 소리에 그 음소가 없으면 오른다")
-        print(f"  (label_report.py 가 라벨에 대는 것과 같은 자).")
-        print(f"  * 음소일치는 우리가 준 가사가 음소열을 정하므로 거의 상수다 — 참고값.")
+        print(f"\n  floor = the fraction of the re-alignment pinned to 30ms. It rises when the")
+        print(f"  sound does not contain that phoneme (the same ruler label_report.py applies to the labels).")
+        print(f"  * ph match is near-constant because the lyrics we supplied fix the phoneme sequence -- a reference value.")
         if oov:
-            print(f"  표본의 OOV(spn) 비율 {median(oov) * 100:.0f}% — 가사의 성질이라 "
-                  f"단마다 같다. 단 비교에 쓰지 않는다.")
+            print(f"  OOV (spn) rate in the sample {median(oov) * 100:.0f}% -- a property of the lyrics, so "
+                  f"identical across rungs. Not used to compare rungs.")
             report['mfa']['_oov_rate'] = median(oov)
 
     out = OUT_DIR / 'intelligibility.json'
@@ -447,11 +459,11 @@ def main():
     p.add_argument('--stage', required=True,
                    choices=['render', 'asr', 'mfa', 'score', 'all'])
     p.add_argument('--items', default=None,
-                   help='쉼표 목록. 기본은 홀드아웃 층화표본 --n 개')
-    p.add_argument('--n', type=int, default=40, help='표본 크기 (기본 40)')
+                   help='comma-separated list. Default: a stratified hold-out sample of --n')
+    p.add_argument('--n', type=int, default=40, help='sample size (default 40)')
     p.add_argument('--seeds', type=int, default=3)
-    p.add_argument('--force', action='store_true', help='이미 만든 행도 다시 만든다')
-    p.add_argument('--wandb', action='store_true', help='score 결과를 wandb 에 올린다')
+    p.add_argument('--force', action='store_true', help='rebuild rows that already exist')
+    p.add_argument('--wandb', action='store_true', help='upload the score results to wandb')
     p.add_argument('--wandb-project', default='pansori')
     p.add_argument('--wandb-group', default=None)
     p.add_argument('--wandb-name', default='intelligibility')
@@ -461,11 +473,11 @@ def main():
     if args.items:
         items = [s for s in args.items.split(',') if s]
         for item in items:
-            I.assert_held_out(item)      # 학습 데이터가 새면 숫자가 무의미하다
+            I.assert_held_out(item)      # if training data leaks in, the numbers mean nothing
     else:
         items = I.holdout_sample(args.n)
     seeds = tuple(range(1, args.seeds + 1))
-    print(f'| 항목 {len(items)}개 · 시드 {seeds}')
+    print(f'| {len(items)} items · seeds {seeds}')
 
     stages = [args.stage] if args.stage != 'all' else ['render', 'asr', 'mfa', 'score']
     for stage in stages:
@@ -483,7 +495,7 @@ def main():
         except ImportError as exc:
             if args.stage != 'all':
                 raise
-            print(f'| {stage} 건너뜀 (이 env 에 없는 의존성): {exc}')
+            print(f'| {stage} skipped (a dependency missing from this env): {exc}')
 
 
 if __name__ == '__main__':

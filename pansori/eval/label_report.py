@@ -1,31 +1,36 @@
 #!/usr/bin/env python3
-"""가사가 아니라 **라벨**을 잰다 — transcriptions.csv 의 ph_dur 분포 진단.
+"""Measures the **labels**, not the lyrics -- a diagnosis of the ph_dur
+distribution in transcriptions.csv.
 
-발음이 나쁠 때 모델을 먼저 의심하기 쉽지만, 이 코퍼스에서 가장 큰 이상 신호는
-학습 라벨 자체에 있다. `data/pansori` 의 ph_dur 값을 세어 보면 **전체 음소의
-22.3% 가 정확히 `0.030000` 초**다. 다음으로 흔한 값(0.04)의 3.2배이고, 자연스러운
-발화 길이 분포에서는 나올 수 없는 모양이다. 0.03 은 MFA 의 최소 음소 길이이므로,
-그 스파이크는 곧 **"정렬기가 여기서 포기했다"** 는 표시다.
+When the pronunciation is bad it is easy to suspect the model first, but the
+loudest anomaly in this corpus is in the training labels themselves. Count the
+ph_dur values in `data/pansori` and **22.3% of all phonemes are exactly
+`0.030000` seconds**. That is 3.2x the next most common value (0.04), and a shape
+that cannot arise from a natural duration distribution. 0.03 is MFA's minimum
+phoneme duration, so that spike is a marker for **"the aligner gave up here"**.
 
-그리고 균등하게 퍼져 있지 않다. 초성 파열음은 40% 대가 하한선에 박혀 있고
-(pp 50.7 / tt 46.6 / b 44.0 / g 43.6 / d 42.4), 모음과 종성은 10~20% 대로 멀쩡하다.
-그래서 이 리포트는 '자음' 하나로 뭉뚱그리지 않고 초성과 종성을 갈라 센다
-(`pansori_lib.phone_class`) — 그 구분이 유일하게 볼 만한 것이기 때문이다.
+And it is not spread evenly. Onset plosives are pinned to the floor at rates in
+the 40s (pp 50.7 / tt 46.6 / b 44.0 / g 43.6 / d 42.4) while vowels and codas are
+fine in the 10-20 range. So this report does not lump them into one 'consonant'
+bucket but counts onsets and codas apart (`pansori_lib.phone_class`) -- because
+that distinction is the only thing worth looking at.
 
-이 스크립트가 하지 않는 것:
+What this script does not do:
 
-  - **정렬을 고치지 않는다.** 기준선을 만들 뿐이다. 나중에 재정렬을 시도할 때
-    개선 여부를 재려면 그 전에 이 숫자가 있어야 한다.
-  - **좋다/나쁘다를 판정하지 않는다.** 합격선을 정할 근거가 아직 없다. 두 코퍼스를
-    나란히 놓고 비교할 수는 있다 (--corpus 를 두 개 준다).
+  - **It does not fix the alignment.** It only builds a baseline. To measure
+    whether a later re-alignment attempt improved anything, these numbers have to
+    exist first.
+  - **It does not judge good or bad.** There is no basis yet for setting a pass
+    line. It can put two corpora side by side, though (pass --corpus twice).
 
-모델도 GPU 도 필요 없다. transcriptions.csv 만 읽으므로 어느 env 에서든 몇 초에 끝난다.
+Needs no model and no GPU. It reads only transcriptions.csv, so it finishes in
+seconds under any env.
 
     python pansori/eval/label_report.py
     python pansori/eval/label_report.py --corpus data/pansori data/pansori_snap
     python pansori/eval/label_report.py --html pansori/eval/out/label_report.html
 
-출력: 콘솔 표 + eval/out/label_report.json + (--html) 자체완결 HTML
+Output: a console table + eval/out/label_report.json + (--html) a self-contained HTML page
 """
 
 import argparse
@@ -65,8 +70,8 @@ TIMESTEP = HOP_SIZE / SAMPLE_RATE
 FLOOR_FRAMES = round(MFA_FLOOR / TIMESTEP)      # 3
 
 CLASS_LABEL = {
-    'onset': '초성', 'coda': '종성', 'vowel': '모음',
-    'glide': '활음', 'sp': '무음', 'other': '기타',
+    'onset': 'onset', 'coda': 'coda', 'vowel': 'vowel',
+    'glide': 'glide', 'sp': 'silence', 'other': 'other',
 }
 
 
@@ -83,7 +88,7 @@ def read_corpus(root: Path) -> dict:
 
     csvs = sorted(root.glob('*/transcriptions.csv'))
     if not csvs:
-        sys.exit(f'transcriptions.csv 를 찾을 수 없음: {root}')
+        sys.exit(f'no transcriptions.csv found under: {root}')
 
     for path in csvs:
         speaker = path.parent.name
@@ -92,7 +97,7 @@ def read_corpus(root: Path) -> dict:
                 seq = row['ph_seq'].split()
                 raw = row['ph_dur'].split()
                 if len(seq) != len(raw):
-                    sys.exit(f"ph_seq/ph_dur 길이 불일치: {path} {row['name']}")
+                    sys.exit(f"ph_seq/ph_dur length mismatch: {path} {row['name']}")
                 n_utt += 1
                 # Mirror the binarizer's rounding exactly so the frame counts are
                 # the ones the model is actually trained on, not a re-derivation.
@@ -220,25 +225,25 @@ def print_report(s: dict) -> None:
     print(f"\n{'=' * 72}")
     print(f"{s['root']}")
     print(f"{'=' * 72}")
-    print(f"발화 {s['n_utt']:,}  ·  음소 {s['n_ph']:,}  ·  {s['hours']:.2f}시간")
-    print(f"무음(SP/AP) 시간 비율 {s['sp_time_share'] * 100:.1f}%  ·  "
-          f"음소/초(무음 제외) {s['phones_per_speech_second']:.2f}")
+    print(f"{s['n_utt']:,} utterances  ·  {s['n_ph']:,} phonemes  ·  {s['hours']:.2f} h")
+    print(f"silence (SP/AP) share of time {s['sp_time_share'] * 100:.1f}%  ·  "
+          f"phonemes/sec excluding silence {s['phones_per_speech_second']:.2f}")
     q = s['quantiles']
-    print('ph_dur 분위(ms)  ' + '  '.join(f'{k}={v:.0f}' for k, v in q.items()))
+    print('ph_dur quantiles (ms)  ' + '  '.join(f'{k}={v:.0f}' for k, v in q.items()))
 
-    print(f"\n── ph_dur 값 상위 (전체 {s['n_ph']:,}개 중) " + '─' * 26)
+    print(f"\n── most common ph_dur values (of {s['n_ph']:,}) " + '─' * 26)
     for row in s['top_values'][:8]:
         bar = '█' * round(row['share'] * 100)
-        flag = '  ← MFA 하한선' if abs(row['ms'] - MFA_FLOOR * 1000) < 0.5 else ''
+        flag = '  ← MFA floor' if abs(row['ms'] - MFA_FLOOR * 1000) < 0.5 else ''
         print(f"  {row['ms']:6.0f}ms  {row['share'] * 100:5.1f}%  {row['n']:8,}  {bar}{flag}")
-    print(f"  ≤{MFA_FLOOR * 1000:.0f}ms 전체: {s['floor_rate'] * 100:.1f}%   "
+    print(f"  ≤{MFA_FLOOR * 1000:.0f}ms overall: {s['floor_rate'] * 100:.1f}%   "
           f"≤{MERGE_FLOOR * 1000:.0f}ms: {s['sub_merge_rate'] * 100:.1f}%")
-    print(f"  ≤{FLOOR_FRAMES}프레임({FLOOR_FRAMES * TIMESTEP * 1000:.1f}ms): "
-          f"{s['floor_rate_frames'] * 100:.1f}%   ← 학습 지표 floor_rate_gt 와 같은 자")
+    print(f"  ≤{FLOOR_FRAMES} frames ({FLOOR_FRAMES * TIMESTEP * 1000:.1f}ms): "
+          f"{s['floor_rate_frames'] * 100:.1f}%   ← the same ruler as the training metric floor_rate_gt")
 
-    print('\n── 부류별 ' + '─' * 52)
-    print(f"  {'부류':<6} {'음소수':>9} {'비중':>7} {'시간비':>7} {'중앙ms':>8} "
-          f"{'≤30ms':>8} {'≤3프레임':>9}")
+    print('\n── by class ' + '─' * 52)
+    print(f"  {'class':<7} {'phonemes':>9} {'share':>7} {'time':>7} {'med ms':>8} "
+          f"{'≤30ms':>8} {'≤3 frames':>10}")
     for cls in PHONE_CLASSES + ('other',):
         c = s['classes'].get(cls)
         if not c:
@@ -247,8 +252,8 @@ def print_report(s: dict) -> None:
               f"{c['time_share'] * 100:>6.1f}% {c['median_ms']:>8.0f} "
               f"{c['floor_rate'] * 100:>7.1f}% {c['floor_rate_frames'] * 100:>8.1f}%")
 
-    print('\n── 음소별 (부류 안에서 등장 순) ' + '─' * 31)
-    print(f"  {'음소':>4} {'부류':<6} {'등장':>9} {'중앙ms':>8} {'하한선율':>9}")
+    print('\n── by phoneme (in order of frequency within each class) ' + '─' * 31)
+    print(f"  {'ph':>4} {'class':<7} {'count':>9} {'med ms':>8} {'floor rate':>11}")
     for cls in PHONE_CLASSES + ('other',):
         members = sorted((p for p in s['phones'].values() if p['cls'] == cls),
                          key=lambda p: -p['n'])
@@ -256,7 +261,7 @@ def print_report(s: dict) -> None:
             print(f"  {p['phone']:>4} {CLASS_LABEL[cls]:<6} {p['n']:>9,} "
                   f"{p['median_ms']:>8.0f} {p['floor_rate'] * 100:>8.1f}%")
 
-    print('\n── 화자별 하한선율 (상·하위 5) ' + '─' * 32)
+    print('\n── floor rate by speaker (top and bottom 5) ' + '─' * 32)
     for row in s['speakers'][:5] + [None] + s['speakers'][-5:]:
         if row is None:
             print('   ...')
@@ -266,15 +271,15 @@ def print_report(s: dict) -> None:
 
 def print_delta(a: dict, b: dict) -> None:
     print(f"\n{'=' * 72}")
-    print(f"차이: {b['root']} − {a['root']}")
+    print(f"difference: {b['root']} − {a['root']}")
     print(f"{'=' * 72}")
-    rows = [('하한선율 전체', 'floor_rate', 100, '%p'),
-            ('무음 시간비', 'sp_time_share', 100, '%p'),
-            ('음소/초', 'phones_per_speech_second', 1, '')]
+    rows = [('floor rate, overall', 'floor_rate', 100, '%p'),
+            ('silence share of time', 'sp_time_share', 100, '%p'),
+            ('phonemes/sec', 'phones_per_speech_second', 1, '')]
     for label, key, scale, unit in rows:
         print(f"  {label:<14} {a[key] * scale:8.2f} → {b[key] * scale:8.2f}  "
               f"({(b[key] - a[key]) * scale:+.2f}{unit})")
-    print(f"  {'부류별 하한선율':<14}")
+    print(f"  {'floor rate by class':<22}")
     for cls in PHONE_CLASSES:
         ca, cb = a['classes'].get(cls), b['classes'].get(cls)
         if not ca or not cb:
@@ -314,7 +319,7 @@ def svg_value_histogram(s: dict, width=880, height=260) -> str:
     bar_w = max(4.0, slot - 4)
 
     parts = [f'<svg viewBox="0 0 {width} {height}" role="img" '
-             f'aria-label="ph_dur 값 분포" style="width:100%;height:auto">']
+             f'aria-label="distribution of ph_dur values" style="width:100%;height:auto">']
 
     for frac in (0, 0.25, 0.5, 0.75, 1.0):
         y = pad_t + ph * (1 - frac)
@@ -335,7 +340,7 @@ def svg_value_histogram(s: dict, width=880, height=260) -> str:
         if is_floor:
             parts.append(f'<text x="{x + bar_w / 2:.1f}" y="{y - 7:.1f}" text-anchor="middle" '
                          f'font-size="12.5" font-weight="600" fill="var(--ink)">'
-                         f'{share * 100:.1f}% · MFA 하한선</text>')
+                         f'{share * 100:.1f}% · MFA floor</text>')
         if i % 2 == 0 or label == '>200':
             parts.append(f'<text x="{x + bar_w / 2:.1f}" y="{height - pad_b + 16:.1f}" '
                          f'text-anchor="middle" font-size="10.5" fill="var(--ink-3)">{_e(label)}</text>')
@@ -370,7 +375,7 @@ def svg_phone_floor(s: dict, width=880, row_h=17) -> str:
     top = 100.0
 
     parts = [f'<svg viewBox="0 0 {width} {height}" role="img" '
-             f'aria-label="음소별 30ms 하한선 비율" style="width:100%;height:auto">']
+             f'aria-label="per-phoneme 30ms floor rate" style="width:100%;height:auto">']
     for frac in (0.25, 0.5, 0.75, 1.0):
         x = pad_l + pw * frac
         parts.append(f'<line x1="{x:.1f}" y1="{pad_t}" x2="{x:.1f}" y2="{height}" '
@@ -380,7 +385,7 @@ def svg_phone_floor(s: dict, width=880, row_h=17) -> str:
     for cls, members in groups:
         overall = s['classes'][cls]['floor_rate'] * 100
         parts.append(f'<text x="0" y="{y + 15:.1f}" font-size="12.5" font-weight="600" '
-                     f'fill="var(--ink-2)">{_e(CLASS_LABEL[cls])} · 전체 {overall:.1f}%</text>')
+                     f'fill="var(--ink-2)">{_e(CLASS_LABEL[cls])} · overall {overall:.1f}%</text>')
         y += head_h
         for p in members:
             rate = p['floor_rate'] * 100
@@ -472,8 +477,8 @@ def stat_tile(k, v, hi=False):
 
 
 def class_table(s: dict) -> str:
-    head = ('<thead><tr><th>부류</th><th>음소 수</th><th>비중</th><th>시간비</th>'
-            '<th>중앙 ms</th><th>≤30ms</th><th>≤3프레임</th></tr></thead>')
+    head = ('<thead><tr><th>class</th><th>phonemes</th><th>share</th><th>time share</th>'
+            '<th>median ms</th><th>≤30ms</th><th>≤3 frames</th></tr></thead>')
     rows = []
     for cls in PHONE_CLASSES + ('other',):
         c = s['classes'].get(cls)
@@ -489,41 +494,45 @@ def class_table(s: dict) -> str:
 
 def render_html(summaries: list) -> str:
     s = summaries[0]
-    body = [f'<h1>라벨 진단 — {_e(s["root"])}</h1>',
-            f'<p class="lede">합성음의 발음을 의심하기 전에, 모델이 무엇을 보고 배웠는지 먼저 잰다. '
-            f'이 페이지는 <code>transcriptions.csv</code> 의 <code>ph_dur</code> 만 읽는다.</p>'
-            f'<p class="meta">발화 {s["n_utt"]:,} · 음소 {s["n_ph"]:,} · {s["hours"]:.2f}시간</p>']
+    body = [f'<h1>Label diagnosis — {_e(s["root"])}</h1>',
+            f'<p class="lede">Before suspecting the synthesis\'s pronunciation, measure what the '
+            f'model was shown. This page reads nothing but <code>ph_dur</code> out of '
+            f'<code>transcriptions.csv</code>.</p>'
+            f'<p class="meta">{s["n_utt"]:,} utterances · {s["n_ph"]:,} phonemes · {s["hours"]:.2f} h</p>']
     body = ['<div class="prose">' + ''.join(body) + '</div>']
 
     body.append('<div class="stats">'
-                + stat_tile('≤30ms 음소', f'{s["floor_rate"] * 100:.1f}%', hi=True)
-                + stat_tile('정확히 0.030초', f'{s["exact_floor_share"] * 100:.1f}%', hi=True)
-                + stat_tile('초성 ≤30ms',
+                + stat_tile('phonemes ≤30ms', f'{s["floor_rate"] * 100:.1f}%', hi=True)
+                + stat_tile('exactly 0.030 s', f'{s["exact_floor_share"] * 100:.1f}%', hi=True)
+                + stat_tile('onsets ≤30ms',
                             f'{s["classes"]["onset"]["floor_rate"] * 100:.1f}%')
-                + stat_tile('종성 ≤30ms',
+                + stat_tile('codas ≤30ms',
                             f'{s["classes"]["coda"]["floor_rate"] * 100:.1f}%')
-                + stat_tile('무음 시간비', f'{s["sp_time_share"] * 100:.1f}%')
-                + stat_tile('≤3프레임 (학습 지표 기준)',
+                + stat_tile('silence share of time', f'{s["sp_time_share"] * 100:.1f}%')
+                + stat_tile('≤3 frames (the training metric\'s ruler)',
                             f'{s["floor_rate_frames"] * 100:.1f}%')
                 + '</div>')
 
-    body.append('<div class="prose"><h2>ph_dur 값 분포</h2>'
-                '<p>MFA 는 10 ms 격자로 답을 내므로 값이 이산적인 것 자체는 정상이다. '
-                '문제는 <strong>한 값에 몰린 봉우리</strong>다 — 0.03 초는 MFA 의 최소 음소 '
-                '길이이고, 거기 쌓인 음소는 길이가 그렇게 <em>측정된</em> 것이 아니라 '
-                '정렬기가 음향적 근거를 못 찾고 최소값에 박아 둔 것이다.</p></div>')
-    body.append(f'<figure><figcaption>값별 비율 (200 ms 초과는 하나로 묶음)</figcaption>'
+    body.append('<div class="prose"><h2>Distribution of ph_dur values</h2>'
+                '<p>MFA answers on a 10 ms grid, so the values being discrete is itself '
+                'normal. The problem is <strong>the peak piled onto one value</strong> — '
+                '0.03 s is MFA\'s minimum phoneme duration, and a phoneme sitting there was '
+                'not <em>measured</em> to be that long: the aligner found no acoustic '
+                'evidence and pinned it to the minimum.</p></div>')
+    body.append(f'<figure><figcaption>share per value (everything over 200 ms in one bucket)</figcaption>'
                 f'{svg_value_histogram(s)}</figure>')
 
-    body.append('<div class="prose"><h2>부류별</h2>'
-                '<p>초성과 종성을 나눠 세는 것이 이 표의 요점이다. 둘을 \'자음\' 하나로 '
-                '묶으면 서로를 상쇄해 아무것도 보이지 않는다.</p></div>')
+    body.append('<div class="prose"><h2>By class</h2>'
+                '<p>Counting onsets and codas separately is the point of this table. Lump '
+                'them into one \'consonant\' bucket and they cancel each other out and '
+                'nothing is visible.</p></div>')
     body.append(class_table(s))
 
-    body.append('<div class="prose"><h2>음소별 하한선 비율</h2>'
-                '<p>막대가 길수록 그 음소의 라벨을 믿기 어렵다. 파열음이 위쪽에 몰리고 '
-                '모음과 종성이 아래에 남는 모양이 이 코퍼스의 특징이다.</p></div>')
-    body.append(f'<figure><figcaption>≤30 ms 인 비율 · 부류 안에서 내림차순</figcaption>'
+    body.append('<div class="prose"><h2>Floor rate per phoneme</h2>'
+                '<p>The longer the bar, the less that phoneme\'s labels can be trusted. The '
+                'shape where plosives cluster at the top and vowels and codas stay at the '
+                'bottom is characteristic of this corpus.</p></div>')
+    body.append(f'<figure><figcaption>share at ≤30 ms · descending within each class</figcaption>'
                 f'{svg_phone_floor(s)}</figure>')
 
     if len(summaries) > 1:
@@ -535,20 +544,20 @@ def render_html(summaries: list) -> str:
                         f'<td>{other["classes"]["onset"]["floor_rate"] * 100:.1f}%</td>'
                         f'<td>{other["classes"]["vowel"]["floor_rate"] * 100:.1f}%</td>'
                         f'<td>{other["sp_time_share"] * 100:.1f}%</td></tr>')
-        head = ('<thead><tr><th>코퍼스</th><th>음소</th><th>≤30ms</th>'
-                '<th>초성</th><th>모음</th><th>무음 시간비</th></tr></thead>')
+        head = ('<thead><tr><th>corpus</th><th>phonemes</th><th>≤30ms</th>'
+                '<th>onsets</th><th>vowels</th><th>silence share</th></tr></thead>')
         first = (f'<tr><td>{_e(s["root"])}</td><td>{s["n_ph"]:,}</td>'
                  f'<td>{s["floor_rate"] * 100:.1f}%</td>'
                  f'<td>{s["classes"]["onset"]["floor_rate"] * 100:.1f}%</td>'
                  f'<td>{s["classes"]["vowel"]["floor_rate"] * 100:.1f}%</td>'
                  f'<td>{s["sp_time_share"] * 100:.1f}%</td></tr>')
-        body.append('<div class="prose"><h2>코퍼스 비교</h2></div>')
+        body.append('<div class="prose"><h2>Corpus comparison</h2></div>')
         body.append(f'<div class="tw"><table>{head}<tbody>{first}{"".join(rows)}'
                     f'</tbody></table></div>')
 
     return (f'<!doctype html><html lang="ko"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width,initial-scale=1">'
-            f'<title>라벨 진단 — {_e(s["root"])}</title><style>{CSS}</style></head>'
+            f'<title>Label diagnosis — {_e(s["root"])}</title><style>{CSS}</style></head>'
             f'<body><div class="wrap">{"".join(body)}</div></body></html>')
 
 
@@ -558,10 +567,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--corpus', nargs='+', default=['data/pansori'],
-                        help='코퍼스 루트. 두 개 이상 주면 차이도 같이 인쇄한다')
+                        help='corpus roots. Pass two or more and the difference is printed too')
     parser.add_argument('--json', default=str(OUT_DIR / 'label_report.json'))
     parser.add_argument('--html', default=None,
-                        help='자체완결 HTML 을 여기에 쓴다 (기본: 안 씀)')
+                        help='write a self-contained HTML page here (default: do not)')
     args = parser.parse_args()
 
     summaries = []
