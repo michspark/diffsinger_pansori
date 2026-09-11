@@ -1,0 +1,26 @@
+# Pansori artefacts — code and docs are tracked, data is not.
+
+# Preprocessing intermediates (jsonl, wavs, MFA input and output)
+data/
+
+# Review HTML (several MB each, with the audio embedded)
+review/
+
+__pycache__/
+
+# The root .gitignore (upstream) has `*.sh`, which swallows our scripts too. It really
+# happened: 3e8d541 silently left out server/run.sh, and a later commit left out
+# examples/run_examples.sh — `git add` passes without a warning, so it is hard to notice.
+# Reverted across this whole subtree.
+!**/*.sh
+
+# Measurement artefacts (jsonl, HTML, MFA working directories)
+eval/out/
+
+# The knowledge graph understand-anything builds — an artefact regenerated from the code.
+.ua/
+
+# The full changbon text. It is a transcription of published libretti, so it is not
+# tracked. With the source Lyrics/ in place, build_corpus.py regenerates it, and
+# pansori/docs/LYRICBOOK_VERDICT.md carries the numbers from it.
+lyricbook/corpus.jsonl

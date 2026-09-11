@@ -1,0 +1,12 @@
+# variance · changbon-snapped labels (the second arm of the lyrics A/B)
+#
+# 32,000 is where the baseline pansori_var_v1 actually stopped (not the 80,000 in its config).
+
+base_config:
+  - configs/pansori/variance.yaml
+  - configs/pansori/data_snap.yaml
+
+binary_data_dir: data/pansori_snap/binary_variance
+
+max_updates: 32000
+num_ckpt_keep: 8

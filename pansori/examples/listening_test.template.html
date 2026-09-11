@@ -1,0 +1,614 @@
+<title>창본 청취 검증</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+
+<style>
+/* ── tokens ─────────────────────────────────────────────────────────────
+   Light is stone paper (창본 종이), dark is stage black with a blue cast.
+   Every colour below is a token; nothing is declared only inside a media
+   query, so the un-stamped "system" state resolves as a complete set.      */
+:root {
+  --ground:  #e9e7e2;
+  --surface: #f6f5f2;
+  --sunken:  #e2dfd8;
+  --rule:    #d3d0c8;
+  --rule-2:  #bdb9ae;
+  --ink:     #1a1b20;
+  --ink-2:   #4c4f58;
+  --ink-3:   #7b7f89;
+  --whisper: #3b5ba5;
+  --snapped: #b5533c;
+  --accent:  #3b5ba5;
+  --accent-soft: #3b5ba518;
+  --tie:     #8a8d95;
+  --on-accent: #ffffff;
+  --shadow: 0 1px 2px #1a1b2010, 0 6px 20px -12px #1a1b2028;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:  #101219;
+    --surface: #171a22;
+    --sunken:  #0c0e14;
+    --rule:    #262a34;
+    --rule-2:  #363b48;
+    --ink:     #e8e9ec;
+    --ink-2:   #a9aeb9;
+    --ink-3:   #767c88;
+    --whisper: #6b8cd4;
+    --snapped: #d07a55;
+    --accent:  #6b8cd4;
+    --accent-soft: #6b8cd420;
+    --tie:     #868b96;
+    --on-accent: #0c0e14;
+    --shadow: 0 1px 2px #0006, 0 8px 24px -14px #0009;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:  #101219;
+  --surface: #171a22;
+  --sunken:  #0c0e14;
+  --rule:    #262a34;
+  --rule-2:  #363b48;
+  --ink:     #e8e9ec;
+  --ink-2:   #a9aeb9;
+  --ink-3:   #767c88;
+  --whisper: #6b8cd4;
+  --snapped: #d07a55;
+  --accent:  #6b8cd4;
+  --accent-soft: #6b8cd420;
+  --tie:     #868b96;
+  --on-accent: #0c0e14;
+  --shadow: 0 1px 2px #0006, 0 8px 24px -14px #0009;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: "IBM Plex Sans KR", system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 60rem; margin: 0 auto; padding: 0 1.25rem 6rem; }
+
+/* ── toolbar ─────────────────────────────────────────────────────────── */
+.bar {
+  position: sticky; top: 0; z-index: 20;
+  background: color-mix(in srgb, var(--ground) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--rule);
+}
+.bar-in {
+  max-width: 60rem; margin: 0 auto; padding: .6rem 1.25rem;
+  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+}
+.bar-name {
+  font-family: "Gowun Batang", serif; font-weight: 700;
+  font-size: 1rem; letter-spacing: .01em; margin-right: auto;
+}
+.bar-name span { color: var(--ink-3); font-weight: 400; font-size: .8rem;
+  font-family: "IBM Plex Mono", monospace; margin-left: .5rem; }
+
+button {
+  font: inherit; color: inherit; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--rule-2);
+  border-radius: 3px; padding: .3rem .7rem; font-size: .8rem;
+  transition: border-color .12s, background .12s;
+}
+button:hover { border-color: var(--ink-3); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button[aria-pressed="true"] {
+  background: var(--accent-soft); border-color: var(--accent); color: var(--accent);
+}
+
+/* ── masthead ────────────────────────────────────────────────────────── */
+.mast { padding: 3.5rem 0 2rem; border-bottom: 1px solid var(--rule); }
+.eyebrow {
+  font-family: "IBM Plex Mono", monospace; font-size: .72rem;
+  letter-spacing: .16em; text-transform: uppercase; color: var(--ink-3);
+}
+h1 {
+  font-family: "Gowun Batang", serif; font-weight: 700;
+  font-size: clamp(2.1rem, 6vw, 3.1rem); line-height: 1.12;
+  margin: .5rem 0 0; text-wrap: balance; letter-spacing: -.01em;
+}
+.lede { max-width: 40rem; color: var(--ink-2); margin: 1rem 0 0; }
+.lede strong { color: var(--ink); font-weight: 600; }
+
+h2 {
+  font-family: "Gowun Batang", serif; font-weight: 700;
+  font-size: 1.4rem; margin: 3rem 0 .25rem; letter-spacing: -.01em;
+}
+h2 + .sub { color: var(--ink-3); font-size: .875rem; margin: 0 0 1.25rem; }
+
+/* ── findings table ──────────────────────────────────────────────────── */
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .85rem; min-width: 34rem; }
+th, td { text-align: right; padding: .45rem .6rem; border-bottom: 1px solid var(--rule); }
+th:first-child, td:first-child { text-align: left; }
+thead th {
+  font-family: "IBM Plex Mono", monospace; font-weight: 500; font-size: .7rem;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3);
+  border-bottom-color: var(--rule-2);
+}
+td.num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+tr.group td {
+  font-family: "IBM Plex Mono", monospace; font-size: .7rem; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-3); padding-top: 1rem; border-bottom: none;
+}
+tr.sig td { background: var(--accent-soft); }
+tr.sig td:first-child { font-weight: 600; }
+
+/* ── item card ───────────────────────────────────────────────────────── */
+.card {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: 4px; padding: 1.1rem 1.25rem 1.25rem;
+  margin-top: 1rem; box-shadow: var(--shadow); scroll-margin-top: 4rem;
+}
+.card.done { border-color: var(--rule-2); }
+.card-head {
+  display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap;
+  padding-bottom: .8rem; border-bottom: 1px solid var(--rule);
+}
+.idx {
+  font-family: "IBM Plex Mono", monospace; font-size: .78rem;
+  color: var(--ink-3); font-variant-numeric: tabular-nums;
+}
+.song { font-weight: 600; }
+.who { color: var(--ink-2); font-size: .85rem; }
+.meta { margin-left: auto; font-family: "IBM Plex Mono", monospace;
+  font-size: .72rem; color: var(--ink-3); }
+.chip {
+  font-family: "IBM Plex Mono", monospace; font-size: .66rem;
+  letter-spacing: .08em; text-transform: uppercase;
+  border: 1px solid var(--rule-2); border-radius: 2px; padding: .05rem .35rem;
+  color: var(--ink-3);
+}
+.chip.treat { border-color: var(--accent); color: var(--accent); }
+
+.q { margin-top: 1.1rem; }
+.q-label {
+  font-family: "IBM Plex Mono", monospace; font-size: .7rem;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3);
+  display: flex; align-items: center; gap: .5rem;
+}
+.q-label::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
+
+/* ── player ──────────────────────────────────────────────────────────── */
+.player { display: flex; align-items: center; gap: .7rem; }
+.play {
+  flex: none; width: 2.1rem; height: 2.1rem; border-radius: 50%;
+  display: grid; place-items: center; padding: 0;
+  background: var(--sunken); border: 1px solid var(--rule-2);
+}
+.play svg { width: .8rem; height: .8rem; fill: var(--ink); }
+.play[data-state="playing"] { background: var(--accent); border-color: var(--accent); }
+.play[data-state="playing"] svg { fill: var(--on-accent); }
+.track {
+  flex: 1; height: 6px; background: var(--sunken); border-radius: 3px;
+  position: relative; cursor: pointer; overflow: hidden;
+}
+.fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--ink-3); }
+.player.on .fill { background: var(--accent); }
+.time {
+  font-family: "IBM Plex Mono", monospace; font-size: .72rem; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; flex: none; min-width: 2.6rem; text-align: right;
+}
+.orig {
+  background: var(--sunken); border: 1px solid var(--rule);
+  border-radius: 3px; padding: .6rem .75rem; margin-top: .5rem;
+}
+.orig .caption {
+  font-family: "IBM Plex Mono", monospace; font-size: .68rem; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-3); margin-bottom: .35rem;
+}
+
+/* ── A/B options ─────────────────────────────────────────────────────── */
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-top: .7rem; }
+@media (max-width: 46rem) { .pair { grid-template-columns: 1fr; } }
+.opt {
+  border: 1px solid var(--rule); border-radius: 3px; padding: .7rem .8rem;
+  display: flex; flex-direction: column; gap: .5rem;
+  background: var(--surface); transition: border-color .12s;
+}
+.opt.picked { border-color: var(--accent); background: var(--accent-soft); }
+.opt-tag {
+  font-family: "IBM Plex Mono", monospace; font-size: .7rem; letter-spacing: .12em;
+  color: var(--ink-3); display: flex; align-items: center; gap: .4rem;
+}
+.opt-tag .dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--tie); }
+.revealed .opt-tag .dot.w { background: var(--whisper); }
+.revealed .opt-tag .dot.s { background: var(--snapped); }
+.opt-tag .name { display: none; }
+.revealed .opt-tag .name { display: inline; color: var(--ink-2); }
+.lyric {
+  font-family: "Gowun Batang", serif; font-size: 1.12rem; line-height: 1.75;
+  color: var(--ink); word-break: keep-all;
+}
+.opt-metrics {
+  display: none; font-family: "IBM Plex Mono", monospace; font-size: .72rem;
+  color: var(--ink-3); font-variant-numeric: tabular-nums;
+  gap: .8rem; flex-wrap: wrap;
+}
+.revealed .opt-metrics { display: flex; }
+
+.votes { display: flex; gap: .4rem; margin-top: .6rem; flex-wrap: wrap; align-items: center; }
+.votes .hint { font-size: .78rem; color: var(--ink-3); margin-right: auto; }
+.same-text {
+  font-family: "Gowun Batang", serif; font-size: 1.12rem; line-height: 1.75;
+  border-left: 2px solid var(--rule-2); padding-left: .8rem; margin-top: .6rem;
+  color: var(--ink-2); word-break: keep-all;
+}
+
+/* ── tally ───────────────────────────────────────────────────────────── */
+.tally { margin-top: 1.25rem; }
+.tally h3 {
+  font-size: .9rem; font-weight: 600; margin: 0 0 .5rem;
+  display: flex; justify-content: space-between; align-items: baseline;
+}
+.tally h3 span { font-family: "IBM Plex Mono", monospace; font-size: .75rem; color: var(--ink-3); }
+.meter { display: flex; gap: 2px; height: 1.6rem; }
+.seg {
+  display: grid; place-items: center; border-radius: 2px; min-width: 2px;
+  font-family: "IBM Plex Mono", monospace; font-size: .72rem;
+  font-variant-numeric: tabular-nums; color: var(--on-accent); overflow: hidden;
+}
+.seg.w { background: var(--whisper); }
+.seg.s { background: var(--snapped); }
+.seg.t { background: var(--tie); }
+.seg.empty { background: var(--sunken); color: var(--ink-3); }
+.key { display: flex; gap: 1rem; margin-top: .4rem; font-size: .76rem; color: var(--ink-2); flex-wrap: wrap; }
+.key i { width: .6rem; height: .6rem; border-radius: 2px; display: inline-block; margin-right: .35rem; }
+.key i.w { background: var(--whisper); } .key i.s { background: var(--snapped); } .key i.t { background: var(--tie); }
+
+textarea {
+  width: 100%; min-height: 6rem; margin-top: .75rem; font-family: "IBM Plex Mono", monospace;
+  font-size: .72rem; background: var(--sunken); color: var(--ink-2);
+  border: 1px solid var(--rule); border-radius: 3px; padding: .6rem; resize: vertical;
+}
+.foot { margin-top: 3rem; padding-top: 1.25rem; border-top: 1px solid var(--rule);
+  color: var(--ink-3); font-size: .8rem; }
+.foot code { font-family: "IBM Plex Mono", monospace; color: var(--ink-2); }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="bar">
+  <div class="bar-in">
+    <div class="bar-name">창본 청취 검증 <span id="progress">0 / 0</span></div>
+    <button id="blind" aria-pressed="true">블라인드</button>
+    <button id="jump">다음 미판정</button>
+    <button id="reset">초기화</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <header class="mast">
+    <div class="eyebrow">pansori · lyricbook verdict §6</div>
+    <h1>창본이 맞는가,<br>귀로 확인한다</h1>
+    <p class="lede">
+      Whisper 전사를 창본(사설집) 원문으로 교정하면 DiffSinger 가 더 나아지는가 —
+      지표는 <strong>아니라고</strong> 답했다. 다만 지금까지 어느 판정도 사람이 들어 본 적이
+      없다. 이 페이지가 그 자리다. 원본 녹음을 듣고 <strong>두 가사 중 실제로 부른 쪽</strong>을
+      고르고, 두 모델의 합성음 중 <strong>원본에 가까운 쪽</strong>을 고른다.
+      순서는 항목마다 섞여 있고 두 질문 사이에 상관이 없다 — 한쪽을 맞혀도 다른 쪽이 새지 않는다.
+    </p>
+  </header>
+
+  <h2>지표는 이렇게 말했다</h2>
+  <p class="sub">홀드아웃 60쌍 × 3시드, <code>2_resynth</code> 단 (실제 ph_dur·실제 f0 → mel). 부호검정.</p>
+  <div class="tablewrap"><table id="summary"></table></div>
+  <p class="sub" style="margin-top:.75rem">
+    분리되는 것은 하나뿐이고 그것이 <strong>가사가 실제로 바뀐 발화에만</strong> 있다.
+    대조군은 두 코퍼스에서 음소열이 글자 하나 다르지 않은 발화라, 학습 런 사이의 우연한
+    차이라면 양쪽에 똑같이 나타나야 한다.
+  </p>
+
+  <h2>듣고 판정하기</h2>
+  <p class="sub" id="itemsub"></p>
+  <div id="items"></div>
+
+  <h2>집계</h2>
+  <p class="sub">이 브라우저에만 저장된다. 지우면 사라진다.</p>
+  <div class="tally">
+    <h3>가사 — 실제로 부른 것은 어느 쪽인가 <span id="c1"></span></h3>
+    <div class="meter" id="m1"></div>
+    <div class="key"><span><i class="s"></i>창본이 맞다</span><span><i class="w"></i>Whisper 가 맞다</span><span><i class="t"></i>판단 불가</span></div>
+  </div>
+  <div class="tally">
+    <h3>합성음 — 원본에 가까운 것은 어느 쪽인가 <span id="c2"></span></h3>
+    <div class="meter" id="m2"></div>
+    <div class="key"><span><i class="s"></i>창본 라벨 모델</span><span><i class="w"></i>Whisper 라벨 모델</span><span><i class="t"></i>차이 없음</span></div>
+  </div>
+  <button id="copy" style="margin-top:1rem">판정 결과 복사</button>
+  <textarea id="dump" readonly aria-label="판정 결과 JSON"></textarea>
+
+  <p class="foot">
+    음원은 mono 96 kbps mp3 로 다시 인코딩했다 — 원본과 두 합성음에 똑같이 적용했으므로
+    상대 비교는 성립한다. 합성음은 각 모델이 <strong>자기 라벨의 ph_dur 과 원본 f0</strong>를
+    받아 mel 만 만든 것이다(<code>2_resynth</code>). 시드 3개 중 mel L1 이 중앙값인 draw 를
+    쓰므로, 화면의 숫자와 들리는 소리가 같은 렌더다.
+    재현: <code>pansori/examples/ab_ladder.py</code> → <code>build_listening_test.py</code>
+  </p>
+</div>
+
+<script id="data" type="application/json">"__PAYLOAD__"</script>
+<script>
+(() => {
+  const DATA = JSON.parse(document.getElementById('data').textContent);
+  const KEY = 'pansori-listening-v1';
+  const $ = (s, r = document) => r.querySelector(s);
+  const esc = t => String(t).replace(/[&<>"]/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  let votes = {};
+  try { votes = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { votes = {}; }
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(votes)); } catch (e) {} };
+
+  // Stable per-item shuffle. Two salts so guessing one question never leaks the
+  // other; derived from the id so a reload never re-shuffles under the listener.
+  const hash = (s, salt) => {
+    let h = (2166136261 ^ salt) >>> 0;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  };
+  const flip = (id, salt) => hash(id, salt) % 2 === 1;
+
+  const fmtTime = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+  const PLAY = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5v9l7-4.5z"/></svg>';
+  const PAUSE = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 2h2.2v8H3zM6.8 2H9v8H6.8z"/></svg>';
+
+  // ── audio: one element per clip, created on first play, one playing at a time.
+  const cache = new Map();
+  let active = null;
+  const clip = src => {
+    if (!cache.has(src)) { const a = new Audio(src); a.preload = 'none'; cache.set(src, a); }
+    return cache.get(src);
+  };
+  const stop = () => {
+    if (!active) return;
+    active.audio.pause();
+    active.el.querySelector('.play').dataset.state = '';
+    active.el.querySelector('.play').innerHTML = PLAY;
+    active.el.classList.remove('on');
+    active = null;
+  };
+  function play(el, at) {
+    const audio = clip(el.dataset.src);
+    if (active && active.audio === audio) { stop(); return; }
+    const carry = at !== undefined ? at
+      : (active && active.el.dataset.group === el.dataset.group ? active.audio.currentTime : 0);
+    stop();
+    // preload is 'none', so on the first play there is no duration to seek within
+    // yet; hand the offset to loadedmetadata instead of dropping it.
+    const seek = () => { try { audio.currentTime = Math.min(carry, audio.duration || carry); }
+                         catch (e) {} };
+    if (audio.readyState >= 1) seek();
+    else audio.addEventListener('loadedmetadata', seek, { once: true });
+    audio.play().catch(() => {});
+    el.querySelector('.play').dataset.state = 'playing';
+    el.querySelector('.play').innerHTML = PAUSE;
+    el.classList.add('on');
+    active = { audio, el };
+  }
+  const tick = () => {
+    if (active) {
+      const { audio, el } = active;
+      const d = audio.duration || 0;
+      el.querySelector('.fill').style.width = d ? `${(audio.currentTime / d) * 100}%` : '0';
+      el.querySelector('.time').textContent = fmtTime(audio.currentTime);
+      if (audio.ended) { stop(); }
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+
+  const player = (src, group, seconds) => {
+    const el = document.createElement('div');
+    el.className = 'player';
+    el.dataset.src = src;
+    el.dataset.group = group;
+    el.innerHTML = `<button class="play" aria-label="재생">${PLAY}</button>
+      <div class="track"><div class="fill"></div></div>
+      <span class="time">${fmtTime(seconds)}</span>`;
+    el.querySelector('.play').addEventListener('click', () => play(el));
+    el.querySelector('.track').addEventListener('click', ev => {
+      const r = ev.currentTarget.getBoundingClientRect();
+      const d = clip(src).duration;
+      play(el, ((ev.clientX - r.left) / r.width) * (d || seconds));
+    });
+    return el;
+  };
+
+  // ── summary table
+  const sum = $('#summary');
+  sum.innerHTML = '<thead><tr><th>지표</th><th>Whisper</th><th>창본</th>'
+    + '<th>창본 승</th><th>p</th></tr></thead><tbody></tbody>';
+  const tb = sum.querySelector('tbody');
+  DATA.summary.forEach(g => {
+    tb.insertAdjacentHTML('beforeend',
+      `<tr class="group"><td colspan="5">${g.label} — ${g.n}쌍</td></tr>`);
+    g.rows.forEach(r => {
+      const sig = r.p < 0.05 ? ' sig' : '';
+      tb.insertAdjacentHTML('beforeend',
+        `<tr class="${sig.trim()}"><td>${r.metric}</td>`
+        + `<td class="num">${r.whisper.toFixed(r.digits)}</td>`
+        + `<td class="num">${r.snapped.toFixed(r.digits)}</td>`
+        + `<td class="num">${r.snappedWins}/${r.pairs}</td>`
+        + `<td class="num">${r.p.toFixed(3)}</td></tr>`);
+    });
+  });
+
+  // ── cards
+  const treated = DATA.items.filter(i => i.changed).length;
+  $('#itemsub').textContent = `${DATA.items.length}개 발화 — 가사가 바뀐 것 ${treated}개, `
+    + `대조군 ${DATA.items.length - treated}개. 원본을 먼저 듣고 고를 것.`;
+
+  const wrap = $('#items');
+  DATA.items.forEach((it, i) => {
+    const card = document.createElement('section');
+    card.className = 'card';
+    card.id = `it-${it.id}`;
+    const lyricFlip = flip(it.id, 1);   // true: A is the book text
+    const audioFlip = flip(it.id, 7);   // true: A is the snapped model
+
+    card.innerHTML = `
+      <div class="card-head">
+        <span class="idx">${String(i + 1).padStart(2, '0')}</span>
+        <span class="song">${esc(it.song)}</span>
+        <span class="who">${esc(it.speaker)}</span>
+        <span class="chip ${it.changed ? 'treat' : ''}">${it.changed ? '가사 바뀜' : '대조군'}</span>
+        <span class="meta">${it.duration.toFixed(1)}s${it.mode ? ' · ' + esc(it.mode) : ''}</span>
+      </div>
+      <div class="orig"><div class="caption">원본 녹음</div></div>
+      <div class="q q-lyric"></div>
+      <div class="q q-audio"></div>`;
+    card.querySelector('.orig').append(player(it.audio.orig, it.id + '-o', it.duration));
+
+    // 1. which text was actually sung
+    const ql = card.querySelector('.q-lyric');
+    if (it.changed) {
+      const first = lyricFlip ? 'book' : 'whisper';
+      const texts = { whisper: it.whisperText, book: it.bookText };
+      const names = { whisper: 'Whisper 전사', book: '창본' };
+      ql.innerHTML = `<div class="q-label">1 · 실제로 부른 가사는</div>
+        <div class="pair">
+          ${['A', 'B'].map((tag, n) => {
+            const who = n === 0 ? first : (first === 'book' ? 'whisper' : 'book');
+            return `<div class="opt" data-q="lyric" data-val="${who}">
+              <div class="opt-tag"><span class="dot ${who === 'book' ? 's' : 'w'}"></span>${tag}
+                <span class="name">· ${names[who]}</span></div>
+              <div class="lyric">${esc(texts[who])}</div></div>`;
+          }).join('')}
+        </div>
+        <div class="votes"><span class="hint">A 와 B 중 원본에서 들리는 쪽</span>
+          <button data-q="lyric" data-vote="${first}">A</button>
+          <button data-q="lyric" data-vote="${first === 'book' ? 'whisper' : 'book'}">B</button>
+          <button data-q="lyric" data-vote="unsure">판단 불가</button></div>`;
+    } else {
+      ql.innerHTML = `<div class="q-label">1 · 가사 — 두 코퍼스가 동일하다</div>
+        <div class="same-text">${esc(it.whisperText)}</div>`;
+    }
+
+    // 2. which render is closer to the recording
+    const qa = card.querySelector('.q-audio');
+    const firstArm = audioFlip ? 'snapped' : 'whisper';
+    const armNames = { whisper: 'Whisper 라벨 모델', snapped: '창본 라벨 모델' };
+    qa.innerHTML = `<div class="q-label">2 · 원본에 가까운 합성음은</div>
+      <div class="pair">
+        ${['A', 'B'].map((tag, n) => {
+          const arm = n === 0 ? firstArm : (firstArm === 'snapped' ? 'whisper' : 'snapped');
+          const m = it.metrics[arm];
+          return `<div class="opt" data-q="audio" data-val="${arm}">
+            <div class="opt-tag"><span class="dot ${arm === 'snapped' ? 's' : 'w'}"></span>${tag}
+              <span class="name">· ${armNames[arm]}</span></div>
+            <div class="slot"></div>
+            <div class="opt-metrics"><span>mel L1 ${m.mel_l1.toFixed(3)}</span>
+              <span>유무성 ${(m.voiced_agree * 100).toFixed(1)}%</span>
+              <span>seed ${it.seeds[arm]}</span></div></div>`;
+        }).join('')}
+      </div>
+      <div class="votes"><span class="hint">전환하면 같은 지점에서 이어 들린다</span>
+        <button data-q="audio" data-vote="${firstArm}">A</button>
+        <button data-q="audio" data-vote="${firstArm === 'snapped' ? 'whisper' : 'snapped'}">B</button>
+        <button data-q="audio" data-vote="tie">차이 없음</button>
+        <button class="reveal">정답 보기</button></div>`;
+    qa.querySelectorAll('.opt').forEach(opt => {
+      opt.querySelector('.slot').append(
+        player(it.audio[opt.dataset.val], it.id + '-ab', it.duration));
+    });
+
+    card.addEventListener('click', ev => {
+      const btn = ev.target.closest('button[data-vote]');
+      if (btn) {
+        const q = btn.dataset.q;
+        votes[it.id] = votes[it.id] || {};
+        votes[it.id][q] = votes[it.id][q] === btn.dataset.vote ? undefined : btn.dataset.vote;
+        save(); paint(card, it);
+      }
+      if (ev.target.closest('.reveal')) { card.classList.toggle('revealed'); }
+    });
+
+    wrap.append(card);
+    paint(card, it);
+  });
+
+  function paint(card, it) {
+    const v = votes[it.id] || {};
+    card.querySelectorAll('button[data-vote]').forEach(b => {
+      b.setAttribute('aria-pressed', String(v[b.dataset.q] === b.dataset.vote));
+    });
+    card.querySelectorAll('.opt').forEach(o => {
+      o.classList.toggle('picked', v[o.dataset.q] === o.dataset.val);
+    });
+    const need = it.changed ? 2 : 1;
+    const got = (v.lyric ? 1 : 0) + (v.audio ? 1 : 0);
+    card.classList.toggle('done', got >= need);
+    tally();
+  }
+
+  // ── tally
+  function tally() {
+    const items = DATA.items;
+    const done = items.filter(it => {
+      const v = votes[it.id] || {};
+      return (it.changed ? (v.lyric && v.audio) : v.audio);
+    }).length;
+    $('#progress').textContent = `${done} / ${items.length}`;
+
+    const bar = (el, counter, tallyObj, order) => {
+      const total = order.reduce((s, [k]) => s + (tallyObj[k] || 0), 0);
+      counter.textContent = total ? `${total}개 판정` : '아직 없음';
+      if (!total) { el.innerHTML = '<div class="seg empty" style="flex:1">판정을 시작하면 채워진다</div>'; return; }
+      el.innerHTML = order.map(([k, cls]) => {
+        const n = tallyObj[k] || 0;
+        if (!n) return '';
+        return `<div class="seg ${cls}" style="flex:${n}" title="${n}">${n}</div>`;
+      }).join('');
+    };
+
+    const lyric = {}, audio = {};
+    items.forEach(it => {
+      const v = votes[it.id] || {};
+      if (it.changed && v.lyric) lyric[v.lyric] = (lyric[v.lyric] || 0) + 1;
+      if (v.audio) audio[v.audio] = (audio[v.audio] || 0) + 1;
+    });
+    bar($('#m1'), $('#c1'), lyric, [['book', 's'], ['whisper', 'w'], ['unsure', 't']]);
+    bar($('#m2'), $('#c2'), audio, [['snapped', 's'], ['whisper', 'w'], ['tie', 't']]);
+
+    $('#dump').value = JSON.stringify({
+      lyric, audio, votes,
+      note: '가사: book=창본이 맞다 / whisper=전사가 맞다. 합성음: snapped=창본 라벨 모델.'
+    }, null, 1);
+  }
+
+  // ── toolbar
+  $('#blind').addEventListener('click', ev => {
+    const on = ev.currentTarget.getAttribute('aria-pressed') === 'true';
+    ev.currentTarget.setAttribute('aria-pressed', String(!on));
+    document.querySelectorAll('.card').forEach(c => c.classList.toggle('revealed', on));
+  });
+  $('#jump').addEventListener('click', () => {
+    const next = [...document.querySelectorAll('.card')].find(c => !c.classList.contains('done'));
+    (next || document.querySelector('.card')).scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  $('#reset').addEventListener('click', () => {
+    votes = {}; save();
+    document.querySelectorAll('.card').forEach((c, i) => paint(c, DATA.items[i]));
+  });
+  $('#copy').addEventListener('click', async ev => {
+    const text = $('#dump').value;
+    try { await navigator.clipboard.writeText(text); ev.currentTarget.textContent = '복사됨'; }
+    catch (e) { $('#dump').select(); ev.currentTarget.textContent = '아래에서 복사'; }
+    setTimeout(() => { ev.currentTarget.textContent = '판정 결과 복사'; }, 1600);
+  });
+
+  tally();
+})();
+</script>

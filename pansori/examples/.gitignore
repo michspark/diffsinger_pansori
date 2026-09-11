@@ -1,0 +1,10 @@
+# Artefacts are not tracked — run_examples.sh + build_report.py regenerate them.
+out/
+ds/
+report.html
+listening_test.html
+
+# The lyrics A/B's second arm, and ab_ladder.py's renders (§7)
+out_snap/
+ds_snap/
+ab_out/

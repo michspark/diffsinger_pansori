@@ -1,0 +1,10 @@
+# variance · whisper labels (baseline)
+#
+# Measured optima: dur 16,000 · pitch 32,000. They differ per head, so the checkpoints
+# are chosen separately too.
+
+base_config:
+  - configs/pansori/variance.yaml
+  - configs/pansori/data_pansori.yaml
+
+binary_data_dir: data/pansori/binary_variance

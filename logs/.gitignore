@@ -1,0 +1,4 @@
+# run.sh 가 만드는 로그 디렉토리. 루트 .gitignore(upstream)를 건드리지 않으려고
+# 자기 자신을 무시하게 둔다.
+*
+!.gitignore

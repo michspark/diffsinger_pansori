@@ -1,0 +1,59 @@
+# Stage 4 aligner configuration.
+#
+# MFA is a speech HMM-GMM and falls apart on pansori's long sustained vowels — 34.03% of
+# the phonemes in the aligner's own TextGrid sit pinned to the 0.03 s floor
+# (pansori/docs/LYRICBOOK_VERDICT.md:70), and the "silent but a note is present" spans that
+# 06_merge absorbs are 52.2% of corpus time. SOFA is built for singing and can be
+# fine-tuned directly on this corpus. The single `aligner` line below is the switch that
+# keeps both aligners on the same pipeline so the choice can be made by measurement.
+#
+# Both backends leave aligned{suffix}/*.TextGrid, so everything downstream is unaware.
+# 04_align.py --aligner overrides this file.
+
+aligner: sofa           # mfa | sofa
+
+# The minimum number of Hangul characters an utterance needs to be alignable. Both
+# backends skip anything shorter — if the two arms do not use the same value their
+# utterance sets diverge and the A/B stops being an A/B.
+min_hangul: 2
+
+mfa:
+  # The model names installed in the `aligner` env (fetched with mfa model download).
+  acoustic: korean_mfa
+  dictionary: korean_mfa
+
+sofa:
+  # https://github.com/qiuqiao/SOFA — cloned outside this repository and pointed at here.
+  # SOFA needs torch, and the aligner env is py3.14 + MFA, so they cannot coexist.
+  root: ~/src/SOFA
+  conda_env: sofa
+  ckpt: ~/src/SOFA/ckpt/korean_pansori/best/5000-5.9491.ckpt
+
+  # SOFA's DictionaryG2P uses the dictionary's values directly as phonemes. So handing it
+  # the very dictionary used for training and inference removes the IPA->Coda conversion
+  # step entirely.
+  dictionary: dictionaries/korean-coda.txt
+
+  # The unit of a .lab token. SOFA's words tier is the .lab tokens verbatim, and
+  # DictionaryG2P unconditionally inserts an SP after every word.
+  #   syllable — words = syllables. 06_merge's eojeol->syllable re-split is solved for
+  #              free, but every syllable gets an SP slot.
+  #   eojeol   — words = eojeol, SP only at eojeol boundaries. The same shape as MFA.
+  #              An eojeol dictionary is synthesised from korean-coda.txt.
+  lab_unit: syllable
+
+  mode: force                                     # force | match (-m)
+  ap_detector: LoudnessSpectralcentroidAPDetector  # ignored when breath_ap is on
+
+# FoxBreatheLabeler — https://github.com/autumn-DL/FoxBreatheLabeler
+# Overlays AP (breath) onto the SP spans of SOFA's TextGrid, and nowhere else. Turning it
+# on forces SOFA to NoneAPDetector (FBL only works over a tg that has no AP).
+# Once AP is genuinely labelled, make_configs.py drops merged_phoneme_groups automatically.
+breath_ap:
+  enabled: false
+  root: ~/src/FoxBreatheLabeler
+  conda_env: fbl
+  ckpt: ~/src/FoxBreatheLabeler/models/model_ckpt_steps_7000.ckpt
+  ap_threshold: 0.4     # breath probability threshold
+  ap_dur: 0.08          # breaths shorter than this are discarded (seconds)
+  sp_dur: 0.1           # SP shorter than this is absorbed into the adjacent AP (seconds)

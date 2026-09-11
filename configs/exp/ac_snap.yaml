@@ -1,0 +1,15 @@
+# acoustic · changbon-snapped labels (the second arm of the lyrics A/B)
+#
+# Audio, notes, hold-out and spec statistics are identical to the baseline; only the
+# labels differ. The step count is matched to the baseline — running one arm longer
+# tilts the comparison. num_ckpt_keep is raised because the measured optimum is early
+# and the default of 8 would delete it.
+
+base_config:
+  - configs/pansori/acoustic.yaml
+  - configs/pansori/data_snap.yaml
+
+binary_data_dir: data/pansori_snap/binary_acoustic
+
+max_updates: 50000
+num_ckpt_keep: 12

@@ -1,0 +1,12 @@
+# variance · SOFA alignment (the treatment arm of the aligner A/B)
+#
+# var_v1's measured optima: dur 16,000 · pitch 32,000. They differ per head, so run only
+# to 40k and choose the checkpoint per head.
+
+base_config:
+  - configs/pansori/variance.yaml
+  - configs/pansori/data_sofa.yaml
+
+binary_data_dir: data/pansori_sofa/binary_variance
+max_updates: 40000
+num_ckpt_keep: 12

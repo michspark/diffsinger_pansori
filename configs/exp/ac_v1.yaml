@@ -1,0 +1,11 @@
+# acoustic · whisper labels (baseline)
+#
+# Measured: the validation minimum is at 28,000 (0.17800). The remaining 72,000 steps
+# wandered between 0.178 and 0.203, and the last one (0.18834) is 6% worse than the
+# optimum. If this is run again, lower max_updates.
+
+base_config:
+  - configs/pansori/acoustic.yaml
+  - configs/pansori/data_pansori.yaml
+
+binary_data_dir: data/pansori/binary_acoustic
