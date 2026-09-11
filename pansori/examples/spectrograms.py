@@ -20,15 +20,15 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
 TRACKS = [('1_orig', '원본 녹음'), ('2_resynth', '재합성 — dur·f0 실측'),
-          ('3_pitch', '피치 예측'), ('4_full', '전체 추론')]
+          ('3_pitch', '피치 예측'), ('4_full', '전체 추론')]   # figure labels
 
 
 def main():
-    parser = argparse.ArgumentParser(description='사다리 mel 비교 그림')
+    parser = argparse.ArgumentParser(description='a figure comparing the ladder\'s mels')
     parser.add_argument('item')
     parser.add_argument('--out', default=None)
     parser.add_argument('--wav-dir', default='pansori/examples/out',
-                        help='사다리 wav 이 있는 곳 (가사 A/B 는 변종마다 다르다)')
+                        help='where the ladder wavs are (the lyrics A/B has one per variant)')
     parser.add_argument('--dpi', type=int, default=110)
     args = parser.parse_args()
 
@@ -38,9 +38,10 @@ def main():
     from matplotlib import font_manager
     import librosa
 
-    # matplotlib 기본 폰트(DejaVu Sans)에는 한글 글리프가 없어 라벨이 두부가 된다.
-    # .ttc 컬렉션은 첫 face 이름으로만 등록되므로 'KR' 이 아니라 'JP' 로 잡히는데,
-    # Noto Sans CJK 는 한 파일에 네 문자권을 다 담고 있어 한글도 이 이름으로 나온다.
+    # matplotlib's default font (DejaVu Sans) has no Hangul glyphs, so the labels become
+    # tofu. A .ttc collection registers only under its first face name, so it is found as
+    # 'JP' rather than 'KR' -- but Noto Sans CJK carries all four scripts in one file, so
+    # Hangul comes out under that name too.
     for path in ('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
                  '/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc'):
         if Path(path).exists():
@@ -72,7 +73,7 @@ def main():
         ).T)
         labels.append(label)
     if not mels:
-        sys.exit(f'{args.item}: wav 없음')
+        sys.exit(f'{args.item}: no wav')
 
     frames = max(m.shape[1] for m in mels)
     seconds = frames * hparams['hop_size'] / sr
@@ -97,25 +98,25 @@ def main():
                 bbox=dict(facecolor='black', alpha=.45, edgecolor='none', pad=2.2))
         for spine in ax.spines.values():
             spine.set_visible(False)
-    # 배경이 투명해 라이트/다크 어느 쪽에도 얹힌다. 축 글자를 검정으로 두면 다크에서
-    # 사라지므로 두 바탕 모두에서 읽히는 중간 회색으로 그린다.
+    # The background is transparent so it sits on either a light or a dark page. Black
+    # axis text would disappear on dark, so a mid grey readable on both is used.
     AXIS = '#8A929E'
-    axes[-1].set_xlabel('초', fontsize=9, color=AXIS)
+    axes[-1].set_xlabel('초', fontsize=9, color=AXIS)   # 'seconds'
     axes[-1].tick_params(labelsize=8, colors=AXIS)
 
     out = Path(args.out) if args.out else out_dir / f'{args.item}_mel.png'
     fig.savefig(out, dpi=args.dpi, bbox_inches='tight',
                 facecolor='none', transparent=True)
-    # 이 그림은 base64 로 페이지에 박히므로 크기가 곧 페이지 무게다.
-    # 스펙트로그램은 색 수가 적어 팔레트화하면 손실 없이 크게 준다.
+    # This figure is embedded into the page as base64, so its size is the page's weight.
+    # A spectrogram has few colours, so palettising shrinks it a lot without loss.
     try:
         from PIL import Image
         im = Image.open(out)
-        # FASTOCTREE 는 RGBA 를 그대로 받는다 — RGB 로 바꾸면 투명 배경이 검게 채워져
-        # 라이트 테마에서 그림만 검은 판이 된다.
+        # FASTOCTREE takes RGBA as-is -- converting to RGB fills the transparent
+        # background with black and the figure becomes a black slab on a light theme.
         im.quantize(colors=192, method=Image.FASTOCTREE).save(out, optimize=True)
     except Exception as exc:
-        print(f'  (팔레트 최적화 건너뜀: {exc})')
+        print(f'  (palette optimisation skipped: {exc})')
     print(f'{out}  ({out.stat().st_size / 1024:.0f} KB)')
 
 

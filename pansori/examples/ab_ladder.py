@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Paired A/B over many held-out utterances — does the treatment change the model?
 
-두 팔은 --arms 로 고른다. 가사 A/B (whisper vs snapped) 로 만들었지만 정렬기 A/B
-(whisper vs sofa) 도 같은 자다 — 바뀐 것이 .lab 이든 정렬기든, 남는 질문은
-"그 라벨로 배운 모델의 소리가 원본에 더 가까운가" 하나이기 때문이다.
+The two arms are chosen with --arms. It was built for the lyrics A/B (whisper vs
+snapped), but it is the same ruler for the aligner A/B (whisper vs sofa) -- whether
+what changed is the .lab or the aligner, the remaining question is the same one:
+"does the model trained on those labels sound closer to the original?"
 
 `run_examples.sh` renders three utterances, and three is not enough here. Measured
 seed spread on a single clip is ±3-12% on mel L1 and ±13-28% on f0 RMSE
@@ -50,20 +51,21 @@ ARMS = {
     'snapped': dict(config='configs/exp/ac_snap.yaml', data='data/pansori_snap',
                     ac_exp='pansori_ac_snap', ckpt=36000),
     'sofa': dict(config='configs/exp/ac_sofa.yaml', data='data/pansori_sofa',
-                 ac_exp='pansori_ac_sofa', ckpt=None),   # --ckpt sofa=N 로 준다
+                 ac_exp='pansori_ac_sofa', ckpt=None),   # supplied via --ckpt sofa=N
 }
 
-# 어느 두 팔을 비교하는가. --arms 가 바꾼다; 하위 프로세스에도 그대로 넘어간다.
+# Which two arms are compared. --arms changes it; it is passed to child processes as-is.
 PAIR = ['whisper', 'snapped']
 
-# 대조군을 무엇으로 가르는가. 가사 A/B 는 "텍스트가 바뀐 발화"가 처치군이지만,
-# 정렬기 A/B 는 모든 발화의 음소열이 바뀌므로 그 기준이 아무것도 가르지 못한다.
-# 대신 MFA 가 실제로 무너진 발화(하한선 비율 상위 절반)를 처치군으로 본다 —
-# 정렬기를 바꾼 이유가 바로 그 발화들이기 때문이다.
+# What separates the control group. For the lyrics A/B the treatment group is
+# "utterances whose text changed", but for the aligner A/B every utterance's phoneme
+# sequence changes, so that criterion separates nothing. Instead the treatment group is
+# the utterances where MFA actually collapsed (the top half by floor rate) -- because
+# those utterances are precisely why the aligner was changed.
 GROUP_LABELS = {
-    ('whisper', 'snapped'): ('가사 바뀐 발화', '가사 동일 (대조군)'),
+    ('whisper', 'snapped'): ('lyrics changed', 'lyrics identical (control)'),
 }
-DEFAULT_LABELS = ('MFA 하한선 높은 발화', 'MFA 하한선 낮은 발화 (대조군)')
+DEFAULT_LABELS = ('high MFA floor rate', 'low MFA floor rate (control)')
 
 
 # ---------------------------------------------------------------- items
@@ -83,9 +85,10 @@ def corpus_rows(data_root: Path):
 def holdout_prefixes(config_path: Path):
     """test_prefixes out of the config chain -- the songs no model ever trained on.
 
-    base_config 를 따라 내려간다. 커밋 3cb4989 가 datasets 블록을 실험 파일에서
-    configs/pansori/data_*.yaml 로 옮겼으므로, 실험 파일만 읽으면 아무것도 못 찾는다
-    (그 커밋 이후 이 함수는 조용히 빈 목록을 돌려주고 있었다).
+    Descends through base_config. Commit 3cb4989 moved the datasets block out of the
+    experiment file into configs/pansori/data_*.yaml, so reading only the experiment
+    file finds nothing (after that commit this function was quietly returning an empty
+    list).
     """
     import yaml
 
@@ -98,7 +101,7 @@ def holdout_prefixes(config_path: Path):
         seen.add(path)
         text = path.read_text(encoding='utf-8')
         # make_configs.py writes the count as a trailing comment on the same line
-        # ("- 'c235c995'      # 발화 3,792개"), so take what is between the quotes.
+        # ("- 'c235c995'      # 3,792 utterances"), so take what is between the quotes.
         for line in text.splitlines():
             line = line.strip()
             if line.startswith("- '") and line.count("'") >= 2:
@@ -109,13 +112,13 @@ def holdout_prefixes(config_path: Path):
 
     walk(config_path)
     if not prefixes:
-        sys.exit(f'{config_path} 체인에서 test_prefixes 를 찾지 못했습니다 — '
-                 f'홀드아웃 없이는 A/B 가 성립하지 않습니다.')
+        sys.exit(f'no test_prefixes found in the {config_path} chain — '
+                 f'without a hold-out there is no A/B.')
     return prefixes
 
 
 def _floor_rate(row):
-    """이 발화의 ph_dur 중 MFA 하한선에 박힌 비율. label_report 와 같은 정의를 쓴다."""
+    """The fraction of this utterance's ph_dur pinned to MFA's floor. Same definition as label_report."""
     sys.path.insert(0, str(REPO / 'pansori' / 'eval'))
     from label_report import MFA_FLOOR, EPS
     durs = [float(x) for x in row['ph_dur'].split()]
@@ -190,7 +193,7 @@ def mode_prep(arm, items):
                    'f0_timestep': F0_TIMESTEP}
         set_speaker(segment, speaker)
         write_ds(segment, out)
-    print(f'| prep {arm}: {len(items)}항목')
+    print(f'| prep {arm}: {len(items)} items')
 
 
 def mode_acoustic(arm, items, seeds, ckpt):
@@ -217,7 +220,7 @@ def mode_acoustic(arm, items, seeds, ckpt):
                 p['seed'] = seed
             infer.run_inference(params, out_dir=wav_dir, title=title,
                                 num_runs=1, seed=seed)
-    print(f'| acoustic {arm}: {len(items)}항목 x {len(seeds)}시드')
+    print(f'| acoustic {arm}: {len(items)} items x {len(seeds)} seeds')
 
 
 # ---------------------------------------------------------------- scoring
@@ -278,19 +281,19 @@ def sign_test(deltas, lower_is_better=True):
 def report(items, changed, scores):
     metrics = [('mel_l1', 'mel L1', True, 3),
                ('f0_rmse_cent', 'f0 RMSE ¢', True, 0),
-               ('voiced_agree', '유무성 일치', False, 3)]
+               ('voiced_agree', 'voiced agreement', False, 3)]
     hi, lo = GROUP_LABELS.get(tuple(PAIR), DEFAULT_LABELS)
     groups = [(hi, [i for i in items if changed.get(i)]),
               (lo, [i for i in items if not changed.get(i)]),
-              ('전체', list(items))]
+              ('all', list(items))]
 
     for title, subset in groups:
         subset = [i for i in subset if i in scores[PAIR[0]] and i in scores[PAIR[1]]]
         if not subset:
             continue
-        print(f'\n{title} — {len(subset)}쌍')
-        print(f"  {'지표':<12}{PAIR[0]:>10}{PAIR[1]:>10}{'Δ 중앙값':>11}"
-              f"{PAIR[1] + ' 승':>11}{'p':>9}")
+        print(f'\n{title} — {len(subset)} pairs')
+        print(f"  {'metric':<18}{PAIR[0]:>10}{PAIR[1]:>10}{'median Δ':>11}"
+              f"{PAIR[1] + ' wins':>13}{'p':>9}")
         for key, label, lower_better, nd in metrics:
             pairs = [(scores[PAIR[0]][i].get(key), scores[PAIR[1]][i].get(key))
                      for i in subset]
@@ -312,14 +315,14 @@ def report(items, changed, scores):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--n', type=int, default=30, help='항목 수 (절반은 대조군)')
+    parser.add_argument('--n', type=int, default=30, help='number of items (half are the control)')
     parser.add_argument('--seeds', type=int, default=3)
     parser.add_argument('--sample-seed', type=int, default=20260829)
     parser.add_argument('--arms', nargs=2, default=['whisper', 'snapped'],
                         metavar=('A', 'B'), choices=list(ARMS),
-                        help='비교할 두 팔 (예: --arms whisper sofa)')
+                        help='the two arms to compare (e.g. --arms whisper sofa)')
     parser.add_argument('--ckpt', action='append', default=[], metavar='ARM=STEP',
-                        help='팔별 체크포인트 step (예: --ckpt sofa=32000). 반복 가능')
+                        help='checkpoint step per arm (e.g. --ckpt sofa=32000). Repeatable')
     parser.add_argument('--mode', default='driver',
                         choices=['driver', 'prep', 'acoustic', 'score'])
     parser.add_argument('--arm', choices=list(ARMS))
@@ -330,11 +333,11 @@ def main() -> None:
     for spec in args.ckpt:
         name, _, step = spec.partition('=')
         if name not in ARMS:
-            sys.exit(f'--ckpt 의 팔 이름이 틀렸습니다: {name} (있는 것: {sorted(ARMS)})')
+            sys.exit(f'unknown arm name in --ckpt: {name} (available: {sorted(ARMS)})')
         ARMS[name]['ckpt'] = int(step)
     missing = [a for a in PAIR if ARMS[a].get('ckpt') is None]
     if missing:
-        sys.exit(f'체크포인트 step 이 없습니다: {missing} — --ckpt {missing[0]}=STEP 로 주십시오')
+        sys.exit(f'no checkpoint step for: {missing} — pass --ckpt {missing[0]}=STEP')
 
     if args.items_file:
         payload = json.loads(Path(args.items_file).read_text(encoding='utf-8'))
@@ -356,8 +359,8 @@ def main() -> None:
                                      ensure_ascii=False), encoding='utf-8')
     n_changed = sum(1 for i in items if changed[i])
     hi, lo = GROUP_LABELS.get(tuple(PAIR), DEFAULT_LABELS)
-    print(f'{PAIR[0]} vs {PAIR[1]} — 항목 {len(items)}개 '
-          f'({hi} {n_changed} / {lo} {len(items) - n_changed}), 시드 {len(seeds)}개')
+    print(f'{PAIR[0]} vs {PAIR[1]} — {len(items)} items '
+          f'({hi} {n_changed} / {lo} {len(items) - n_changed}), {len(seeds)} seeds')
 
     env = {**os.environ, 'PYTHONPATH': str(REPO)}
     ckpt_args = [x for a in PAIR for x in ('--ckpt', f'{a}={ARMS[a]["ckpt"]}')]

@@ -7,7 +7,7 @@ this reports, per generated file:
   peak / RMS      sanity -- a silent or clipped file is a bug, not a result
   f0 RMSE (cent)  pitch accuracy on frames both sides call voiced
   mel L1          spectral distance in the model's own 128-bin log-mel space
-  voiced 일치     fraction of frames where both agree on voiced/unvoiced
+  voiced agree    fraction of frames where both agree on voiced/unvoiced
 
 f0 and mel both come from the same extractors the training pipeline uses (RMVPE
 with the config's 55--750 Hz range, and nvSTFT), so the numbers are in the
@@ -34,10 +34,10 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
 TRACKS = {
-    '1_orig': '원본 녹음',
-    '2_resynth': '실제 dur + 실제 f0',
-    '3_pitch': '실제 dur, f0 예측',
-    '4_full': 'dur·f0 모두 예측',
+    '1_orig': 'original recording',
+    '2_resynth': 'real dur + real f0',
+    '3_pitch': 'real dur, f0 predicted',
+    '4_full': 'dur and f0 both predicted',
 }
 
 
@@ -98,9 +98,9 @@ def compare(ref_wav, gen_wav, hparams, pe):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='생성 예시 채점')
+    parser = argparse.ArgumentParser(description='score the generated examples')
     parser.add_argument('--out', default='pansori/examples/out')
-    parser.add_argument('--json', help='결과를 JSON 으로도 저장')
+    parser.add_argument('--json', help='also save the results as JSON')
     args = parser.parse_args()
 
     from utils.hparams import set_hparams, hparams
@@ -115,8 +115,8 @@ def main():
                     if (m := re.match(r'(.+?)_[1-4]_', w.name))})
 
     results = {}
-    print(f'{"항목":26s} {"트랙":22s} {"길이":>6s} {"peak":>6s} {"RMS dB":>7s} '
-          f'{"f0 RMSE¢":>9s} {"mel L1":>7s} {"유무성":>7s}')
+    print(f'{"item":26s} {"track":24s} {"len":>6s} {"peak":>6s} {"RMS dB":>7s} '
+          f'{"f0 RMSE¢":>9s} {"mel L1":>7s} {"voiced":>8s}')
     print('-' * 100)
     for item in items:
         ref_path = out_dir / f'{item}_1_orig.wav'
@@ -138,7 +138,7 @@ def main():
     # Scores have no reference recording -- sanity numbers only.
     score_wavs = [w for w in wavs if w.name.startswith('5_score')]
     if score_wavs:
-        print(f'{"악보 합성 (원본 없음)":26s} {"":22s} {"길이":>6s} {"peak":>6s} {"RMS dB":>7s}')
+        print(f'{"score synthesis (no original)":30s} {"":20s} {"len":>6s} {"peak":>6s} {"RMS dB":>7s}')
         print('-' * 70)
         for w in score_wavs:
             gen = load_wav(w, sr)

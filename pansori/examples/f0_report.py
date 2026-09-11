@@ -3,7 +3,7 @@
 
 pansori/docs/SIGIMSAE_PLAN.md diagnosed the old cascade model as flattening
 pitch: a deterministic regressor under an L1 loss converges on the conditional
-median, so 시김새 -- the ornament that carries most of the expression in this
+median, so sigimsae -- the ornament that carries most of the expression in this
 music -- averages away. openvpi's pitch predictor is a reflow generative model
 instead, so that argument does not transfer, and the question has to be re-asked
 of the new model rather than assumed.
@@ -11,13 +11,13 @@ of the new model rather than assumed.
 This asks it. For each utterance it takes the f0 of the original recording and
 of each generated version and reports:
 
-  범위        p5--p95 spread in cents -- how much of the register is used
+  range       p5--p95 spread in cents -- how much of the register is used
   |Δf0|       median absolute frame-to-frame motion in cents/frame -- how much
               the contour actually moves, which is what an ornament is
-  진폭비      the generated |Δf0| as a fraction of the original's
+  amp ratio   the generated |Δf0| as a fraction of the original's
 
 A model that flattens keeps the range roughly right (it lands on the notes) but
-loses the motion between them, so 진폭비 well under 1 is the signature to watch.
+loses the motion between them, so an amp ratio well under 1 is the signature to watch.
 
 Both models are reflow samplers, and the ratio moves a lot between draws -- one
 utterance measured 0.46 on one seed and 1.01 on another. A single sample
@@ -42,8 +42,8 @@ import numpy as np
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
-TRACKS = [('1_orig', '원본'), ('2_resynth', '실제 f0'),
-          ('3_pitch', 'f0 예측'), ('4_full', 'dur·f0 예측')]
+TRACKS = [('1_orig', 'original'), ('2_resynth', 'real f0'),
+          ('3_pitch', 'f0 predicted'), ('4_full', 'dur+f0 predicted')]
 
 
 def contour(path, hparams, pe):
@@ -97,8 +97,8 @@ def _infer(kind, proj, ckpt, seed, out, title, predict=None):
 def seeded(items, out_dir, n_seeds, hparams, pe):
     """Regenerate the predicted tracks under n seeds and report median motion ratio."""
     ac, dur, pitch = (int(x) for x in (out_dir / 'CKPT_STEPS').read_text().split())
-    print(f'시드 {n_seeds}회 · acoustic {ac:,} · dur {dur:,} · pitch {pitch:,}\n')
-    print(f'{"항목":22s} {"트랙":14s} {"진폭비 중앙값":>14s} {"범위":>16s}')
+    print(f'{n_seeds} seeds · acoustic {ac:,} · dur {dur:,} · pitch {pitch:,}\n')
+    print(f'{"item":22s} {"track":16s} {"median amp ratio":>17s} {"range":>16s}')
     print('-' * 72)
     results = {}
     for item in items:
@@ -107,9 +107,9 @@ def seeded(items, out_dir, n_seeds, hparams, pe):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             for track, label, ds, steps in (
-                ('2_resynth', '실제 f0', f'{item}_gt.ds', None),
-                ('3_pitch', 'f0 예측', f'{item}_dur.ds', 'pitch'),
-                ('4_full', 'dur·f0 예측', f'{item}_notes.ds', 'both'),
+                ('2_resynth', 'real f0', f'{item}_gt.ds', None),
+                ('3_pitch', 'f0 predicted', f'{item}_dur.ds', 'pitch'),
+                ('4_full', 'dur+f0 predicted', f'{item}_notes.ds', 'both'),
             ):
                 ratios = []
                 for seed in range(1, n_seeds + 1):
@@ -134,11 +134,11 @@ def seeded(items, out_dir, n_seeds, hparams, pe):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='f0 평탄화 측정')
+    parser = argparse.ArgumentParser(description='measure f0 flattening')
     parser.add_argument('--out', default='pansori/examples/out')
     parser.add_argument('--json')
     parser.add_argument('--seeds', type=int, default=0,
-                        help='N회 재생성해 중앙값·범위로 판정 (0 = 기존 파일만)')
+                        help='regenerate N times and judge by median and range (0 = existing files only)')
     args = parser.parse_args()
 
     from utils.hparams import set_hparams, hparams
@@ -151,7 +151,7 @@ def main():
                     for p in out_dir.glob('*_1_orig.wav')})
 
     payload = {'timestep': hparams['hop_size'] / hparams['audio_sample_rate'], 'items': {}}
-    print(f'{"항목":22s} {"트랙":14s} {"범위 ¢":>8s} {"|Δf0| ¢/frame":>15s} {"진폭비":>8s}')
+    print(f'{"item":22s} {"track":16s} {"range ¢":>9s} {"|Δf0| ¢/frame":>15s} {"amp ratio":>10s}')
     print('-' * 74)
     for item in items:
         base_motion = None

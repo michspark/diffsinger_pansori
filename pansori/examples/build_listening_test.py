@@ -2,7 +2,7 @@
 """Bundle the A/B renders into one self-contained listening-test page.
 
 `pansori/docs/LYRICBOOK_VERDICT.md` §6 and §9-4 both end at the same missing step: nobody has
-listened. §2 says the 창본 corrections are right, but that is agreement with a book,
+listened. §2 says the changbon corrections are right, but that is agreement with a book,
 not with the recording; §9 says the corrected labels make the model's voiced/unvoiced
 decisions worse, but that is a number, not a judgement. Both need an ear.
 
@@ -59,14 +59,14 @@ def summarize(scores):
 
     changed, sc = scores['changed'], scores['scores']
     out = []
-    for label, want in (('가사 바뀜', True), ('대조군', False)):
+    for label, want in (('lyrics changed', True), ('control', False)):
         subset = [i for i in sorted(sc['whisper'])
                   if changed.get(i) is want and i in sc['snapped']]
         group = {'label': label, 'n': len(subset), 'rows': []}
         for key, name, lower_better, digits in (
                 ('mel_l1', 'mel L1', True, 3),
                 ('f0_rmse_cent', 'f0 RMSE ¢', True, 0),
-                ('voiced_agree', '유무성 일치', False, 3)):
+                ('voiced_agree', 'voiced agreement', False, 3)):
             pairs = [(sc['whisper'][i][key], sc['snapped'][i][key]) for i in subset
                      if key in sc['whisper'][i] and key in sc['snapped'][i]]
             if not pairs:
@@ -84,7 +84,7 @@ def summarize(scores):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--n', type=int, default=40,
-                        help='항목 수. 가사가 바뀐 것을 먼저 채우고 남으면 대조군')
+                        help='number of items. Fills with lyrics-changed first, then the control')
     parser.add_argument('--out', default=str(OUT_HTML))
     args = parser.parse_args()
 
@@ -152,12 +152,12 @@ def main() -> None:
     out = Path(args.out)
     out.write_text(html, encoding='utf-8')
     size = out.stat().st_size
-    print(f'\n{out}  {size / 1e6:.1f} MB  (오디오 {total_bytes / 1e6:.1f} MB / '
-          f'{len(items)}항목 x 3)')
+    print(f'\n{out}  {size / 1e6:.1f} MB  (audio {total_bytes / 1e6:.1f} MB / '
+          f'{len(items)} items x 3)')
     if size > 16e6:
-        sys.exit('⚠ 16 MB 초과 — --n 을 줄일 것')
+        sys.exit('⚠ over 16 MB — reduce --n')
     if not shutil.which('ffmpeg'):
-        sys.exit('ffmpeg 없음')
+        sys.exit('ffmpeg not found')
 
 
 if __name__ == '__main__':

@@ -35,13 +35,14 @@ def infer(kind, proj, exp, ckpt, seed, out, title, predict=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='시드에 따른 점수 편차 측정')
+    parser = argparse.ArgumentParser(description='measure how much the scores vary with the seed')
     parser.add_argument('item')
     parser.add_argument('--seeds', type=int, default=5)
     parser.add_argument('--ac-ckpt', type=int)
     parser.add_argument('--dur-ckpt', type=int)
     parser.add_argument('--pitch-ckpt', type=int)
-    # 가사 A/B 는 같은 발화를 두 모델로 재므로 실험 이름과 산출물 경로가 둘이다.
+    # The lyrics A/B measures the same utterance with two models, so there are two
+    # experiment names and two output paths.
     parser.add_argument('--ac-exp', default='pansori_ac_v1')
     parser.add_argument('--var-exp', default='pansori_var_v1')
     parser.add_argument('--out-dir', default='pansori/examples/out')
@@ -58,7 +59,7 @@ def main():
     orig = REPO / args.out_dir / f'{args.item}_1_orig.wav'
     for p in (notes_ds, orig):
         if not p.exists():
-            sys.exit(f'{p} 없음 — run_examples.sh 를 먼저 돌릴 것')
+            sys.exit(f'{p} missing — run run_examples.sh first')
 
     import measure as M
     from utils.hparams import set_hparams, hparams
@@ -69,7 +70,7 @@ def main():
     ref = M.load_wav(orig, sr)
 
     print(f'{args.item} · {args.ac_exp} {ac:,} · {args.var_exp} dur {dur:,} / pitch {pitch:,}')
-    print(f'{"seed":>6s} {"f0 RMSE ¢":>10s} {"mel L1":>8s} {"유무성":>8s}')
+    print(f'{"seed":>6s} {"f0 RMSE ¢":>10s} {"mel L1":>8s} {"voiced":>8s}')
     rows = []
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -84,11 +85,11 @@ def main():
 
     for key, label, spec in (('f0_rmse_cent', 'f0 RMSE ¢', '.0f'),
                              ('mel_l1', 'mel L1', '.3f'),
-                             ('voiced_agree', '유무성 일치', '.1%')):
+                             ('voiced_agree', 'voiced agreement', '.1%')):
         v = np.array([r[key] for r in rows])
-        print(f'{label:12s} 중앙값 {format(np.median(v), spec)}  '
-              f'범위 {format(v.min(), spec)}–{format(v.max(), spec)}  '
-              f'상대폭 {(v.max() - v.min()) / np.median(v):.0%}')
+        print(f'{label:18s} median {format(np.median(v), spec)}  '
+              f'range {format(v.min(), spec)}–{format(v.max(), spec)}  '
+              f'relative spread {(v.max() - v.min()) / np.median(v):.0%}')
 
 
 if __name__ == '__main__':

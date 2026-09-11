@@ -26,7 +26,7 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 def main():
-    parser = argparse.ArgumentParser(description='검증 손실 최저 체크포인트 찾기')
+    parser = argparse.ArgumentParser(description='find the lowest-validation-loss checkpoint')
     parser.add_argument('exp')
     parser.add_argument('--metric', default='validation/total_loss')
     parser.add_argument('--quiet', action='store_true')
@@ -36,7 +36,7 @@ def main():
     available = {int(m.group(1)) for p in exp_dir.glob('model_ckpt_steps_*.ckpt')
                  if (m := re.search(r'steps_(\d+)\.ckpt', p.name))}
     if not available:
-        sys.exit(f'{exp_dir}: 체크포인트 없음')
+        sys.exit(f'{exp_dir}: no checkpoints')
 
     events = sorted(glob.glob(str(exp_dir / 'lightning_logs' / '*' / 'events.out.tfevents.*')))
     if not events:
@@ -60,14 +60,14 @@ def main():
     best_step = min(scalars, key=scalars.get)
     kept = {s: v for s, v in scalars.items() if s in available}
     if not kept:
-        sys.exit(f'{args.exp}: 검증된 step 중 남아 있는 체크포인트가 없다')
+        sys.exit(f'{args.exp}: no checkpoint survives for any validated step')
     pick = min(kept, key=kept.get)
 
     if not args.quiet:
         note = '' if pick == best_step else \
-            f' (전체 최저는 step {best_step:,} 이지만 num_ckpt_keep 으로 삭제됨)'
-        print(f'{args.exp}: {args.metric} 최저 {kept[pick]:.5f} @ step {pick:,}'
-              f' / 마지막 step {max(scalars):,} 은 {scalars[max(scalars)]:.5f}{note}',
+            f' (the overall minimum is step {best_step:,} but num_ckpt_keep deleted it)'
+        print(f'{args.exp}: {args.metric} minimum {kept[pick]:.5f} @ step {pick:,}'
+              f' / the last step {max(scalars):,} is {scalars[max(scalars)]:.5f}{note}',
               file=sys.stderr)
     print(pick)
 
