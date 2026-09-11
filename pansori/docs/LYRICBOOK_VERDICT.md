@@ -1,36 +1,38 @@
-# 가사집 스냅 판정 — 가사를 고치면 MFA 정렬이 좋아지는가
+# Lyricbook snapping verdict — does correcting the lyrics improve MFA alignment?
 
-**판정: ❌ 성립하지 않는다.** 가사집 원문으로 교정한 텍스트는 MFA 정렬을
-**악화**시킨다. 도구는 동작하고 교정 자체는 대부분 옳지만, 이 파이프라인의
-목적에는 도움이 되지 않는다. `04_align.py`의 기본 입력은 `lyrics.jsonl`로 둔다.
+**Verdict: ❌ it does not.** Text corrected against the *changbon* (창본, the published
+libretto) makes MFA alignment **worse**. The tooling works and the corrections are mostly
+right, but they do not help this pipeline's purpose. `04_align.py`'s default input stays
+`lyrics.jsonl`.
 
-검증 일자: 2026-08-26 / MFA 3.4.1 / korean_mfa v3.0 / 표본 200 세그먼트
+Verified 2026-08-26 / MFA 3.4.1 / korean_mfa v3.0 / sample of 200 segments
 
 ---
 
-## 1. 무엇을 만들었나
+## 1. What was built
 
-| 파일 | 역할 |
+| File | Role |
 |---|---|
-| `lyricbook/build_corpus.py` | 가사집 15개 → `corpus.jsonl` (블록 713, 창 366, 창 음절 95,845자) |
-| `preprocess/03b_snap_lyrics.py` | 곡 단위 앵커링 + 세그먼트 스냅 → `lyrics_snapped.jsonl` |
-| `eval/compare_lyrics_alignment.py` | 같은 클립을 두 가사로 각각 MFA 정렬해 비교 |
-| `preprocess/04_align.py` | `--lyrics` / `--suffix` / `--items` 추가 (기본 동작은 불변) |
+| `lyricbook/build_corpus.py` | 15 lyricbooks → `corpus.jsonl` (713 blocks, 366 sung, 95,845 sung syllables) |
+| `preprocess/03b_snap_lyrics.py` | Per-song anchoring + per-segment snapping → `lyrics_snapped.jsonl` |
+| `eval/compare_lyrics_alignment.py` | Aligns the same clip with both lyric sources and compares |
+| `preprocess/04_align.py` | Added `--lyrics` / `--suffix` / `--items` (default behaviour unchanged) |
 
-전체 실행 결과: **295곡 / 31,529개 중 11,174개(35.4%)** 세그먼트가 교정됐다.
+Full run: **11,174 of 31,529 segments (35.4%)** across 295 songs were corrected.
 
-### 부수 발견 — 가사집 15개는 실제로 6개다
+### Incidental finding — the 15 lyricbooks are really 6
 
-같은 바탕끼리 유사도가 0.998~0.9997이다(심청가와 심청가_성창순은 바이트 단위로
-동일). 유일한 예외가 춘향가_성우향_김세종제로, 다른 춘향가와 0.37을 공유한다.
-즉 5바탕 중 춘향가만 창본이 둘이고 나머지는 하나씩이다.
+Within a given *bata* (바탕, the work/repertoire piece) similarity runs 0.998–0.9997 — 심청가
+and 심청가_성창순 are byte-identical. The one exception is 춘향가_성우향_김세종제, which
+shares 0.37 with the other 춘향가. So of the five bata, only 춘향가 has two changbon; the
+rest have one each.
 
-### 창본 자동 선택은 정확했다
+### Automatic changbon selection was accurate
 
-파일명의 바탕은 매칭에 **전혀 넣지 않았다**. 그래서 파일명은 정답지 역할을 한다.
-게이트를 열고 387곡 전체를 돌린 결과:
+The bata in the filename was **never** fed into the matching, so the filename acts as an
+answer key. Opening the gate and running all 387 songs:
 
-| 배경대비 | 곡 | 바탕 적중률 | 세그먼트 채택률 |
+| Contrast vs background | Songs | Bata hit rate | Segment adoption rate |
 |---:|---:|---:|---:|
 | 0.0-1.2 | 31 | 36% | 3.1% |
 | 1.2-1.5 | 61 | 75% | 7.8% |
@@ -38,15 +40,17 @@
 | 1.8-2.0 | 26 | **100%** | 25.3% |
 | 2.0+ | 230 | **100%** | 50.4% |
 
-게이트를 1.5로 두면 **295곡의 창본 선택이 파일명과 100% 일치**한다. 마지막 열도
-읽을 만하다 — 앵커가 틀린 구간에서도 세그먼트의 3.1%만 통과한다. 2단계 유사도
-검사가 잘못된 앵커를 실제로 되돌린다는 뜻이다.
+With the gate at 1.5, **the changbon choice for all 295 songs matches the filename 100% of
+the time**. The last column is worth reading too — even where the anchor is wrong, only
+3.1% of segments get through. That means the second-stage similarity check really does undo
+bad anchors.
 
 ---
 
-## 2. 교정 자체는 옳다
+## 2. The corrections themselves are right
 
-`fe9992ba` (김수연 · 심청가 청이 밥 빌러 가는데), 123개 중 72개 채택:
+`fe9992ba` (Kim Su-yeon · Simcheongga, the passage where Cheong goes begging for rice),
+72 of 123 adopted:
 
 ```
 자료난 현인으로        →  자로는 현인으로
@@ -56,182 +60,199 @@
 한 물 며오ㅈㅈㅈㅈㅈ…   →  하물며
 ```
 
-가장 크게 악화된 클립들조차 교정 내용은 눈으로 보면 맞다 —
+Even the clips that got the *worst* are visibly correct as corrections —
 `극공단 맞이` → `흑공단 바지`, `길어 길은` → `기러기는`.
 
 ---
 
-## 3. 그런데 정렬은 나빠진다
+## 3. And yet the alignment gets worse
 
-같은 클립 182개를 두 가사로 각각 정렬했다. `.lab` 외에는 전부 동일하다.
+The same 182 clips were aligned with each lyric source. Everything but the `.lab` is
+identical.
 
-| 지표 | whisper | snapped | 변화 |
+| Metric | whisper | snapped | Change |
 |---|---:|---:|---:|
-| 0.03초 하한선 비율 | 34.03% | 38.54% | **+13%** |
-| 1초+ 침묵 (평균) | 1.15s | 1.40s | **+21%** |
-| 전체 침묵 비율 | 51.91% | 57.67% | +11% |
-| 정렬된 음소 수 | 13.66 | 12.59 | −8% |
+| Fraction at the 0.03 s floor | 34.03% | 38.54% | **+13%** |
+| 1s+ silence (mean) | 1.15s | 1.40s | **+21%** |
+| Overall silence fraction | 51.91% | 57.67% | +11% |
+| Phonemes aligned | 13.66 | 12.59 | −8% |
 
-클립 단위로 개선 65 / 악화 99 / 동일 18. **합격선(하한선 −10%) 미달.**
+Per clip: 65 improved / 99 worsened / 18 unchanged. **Below the pass line (floor −10%).**
 
-### 실험이 타당하다는 근거 두 가지
+### Two reasons to believe the experiment
 
-1. **대조군 일치.** `wavs/`가 이미 정리돼 있어 표본을 원본 오디오에서 다시 잘랐다.
-   그 200개짜리 코퍼스의 whisper 정렬은 원래 31,529개 코퍼스의 결과를 재현한다 —
-   하한선 34.03 vs 34.72, 1초+ 침묵 1.15 vs 1.21, 음소 수 13.66 vs 13.66.
-2. **비결정성 없음.** 텍스트가 한 글자도 바뀌지 않은 7개 클립의 지표 변화는
-   정확히 0.00이다.
+1. **The control matches.** Since `wavs/` had already been cleaned up, the sample was re-cut
+   from the source audio. The whisper alignment of that 200-item corpus reproduces the
+   original 31,529-item corpus's result — floor 34.03 vs 34.72, 1s+ silence 1.15 vs 1.21,
+   phoneme count 13.66 vs 13.66.
+2. **No non-determinism.** For the 7 clips whose text did not change by a single character,
+   every metric changed by exactly 0.00.
 
 ---
 
-## 4. 원인 — 네 가설 중 셋을 기각했다
+## 4. Cause — three of four hypotheses rejected
 
-| 가설 | 검사 | 결과 |
+| Hypothesis | Test | Result |
 |---|---|---|
-| 어절 경계가 늘어 MFA가 시간을 침묵에 숨긴다 | Δ어절수 vs Δ하한선 상관 | **기각** (+0.046, 어절수 3.10→3.08) |
-| 가사집 고어·방언이 OOV라 `spn`으로 뭉개진다 | korean_mfa 사전 대조 | **기각** (OOV 70.3% vs 71.4%, 사실상 동일) |
-| 텍스트가 시간축에서 밀려 이웃 클립 내용이 들어온다 | 유사도 0.85~0.95 구간 | **기각** (밀릴 수 없는 구간인데 +6.1%) |
-| 내용 치환 자체가 음향과 덜 맞는다 | 음절 동일 vs 상이 | **성립** (동일 0.0% / 상이 +4.4%) |
+| More word boundaries let MFA hide time in silence | Δword count vs Δfloor correlation | **Rejected** (+0.046; word count 3.10→3.08) |
+| Archaic and dialectal lyricbook words are OOV and smear into `spn` | Checked against the korean_mfa dictionary | **Rejected** (OOV 70.3% vs 71.4%, effectively identical) |
+| The text is shifted along time and neighbouring clips' content bleeds in | The 0.85–0.95 similarity band | **Rejected** (+6.1% in a band where shifting is impossible) |
+| The content substitution itself fits the acoustics less well | Identical vs differing syllables | **Holds** (identical 0.0% / differing +4.4%) |
 
-`spn`(MFA가 음향적으로 포기한 단어)이 164→202개로 23% 늘었다. OOV는 그대로인데
-`spn`만 늘었다는 것은, 사전에 있고 없고의 문제가 아니라 **그 단어가 이 소리와 맞지
-않는다**고 MFA가 판단했다는 뜻이다.
+`spn` (a word MFA acoustically gave up on) rose 23%, from 164 to 202. OOV stayed put while
+`spn` alone rose, which means this is not about whether the word is in the dictionary —
+MFA judged that **that word does not fit this sound**.
 
-### 왜 그런가
+### Why
 
-MFA는 음향 정렬기다. **Whisper의 전사는 바로 이 녹음의 소리에서 나왔고, 가사집은
-다른 사람의 다른 공연에서 나왔다.** 둘이 갈리는 지점에서는 정의상 Whisper 쪽이
-이 오디오에 실제로 있는 소리에 더 가깝다. 판소리는 그 간극이 특히 크다 — 전라도
-방언, 고어체, 성음 변형, 시김새가 악보의 철자와 다르게 실현된다.
+MFA is an acoustic aligner. **Whisper's transcription came out of the sound of this very
+recording; the lyricbook came from a different person's different performance.** Wherever
+the two diverge, the Whisper side is by definition closer to the sound actually present in
+this audio. In pansori that gap is especially wide — Jeolla dialect, archaic diction, vocal
+transformation and sigimsae are all realised differently from the spelling on the page.
 
-그래서 **MFA 지표는 "어느 가사가 옳은가"를 판정할 수 없다.** 오디오에서 파생된
-텍스트를 구조적으로 편애한다. 이 실험의 합격선은 그 편향 위에 세워져 있었다.
+So **MFA metrics cannot decide "which lyrics are correct".** They structurally favour text
+derived from the audio. This experiment's pass line was built on top of that bias.
 
-### 남는 질문
+### The question that remains
 
-DiffSinger 음향모델이 원하는 것이 "의미상 옳은 가사"인지 "실제로 난 소리와 맞는
-음소열"인지는 이 실험이 답하지 않는다. 학습 라벨과 오디오의 일치가 중요하다면
-Whisper 쪽이 오히려 나을 수도 있다. 판정하려면 두 라벨로 각각 학습시켜 합성음을
-비교해야 하고, 그건 이 검증의 범위 밖이다.
+Whether the DiffSinger acoustic model wants "semantically correct lyrics" or "a phoneme
+sequence matching the sound that was actually made" is not something this experiment
+answers. If agreement between the training labels and the audio is what matters, the Whisper
+side may in fact be better. Deciding that means training on both label sets and comparing
+the synthesis, which is outside this verification's scope.
 
 ---
 
-## 5. 구제 가능한 부분집합은 없다
+## 5. There is no salvageable subset
 
-개선된 클립 65개를 가려낼 신호를 찾았으나 없었다.
+A signal was sought that would pick out the 65 improved clips. There is none.
 
-| 특징 | 하한선 변화와의 상관 |
+| Feature | Correlation with the floor-rate change |
 |---|---:|
-| 유사도 (`match_score`) | +0.020 |
-| 곡 앵커 밀도 | +0.069 |
-| 클립 길이 | −0.076 |
-| Whisper 음절 수 | +0.057 |
-| 원래 하한선 비율 | −0.420 ← 평균 회귀 artifact |
+| Similarity (`match_score`) | +0.020 |
+| Song anchor density | +0.069 |
+| Clip length | −0.076 |
+| Whisper syllable count | +0.057 |
+| Original floor rate | −0.420 ← a regression-to-the-mean artefact |
 
-마지막 항목만 상관이 있으나, 원래 값이 낮으면 올라가는 것 말고는 갈 곳이 없으므로
-쓸 수 있는 신호가 아니다. **채택 임계값을 올려 부분 적용하는 길은 닫혀 있다.**
-
----
-
-## 6. 이 판정의 한계
-
-- **표본 200개**다. 31,529개 중 0.6%이고, 교정된 11,174개 중 1.8%다.
-- `spn`이 늘어난 38개 단어를 개별로 듣고 확인하지 않았다. "음향과 안 맞는다"는
-  MFA의 판단을 그대로 받아들인 것이다.
-- **청취 검증을 하지 않았다.** 교정 전후 텍스트가 실제 노래와 어느 쪽이 맞는지
-  사람 귀로 확인한 바 없다. §2의 "교정이 옳다"는 가사집과의 일치일 뿐이다.
-- MFA 하한선 비율이 whisper 기준으로도 34%다. SEGMENTATION_VERDICT.md가 6초 이하에서 잰
-  25.8%보다 높다. 즉 **양쪽 다 좋은 정렬이 아니다.** 나쁜 정렬 둘을 비교한 것이다.
+Only the last one correlates, and since a low starting value has nowhere to go but up, it is
+not a usable signal. **The route of raising the adoption threshold and applying the
+correction partially is closed.**
 
 ---
 
-## 7. 권고
+## 6. Limits of this verdict
 
-1. **`04_align.py`의 기본 입력을 `lyrics.jsonl`로 유지한다.** 이미 그렇게 돼 있다.
-2. **`lyrics_snapped.jsonl`과 도구는 남긴다.** 세그먼트마다 `source`, `match_score`,
-   `book_ref`가 붙어 있어 언제든 다시 판단할 수 있고, 원본은 손대지 않았다.
-3. **MFA 지표를 가사 판정에 다시 쓰지 않는다.** §4에서 본 편향 때문이다. 다음에
-   판정한다면 청취 검증이나 학습 후 합성음 비교여야 한다.
-4. **더 큰 문제를 먼저 본다.** whisper 기준으로도 하한선 34% · 침묵 51.9%다.
-   가사를 바꾸는 것보다 정렬 자체를 고치는 쪽의 여지가 훨씬 크다.
+- **The sample is 200.** That is 0.6% of 31,529, and 1.8% of the 11,174 corrected.
+- The 38 words where `spn` increased were not listened to individually. MFA's judgement of
+  "does not fit the acoustics" was taken at face value.
+- **No listening verification was done.** Nobody has checked by ear which of the before/after
+  texts matches the actual singing. §2's "the corrections are right" means only "they agree
+  with the lyricbook".
+- The MFA floor rate is 34% even on the whisper side — higher than the 25.8% that
+  SEGMENTATION_VERDICT.md measured under 6 seconds. In other words **neither one is a good
+  alignment.** This compared two bad alignments.
 
-## 8. 산출물
+---
 
-| 파일 | 내용 |
+## 7. Recommendations
+
+1. **Keep `04_align.py`'s default input as `lyrics.jsonl`.** It already is.
+2. **Keep `lyrics_snapped.jsonl` and the tooling.** Every segment carries `source`,
+   `match_score` and `book_ref`, so the judgement can be revisited at any time, and the
+   original was never touched.
+3. **Do not use MFA metrics to judge lyrics again**, because of the bias in §4. The next
+   judgement has to be listening verification, or a synthesis comparison after training.
+4. **Look at the bigger problem first.** Even on the whisper side the floor rate is 34% and
+   silence is 51.9%. There is far more headroom in fixing the alignment itself than in
+   changing the lyrics.
+
+## 8. Outputs
+
+| File | Contents |
 |---|---|
-| `lyricbook/corpus.jsonl` | 정제된 창본 6개, 블록 713개 |
-| `data/full/lyrics_snapped.jsonl` | 31,529행, 그중 11,174행이 `source: "book"` |
-| `data/full/lyric_eval/metrics.json` | 클립별 원본 지표 (whisper / snapped) |
-| `data/full/lyric_eval/aligned_*/` | 양쪽 TextGrid — 청취 검증의 출발점 |
+| `lyricbook/corpus.jsonl` | The 6 cleaned changbon, 713 blocks |
+| `data/full/lyrics_snapped.jsonl` | 31,529 rows, of which 11,174 are `source: "book"` |
+| `data/full/lyric_eval/metrics.json` | Raw per-clip metrics (whisper / snapped) |
+| `data/full/lyric_eval/aligned_*/` | Both sides' TextGrids — the starting point for listening verification |
 
 ---
 
-## 9. 후속 — 학습시켜서 판정했다 (2026-08-29)
+## 9. Follow-up — decided by training (2026-08-29)
 
-§4 가 남긴 질문에 답한다: **"DiffSinger 음향모델이 원하는 것이 의미상 옳은 가사인지
-실제로 난 소리와 맞는 음소열인지"** — 두 라벨로 각각 학습시켜 합성음을 비교했다.
+This answers the question §4 left open: **"does the DiffSinger acoustic model want
+semantically correct lyrics, or a phoneme sequence matching the sound that was actually
+made?"** Both label sets were trained and their synthesis compared.
 
-**판정: 보정은 도움이 되지 않는다.** 가사가 실제로 바뀐 발화에서만 유무성 일치가
-유의하게 나빠진다. MFA 지표에서 본 것과 같은 방향이고, 이번에는 §4 가 지적한
-"MFA 는 오디오에서 파생된 텍스트를 편애한다"는 편향이 개입할 수 없는 자리에서 나왔다.
+**Verdict: the correction does not help.** Voiced/unvoiced agreement gets significantly
+worse, and only on utterances whose lyrics actually changed. That is the same direction seen
+in the MFA metrics, and this time it comes from a place where the bias §4 identified — MFA
+favouring text derived from the audio — cannot intervene.
 
-### 9-1. 설계 — 라벨 말고는 전부 같다
+### 9-1. Design — everything but the labels is the same
 
 | | whisper | snapped |
 |---|---|---|
-| 코퍼스 | `data/pansori` 26,955 발화 | `data/pansori_snap` 26,779 발화 (whisper 의 부분집합) |
-| 오디오 | 동일 파일 (`08_export.py --wavs_from` 이 심볼릭 링크) | ← |
-| spec 통계·홀드아웃·config | 동일 (`pansori/spec_stats.yaml` 재사용) | ← |
-| acoustic | `pansori_ac_v1` 28k (검증 최저) | `pansori_ac_snap` 36k (검증 최저) |
+| Corpus | `data/pansori`, 26,955 utterances | `data/pansori_snap`, 26,779 utterances (a subset of whisper's) |
+| Audio | The same files (`08_export.py --wavs_from` symlinks them) | ← |
+| Spec stats, hold-out, config | Identical (`pansori/spec_stats.yaml` reused) | ← |
+| acoustic | `pansori_ac_v1` 28k (lowest validation) | `pansori_ac_snap` 36k (lowest validation) |
 
-공유 발화 26,779개 중 **40.5%(10,857개)** 가 실제로 창본 텍스트를 쓴다.
+Of the 26,779 shared utterances, **40.5% (10,857)** actually use changbon text.
 
-평가는 홀드아웃 곡에서 뽑은 **60쌍 × 3시드**, `2_resynth` 단만 렌더한다 — 실제
-`ph_dur` 과 실제 f0 를 주므로 음향모델과 그 음소열만 달라지고 variance 헤드의
-샘플링 잡음이 섞이지 않는다. 시드 3개의 중앙값을 발화 하나의 값으로 쓰고 부호검정한다.
+Evaluation is **60 pairs × 3 seeds** drawn from the hold-out songs, rendering only the
+`2_resynth` rung — since real `ph_dur` and real f0 are supplied, only the acoustic model and
+its phoneme sequence differ, and the variance head's sampling noise does not mix in. The
+median over the 3 seeds is one utterance's value, and a sign test is applied.
 `pansori/examples/ab_ladder.py`.
 
-**60쌍의 절반은 대조군이다** — 두 코퍼스에서 음소열이 **글자 하나 다르지 않은** 발화.
-같은 모델 두 개로 재므로, 학습 런 사이의 우연한 차이는 두 군에 똑같이 나타난다.
-처치군에서만 나오는 차이라야 가사 탓이다.
+**Half of the 60 pairs are a control group** — utterances whose phoneme sequences do not
+differ by a single character across the two corpora. Since both are measured with the same
+two models, incidental differences between the training runs appear equally in both groups.
+Only a difference that appears in the treatment group alone can be attributed to the lyrics.
 
-### 9-2. 결과
+### 9-2. Results
 
-| 군 | 지표 | whisper | snapped | snapped 승 | p |
+| Group | Metric | whisper | snapped | snapped wins | p |
 |---|---|---:|---:|---:|---:|
-| **가사 바뀜 (30쌍)** | mel L1 | 1.097 | 1.101 | 11/30 | 0.200 |
+| **Lyrics changed (30 pairs)** | mel L1 | 1.097 | 1.101 | 11/30 | 0.200 |
 | | f0 RMSE ¢ | 42 | 39 | 14/30 | 0.856 |
-| | **유무성 일치** | **0.952** | **0.950** | **6/27** | **0.006** |
-| 대조군 (30쌍) | mel L1 | 1.070 | 1.112 | 12/30 | 0.362 |
+| | **Voiced/unvoiced agreement** | **0.952** | **0.950** | **6/27** | **0.006** |
+| Control (30 pairs) | mel L1 | 1.070 | 1.112 | 12/30 | 0.362 |
 | | f0 RMSE ¢ | 39 | 43 | 11/30 | 0.200 |
-| | 유무성 일치 | 0.975 | 0.969 | 12/22 | 0.832 |
+| | Voiced/unvoiced agreement | 0.975 | 0.969 | 12/22 | 0.832 |
 
-**분리되는 것은 하나뿐이고, 그 하나가 처치군에만 있다.** 가사가 바뀐 발화에서
-whisper 가 21승 6패 3무(중앙값 −0.53%p), 대조군에서는 10승 12패 8무(중앙값 0.00)다.
-Holm 보정은 처치군 3개 검정을 1차 가족으로 보면 p = 0.018, 9개 전부를 한 가족으로
-보면 p = 0.054 로 경계에 걸린다. **효과의 크기는 작다** — 유무성 일치 0.5%p 다.
+**Only one metric separates, and it is present only in the treatment group.** On utterances
+whose lyrics changed, whisper wins 21–6 with 3 ties (median −0.53 pp); in the control it is
+10–12 with 8 ties (median 0.00). Under Holm correction, treating the treatment group's 3
+tests as the primary family gives p = 0.018; treating all 9 as one family gives p = 0.054,
+which is borderline. **The effect is small** — 0.5 pp of voiced/unvoiced agreement.
 
-### 9-3. 왜 유무성인가
+### 9-3. Why voiced/unvoiced
 
-유무성 일치는 "모델이 이 프레임을 소리내야 한다고 보았는가"가 원본과 맞는지를 잰다.
-음소열이 바뀌면 그 판단이 직접 바뀐다 — 창본이 `극공단 맞이` 를 `흑공단 바지` 로
-고치면 모델은 다른 자리에 파열음과 마찰음을 놓는다. §2 에서 본 대로 그 교정은
-**글로는 옳다.** 그런데 그 자리에서 실제로 난 소리는 창자가 부른 소리이지 창본의
-철자가 아니다.
+Voiced/unvoiced agreement measures whether the model's judgement of "should this frame make
+sound" matches the original. Changing the phoneme sequence changes that judgement directly —
+when the changbon corrects `극공단 맞이` to `흑공단 바지`, the model places its plosives and
+fricatives elsewhere. As §2 showed, that correction **is right on paper.** But the sound
+actually made at that point is the sound the singer sang, not the changbon's spelling.
 
-### 9-4. 이 판정이 답하지 않는 것
+### 9-4. What this verdict does not answer
 
-- **팔 하나에 학습 런 하나뿐이다.** 대조군이 런 사이의 전역적 차이는 걸러 주지만,
-  "처치군에서만 나빠진다"는 상호작용 자체가 우연일 가능성은 런을 더 돌려야 배제된다.
-- `2_resynth` 단만 쟀다. 길이·피치 예측까지 포함한 전체 추론에서 같은 방향인지는
-  이 표가 말하지 않는다 (3발화 사다리에서는 시드 잡음에 묻혔다).
-- **청취 검증은 여전히 없다.** §6 의 한계가 그대로 남아 있다.
+- **There is only one training run per arm.** The control group filters out global
+  differences between runs, but the possibility that the interaction itself — "worse only in
+  the treatment group" — is chance can only be ruled out by running more.
+- Only the `2_resynth` rung was measured. Whether full inference, including duration and
+  pitch prediction, goes the same way is not something this table says (on a 3-utterance
+  ladder it was buried in seed noise).
+- **There is still no listening verification.** §6's limit remains exactly as it was.
 
-### 9-5. 권고 (§7 을 대체하지 않고 보강한다)
+### 9-5. Recommendations (these reinforce §7 rather than replacing it)
 
-1. `04_align.py` 의 기본 입력을 `lyrics.jsonl` 로 유지한다 — 이제 근거가 둘이다.
-2. `lyrics_snapped.jsonl` 과 `data/pansori_snap` 은 남긴다. 창본 정렬 자체는
-   **가사 검색·자막·바탕 식별**처럼 라벨이 아닌 용도에서는 여전히 옳다 (§2, 창본
-   자동 선택 100% 적중).
-3. 여기서 더 파려면 학습 런을 팔당 2~3개 돌려 상호작용을 확인하거나, 청취 검증으로
-   넘어간다. 지표를 더 짜내는 쪽은 소진됐다.
+1. Keep `04_align.py`'s default input as `lyrics.jsonl` — there are now two grounds for it.
+2. Keep `lyrics_snapped.jsonl` and `data/pansori_snap`. Changbon alignment itself is still
+   right for non-label purposes such as **lyric search, subtitling and bata identification**
+   (§2; automatic changbon selection was 100% accurate).
+3. To dig further from here, either run 2–3 training runs per arm to confirm the
+   interaction, or move to listening verification. Squeezing more out of the metrics is
+   exhausted.
