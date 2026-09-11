@@ -1,298 +1,330 @@
-# 판소리 DiffSinger — 전체 파이프라인 단계별 기록
+# Pansori DiffSinger — the full pipeline, stage by stage
 
-원본 오디오 한 덩어리에서 "부르는 모델"까지, 실제로 돌아간 순서 그대로 적은 문서다.
-각 단계는 **무엇을 받아 무엇을 내놓는지 · 왜 그렇게 하는지 · 실측 수치 · 재실행 비용**을 같이 적었다.
+A record of getting from one pile of source audio to a model that sings, written in the order
+it actually ran. Each stage records **what it takes in and puts out · why it is done that
+way · the measured numbers · the cost of re-running it**.
 
-- 실행법 요약은 [`../README.md`](../README.md), 이식 경위는 [`PORTING.md`](PORTING.md),
-  **학습 한 스텝 안에서 벌어지는 일**은 [`TRAINING.md`](TRAINING.md),
-  6초 제약의 근거는 [`SEGMENTATION_VERDICT.md`](SEGMENTATION_VERDICT.md), 남은 일은 [`NEXT.md`](NEXT.md).
-- 브랜치 `feat/pansori`. **upstream 파일은 한 줄도 고치지 않았다.**
+- The command summary is in [`../README.md`](../README.md); the port history is in
+  [`PORTING.md`](PORTING.md); **what happens inside a single training step** is in
+  [`TRAINING.md`](TRAINING.md); the basis for the 6-second constraint is in
+  [`SEGMENTATION_VERDICT.md`](SEGMENTATION_VERDICT.md); what is left to do is in
+  [`NEXT.md`](NEXT.md).
+- Branch `feat/pansori`. **Not one line of an upstream file has been changed.**
 
 ```
-원본 394곡(28 GB)
-  └ 01 세그멘테이션 ─ 02 화자매핑 ─ 03 전사 ─ 04 정렬 ─ 05 노트 ─ 06 병합 ─ 07 검증 ─ 08 내보내기
-      └ 사전 생성 ─ config 생성 ─ binarize ─ spec 통계 부트스트랩
-          └ acoustic 학습 ┐
-            variance 학습 ┴─ 체크포인트 선택(헤드별)
-                └ .ds 작성 ─ variance(dur) ─ variance(pitch) ─ acoustic ─ NSF-HiFiGAN ─ wav
-                    └ 사다리 4단 · 악보 합성 ─ 측정 ─ 리포트
+394 source recordings (28 GB)
+  └ 01 segment ─ 02 speaker map ─ 03 transcribe ─ 04 align ─ 05 notes ─ 06 merge ─ 07 validate ─ 08 export
+      └ build dictionary ─ generate configs ─ binarize ─ bootstrap spec stats
+          └ train acoustic ┐
+            train variance ┴─ select checkpoints (per head)
+                └ write .ds ─ variance(dur) ─ variance(pitch) ─ acoustic ─ NSF-HiFiGAN ─ wav
+                    └ 4-rung ladder · score synthesis ─ measure ─ report
 ```
 
 ---
 
-## 0. 준비물
+## 0. Prerequisites
 
-### 하드웨어 / 원본
+### Hardware / source material
 
-| 항목 | 값 |
+| Item | Value |
 |---|---|
-| GPU | RTX 4090 (24 GB) — 실제 사용 6.1 GB |
-| 원본 오디오 | `~/Desktop/Pansori_Data/Audio/` 394곡, 44.1 kHz 스테레오, **28 GB** (demucs 로 분리한 보컬) |
-| 창 구간 라벨 | `labels_2.json` — 곡 안의 악조 구간(계면조/우조/평조/설렁제/경드름)과 아니리·창조 |
-| 노트 MIDI | `rosvot_midi/*_vocal.mid` — ROSVOT 이 곡 단위로 뽑아 둔 음표 타임라인 |
-| 가사 텍스트 | **없음** → 3단계에서 전사부터 해야 한다 |
+| GPU | RTX 4090 (24 GB) — 6.1 GB actually used |
+| Source audio | `~/Desktop/Pansori_Data/Audio/`, 394 recordings, 44.1 kHz stereo, **28 GB** (vocals separated with demucs) |
+| Sung-section labels | `labels_2.json` — the modal sections within each piece (gyemyeonjo / ujo / pyeongjo / seolleongje / gyeongdeureum) plus aniri and changjo |
+| Note MIDI | `rosvot_midi/*_vocal.mid` — the note timeline ROSVOT extracted per piece |
+| Lyrics text | **None** → stage 03 has to transcribe it first |
 
-원본 경로는 `preprocess/pansori_lib.py` 의 `PANSORI_DATA` 한 곳에만 하드코딩돼 있다.
+The source path is hardcoded in exactly one place: `PANSORI_DATA` in
+`preprocess/pansori_lib.py`.
 
-### conda 환경 3개
+### Three conda environments
 
-| env | Python | 쓰는 곳 | 이유 |
+| env | Python | Used by | Why |
 |---|---|---|---|
-| `pansori` | 3.10 | 01–03, 06–08 | `base` 는 numba ↔ numpy 2.5 충돌로 06 이 죽는다 |
+| `pansori` | 3.10 | 01–03, 06–08 | Under `base`, the numba ↔ numpy 2.5 conflict kills 06 |
 | `aligner` | 3.14 | 04–05 | MFA 3.4.1 + `korean_mfa` + mecab-ko |
-| `dsp` | 3.10 | binarize / train / infer | openvpi 본체. **`PYTHONNOUSERSITE=1` 필수** |
+| `dsp` | 3.10 | binarize / train / infer | openvpi itself. **`PYTHONNOUSERSITE=1` is mandatory** |
 
-`PYTHONNOUSERSITE=1` 이 없으면 `~/.local/lib/python3.10/site-packages` 의 낡은 tensorflow 가
-tensorboard import 를 protobuf 에서 죽이고, 거기 numpy 때문에 pip 이 요구사항을 "이미 설치됨"으로
-오판해 env 안에 안 넣는다. `dsp` env 의 `activate.d` 에 넣어 뒀다.
-`requirements.txt` 에는 **`torchaudio` 가 빠져 있다** (upstream 누락) — RMVPE 가 `Resample` 을 쓴다.
+Without `PYTHONNOUSERSITE=1`, an old tensorflow in
+`~/.local/lib/python3.10/site-packages` kills the `tensorboard` import at protobuf, and the
+numpy there makes pip misjudge requirements as "already satisfied" and never install them
+into the env. It is set in the `dsp` env's `activate.d`.
+`requirements.txt` is **missing `torchaudio`** (an upstream omission) — RMVPE uses
+`Resample`.
 
-`bash pansori/server/run.sh setup` 이 위를 전부 한다.
+`bash pansori/server/run.sh setup` does all of the above.
 
 ---
 
-## A. 전처리 8단계
+## A. Preprocessing, eight stages
 
-단계 사이를 **jsonl 파일로 끊어 뒀다.** 재실행 비용이 단계마다 100배씩 차이나기 때문이다 —
-MFA 정렬은 수 시간이지만 그 결과를 다시 파싱하는 것은 2분이다. 실제로 음소 매핑을 고쳤을 때
-04는 정렬을 다시 돌리지 않고 파싱만 재실행했다.
+The stages are **separated by jsonl files on disk**, because their re-run costs differ by two
+orders of magnitude — MFA alignment takes hours, but re-parsing its output takes two minutes.
+When the phoneme mapping was fixed, stage 04 re-ran only the parse, not the alignment.
 
-모든 단계는 `pansori/data/{set}/` 아래에서 돌고 `--set` 으로 고른다 (실제 사용: `--set full`).
+Every stage runs under `pansori/data/{set}/` and is selected with `--set` (in practice
+`--set full`).
 
-### 데이터가 줄어드는 지점
+### Where the data shrinks
 
-| 지점 | 남은 수 | 줄어든 이유 |
+| Point | Remaining | Why it shrank |
 |---|---|---|
-| 원본 오디오 | 394곡 | — |
-| 창 구간 라벨과 교집합 | **387곡** | 라벨이 없거나 오디오가 없는 곡 |
-| 01 세그멘테이션 | **31,529 발화 / 33.48 h** | 아니리·창조 제외, 2초 미만 조각 폐기 |
-| 04 MFA 정렬 성공 | **26,955 발화** | 가사 2자 미만이라 정렬 대상 제외 + 정렬 실패 (−4,574) |
-| 06 병합 | 26,955 | 노트 없음/전부 rest 로 탈락한 항목 0 |
-| 08 최종 코퍼스 | **26,955 발화 / 28.93 h / 화자 23명** | — |
+| Source audio | 394 pieces | — |
+| Intersected with the section labels | **387 pieces** | No label, or no audio |
+| 01 segmentation | **31,529 utterances / 33.48 h** | aniri and changjo excluded; fragments under 2 s discarded |
+| 04 MFA alignment succeeded | **26,955 utterances** | Under 2 Hangul characters so not submitted, plus alignment failures (−4,574) |
+| 06 merge | 26,955 | Nothing dropped for missing or all-rest notes |
+| 08 final corpus | **26,955 utterances / 28.93 h / 23 speakers** | — |
 
-최종 라벨 규모: 음소 370,831개 · 노트 349,774개 · 단어 179,776개
-(발화당 평균 음소 13.8 · 노트 13.0 · 단어 6.7).
+Final label volume: 370,831 phonemes · 349,774 notes · 179,776 words
+(per utterance, a mean of 13.8 phonemes · 13.0 notes · 6.7 words).
 
 ---
 
-### 01 — 세그멘테이션 `preprocess/01_segment.py`
+### 01 — segmentation `preprocess/01_segment.py`
 
 | | |
 |---|---|
-| 입력 | `labels_2.json` + `Audio/*.wav` + `rosvot_midi/*_vocal.mid` |
-| 출력 | `data/full/segments.jsonl` + `data/full/wavs/{item}.wav` |
+| In | `labels_2.json` + `Audio/*.wav` + `rosvot_midi/*_vocal.mid` |
+| Out | `data/full/segments.jsonl` + `data/full/wavs/{item}.wav` |
 | env | `pansori` |
 
-곡을 **2–6초 발화**로 자른다. `item_name` 은 `{uuid8}_{index:04d}` 형식이고, 이 8자리 uuid 접두가
-나중에 홀드아웃 단위가 된다 (`labels_2.json` 의 경로 문자열은 NFC/NFD 가 섞여 있어 파일명 대신
-uuid 로 조인한다).
+Cuts each piece into **2–6 second utterances**. `item_name` has the form
+`{uuid8}_{index:04d}`, and that 8-digit uuid prefix later becomes the hold-out unit (the path
+strings in `labels_2.json` mix NFC and NFD, so the join is on the uuid rather than the
+filename).
 
-**왜 6초인가.** korean_mfa 는 말소리로 학습돼 긴 지속음에서 self-loop 페널티가 누적된다. 6초를
-넘으면 정렬이 붕괴한다 — 음소가 0.03초 바닥값에 몰리고 나머지가 통째로 무음으로 먹힌다. 표본
-10개 실측: 6초 이하에서는 1초 이상 침묵이 **한 건도 없고**, 6초 초과에서는 평균 **4.06초**가
-침묵으로 잡혔다. 표본이 작아 확정된 임계값이라기보다 유력한 가설이지만, 재세그멘테이션 자체는
-선택지가 아니다 — 라벨된 창 구간 37.5시간 중 21초 미만이 3.3시간뿐이다.
+**Why 6 seconds.** korean_mfa was trained on speech, so its self-loop penalty accumulates
+over long sustained tones. Past 6 seconds the alignment collapses — phonemes pile onto the
+0.03 s floor value and the remainder is swallowed whole as silence. Measured on a sample of
+10: under 6 seconds there is **not a single** silence of 1 second or more; over 6 seconds an
+average of **4.06 s** was registered as silence. The sample is small, so this is a strong
+hypothesis rather than a settled threshold — but re-segmentation itself is not optional: of
+the 37.5 hours of labelled sung sections, only 3.3 hours are under 21 seconds.
 
-**어디서 자르는가** (`segment_span`):
+**Where it cuts** (`segment_span`):
 
-1. `librosa.effects.split(top_db=35)` 로 비-무음 구간을 뽑고, 구간 사이 간격이
-   **0.4초 이상**이면 진짜 숨자리로 보고 자른다. 실측 간격 분포가 중앙값 0.13초 / p90 0.66초라
-   이 값이 숨 쉬는 자리와 **시김새 안의 짧은 멈춤**을 가른다.
-2. 2초 미만 조각은 앞 그룹에 흡수한다 — 단, 합쳐서 4.5초(soft target)를 넘지 않을 때만.
-3. 아직 6초를 넘는 그룹은 쪼갠다. 내부에 무음이 있으면 **폭 × 균형 점수**가 최대인 곳에서
-   자르고(균형 항이 없으면 가장 넓은 멈춤이 가장자리에 붙어 2초짜리 조각만 떨어져 나간다),
-   무음이 전혀 없는 긴 멜리스마는 **ROSVOT 노트 간격 중 가장 넓은 곳**으로 자른다 —
-   지속음 한가운데를 자르지 않기 위해서다.
+1. Take the non-silent spans with `librosa.effects.split(top_db=35)` and cut wherever the
+   gap between spans is **0.4 s or more**, treating that as a real breath. The measured gap
+   distribution has median 0.13 s and p90 0.66 s, so that value separates a breath from
+   **a short pause inside sigimsae**.
+2. Fragments under 2 s are absorbed into the preceding group — but only if the combination
+   stays under 4.5 s (the soft target).
+3. Groups still over 6 s are split. If there is silence inside, cut at the maximum of
+   **width × balance score** (without the balance term, the widest pause sits at an edge and
+   only a 2-second sliver breaks off); a long melisma with no silence at all is cut at
+   **the widest gap between ROSVOT notes** — so as not to cut through the middle of a
+   sustained tone.
 
-결과: 31,529 발화 / 33.48 h / 평균 3.82초 (min 2.00 / max 6.00).
-악조 분포는 계면조 22,321 · 우조 7,057 · 평조 1,746 · 설렁제 310 · 경드름 95.
+Result: 31,529 utterances / 33.48 h / mean 3.82 s (min 2.00 / max 6.00).
+Modal distribution: gyemyeonjo 22,321 · ujo 7,057 · pyeongjo 1,746 · seolleongje 310 ·
+gyeongdeureum 95.
 
-> 이 단계의 알고리즘 시뮬레이션은 `experiments/sim_merge.py`, `sim_final.py`, `diag_split.py`.
+> The algorithm simulations behind this stage are `experiments/sim_merge.py`,
+> `sim_final.py` and `diag_split.py`.
 
 ---
 
-### 02 — 화자 매핑 `preprocess/02_speaker_map.py`
+### 02 — speaker mapping `preprocess/02_speaker_map.py`
 
 | | |
 |---|---|
-| 입력 | `segments.jsonl` |
-| 출력 | `data/full/spk_map.json` |
+| In | `segments.jsonl` |
+| Out | `data/full/spk_map.json` |
 | env | `pansori` |
 
-파일명 `{uuid8}-{track}-{명창}-{바탕}_{대목}` 의 3번째 필드가 한글 2–4자면 명창으로 본다.
+In the filename `{uuid8}-{track}-{myeongchang}-{bata}_{passage}`, the third field is taken as
+the myeongchang if it is 2–4 Hangul characters.
 
-**명창을 특정할 수 없는 곡은 버리지 않고 `unknown` 한 사람으로 모은다.** 곡마다 다른 id 를 주면
-발화 몇 개짜리 싱글턴 화자가 ~122명 생기고 그 임베딩은 학습이 안 된다. 모아 두면 6.16시간짜리
-**단일 최대 화자**가 된다 (코퍼스의 21.3%).
+**Pieces whose myeongchang cannot be identified are not discarded but pooled into a single
+`unknown`.** Giving each piece its own id would create ~122 singleton speakers with a handful
+of utterances each, whose embeddings never train. Pooled, it becomes the **single largest
+speaker** at 6.16 hours (21.3% of the corpus).
 
 ---
 
-### 03 — 가사 전사 `preprocess/03_transcribe.py`
+### 03 — lyric transcription `preprocess/03_transcribe.py`
 
 | | |
 |---|---|
-| 입력 | `segments.jsonl` + `wavs/*.wav` |
-| 출력 | `data/full/lyrics.jsonl` (`text_raw`, `text`) |
+| In | `segments.jsonl` + `wavs/*.wav` |
+| Out | `data/full/lyrics.jsonl` (`text_raw`, `text`) |
 | env | `pansori` (GPU) |
 
-`openai/whisper-large-v3`, fp16, 16 kHz, `language="korean"`. transformers 의 ASR *pipeline* 은
-쓰지 않는다 — 깨진 torchcodec 을 무조건 import 한다. 모든 세그먼트가 30초 미만이라 long-form
-청킹이 필요 없어서 모델을 직접 호출한다.
+`openai/whisper-large-v3`, fp16, 16 kHz, `language="korean"`. transformers' ASR *pipeline* is
+not used — it unconditionally imports a broken torchcodec. Every segment is under 30 seconds
+so long-form chunking is unnecessary, and the model is called directly.
 
-**반복 접기가 필요하다.** 지속음 하나가 Whisper 에게는 같은 음절의 반복으로 들려서
-`지이이이…이(×200)` 같은 산출물이 나온다. `pansori_lib.normalize_repeats` 가 3회 이상 반복을
-하나로 접고, 정렬은 접힌 쪽(`text`)을 쓴다. 원본(`text_raw`)은 검토용으로 남긴다.
+**Repeat collapsing is necessary.** A single sustained tone sounds to Whisper like the same
+syllable repeated, producing output such as `지이이이…이(×200)`.
+`pansori_lib.normalize_repeats` collapses runs of 3 or more into one, and alignment uses the
+collapsed side (`text`). The original (`text_raw`) is kept for review.
 
-Whisper 는 판소리에서 완벽하지 않다. 목표는 완벽한 가사가 아니라 **음소가 시간축에서 맞는 것**이다.
+Whisper is not perfect on pansori. The goal is not perfect lyrics but **phonemes that line
+up in time**.
 
 ---
 
-### 04 — 강제 정렬 `preprocess/04_align.py`
+### 04 — forced alignment `preprocess/04_align.py`
 
 | | |
 |---|---|
-| 입력 | `segments.jsonl` + `lyrics.jsonl` + `wavs/*.wav` |
-| 출력 | `data/full/phones.jsonl` (`phones`, **`words`**) + `mfa_corpus/`, `aligned/` |
+| In | `segments.jsonl` + `lyrics.jsonl` + `wavs/*.wav` |
+| Out | `data/full/phones.jsonl` (`phones`, **`words`**) + `mfa_corpus/`, `aligned/` |
 | env | `aligner` |
 
-1. `mfa_corpus/` 에 wav 심볼릭 링크 + `.lab` (정규화 텍스트)를 깐다. 한글 2자 미만은 제외.
+1. Lay out wav symlinks and `.lab` files (normalised text) in `mfa_corpus/`. Anything under
+   2 Hangul characters is excluded.
 2. `mfa align {corpus} korean_mfa korean_mfa {aligned} --clean --output_format long_textgrid`
-3. TextGrid 를 파싱해 **IPA 108종 → 자모 기반 Coda 34종**으로 변환한다.
+3. Parse the TextGrid and convert **108 IPA symbols → the 34 jamo-based Coda phonemes**.
 
-변환은 `pansori_lib.convert_phone` 이 하고, 문맥 규칙이 두 종류 붙는다 — 자음이 초성인지
-종성인지, 그리고 활음(`y`/`w`)을 살릴지 뺄지. IPA 한 구간이 Coda 두 토큰으로 갈라지면
-(`mʲ → m y`) 구간 길이를 균등 분할한다.
+`pansori_lib.convert_phone` does the conversion, with two kinds of contextual rule attached —
+whether a consonant is an onset or a coda, and whether to keep or drop the glide (`y`/`w`).
+When one IPA span splits into two Coda tokens (`mʲ → m y`), the span's duration is divided
+evenly.
 
-**`words` tier 를 함께 기록하는 것이 이 단계의 핵심 변경이다.** openvpi 가 요구하는 `ph_num`
-(단어별 음소 개수)은 여기서만 유도할 수 있다. 남겨 두면 매핑을 고칠 때마다
-`--skip_align`(옛 이름 `--skip_mfa` 도 받는다) 로 **정렬 없이 파싱만** 다시 돌릴 수 있다
-(수 시간 → 2분).
+**Also recording the `words` tier is this stage's key change.** `ph_num` (phonemes per word),
+which openvpi requires, can only be derived here. Leaving it recorded means every mapping fix
+can re-run **parsing only, without aligning**, via `--skip_align` (the old name `--skip_mfa`
+is still accepted) — hours down to two minutes.
 
-정렬기는 `preprocess/align.yaml` 의 `aligner` 가 정한다 — `mfa`(기본) 또는 `sofa`.
-백엔드의 속은 `preprocess/aligners.py` 에 있고, 둘 다 `aligned{suffix}/*.TextGrid` 를
-남기므로 여기서 아래로는 아무것도 달라지지 않는다. SOFA 는 사전이 곧 음소셋이라
-`dictionaries/korean-coda.txt` 를 주면 IPA→Coda 변환 단계 자체가 없다. 절차는
-README §3.1–3.2.
+The aligner is chosen by `aligner` in `preprocess/align.yaml` — `mfa` or `sofa`. The
+backends live in `preprocess/aligners.py`, and since both leave
+`aligned{suffix}/*.TextGrid`, nothing from here downward changes. For SOFA the dictionary
+*is* the phoneme set, so handing it `dictionaries/korean-coda.txt` removes the IPA→Coda
+conversion step entirely. The procedure is in README §8.
 
-무음은 `sil` 플레이스홀더로 남긴다 — 그것이 쉼인지 지속음인지는 노트를 봐야 알 수 있고,
-그 판단은 06이 한다.
+Silence is left as a `sil` placeholder — whether it is a rest or a sustained tone can only be
+known by looking at the notes, and 06 makes that call.
 
-결과: 26,955 / 31,529 정렬 성공, OOV 0.
-
----
-
-### 05 — 노트 슬라이싱 `preprocess/05_notes.py`
-
-| | |
-|---|---|
-| 입력 | `segments.jsonl` + `phones.jsonl` (정렬에 살아남은 항목) |
-| 출력 | `data/full/notes.jsonl` |
-| env | `aligner` 또는 `pansori` |
-
-ROSVOT 을 다시 돌리지 않는다. 곡 단위 MIDI 를 각 발화의 절대 시간 창으로 잘라 로컬 시간으로
-옮길 뿐이다. 노트 음역은 **MIDI 35 (B1, 61.7 Hz) ~ 78 (F♯5, 740 Hz)** — 이 값이 나중에
-`f0_min: 55` / `f0_max: 750` 의 근거가 된다.
+Result: 26,955 of 31,529 aligned successfully, OOV 0.
 
 ---
 
-### 06 — 병합 `preprocess/06_merge.py`
+### 05 — note slicing `preprocess/05_notes.py`
 
 | | |
 |---|---|
-| 입력 | `phones.jsonl` + `notes.jsonl` + `segments.jsonl` + `dictionaries/korean-coda.txt` |
-| 출력 | `data/full/transcriptions.csv` (`name, ph_seq, ph_dur, ph_num, note_seq, note_dur`) |
+| In | `segments.jsonl` + `phones.jsonl` (items that survived alignment) |
+| Out | `data/full/notes.jsonl` |
+| env | `aligner` or `pansori` |
+
+ROSVOT is not re-run. The per-piece MIDI is simply sliced to each utterance's absolute time
+window and shifted to local time. The note range is **MIDI 35 (B1, 61.7 Hz) to 78 (F♯5,
+740 Hz)** — that range is what later justifies `f0_min: 55` / `f0_max: 750`.
+
+---
+
+### 06 — merge `preprocess/06_merge.py`
+
+| | |
+|---|---|
+| In | `phones.jsonl` + `notes.jsonl` + `segments.jsonl` + `dictionaries/korean-coda.txt` |
+| Out | `data/full/transcriptions.csv` (`name, ph_seq, ph_dur, ph_num, note_seq, note_dur`) |
 | env | `pansori` |
 
-파이프라인에서 판단이 가장 많이 들어가는 단계다. 순서대로:
+The stage carrying the most judgement in the pipeline. In order:
 
-**① 음소를 단어에 배정** (`assign_words`) — 음소 **중점**이 어느 `words` 구간에 들어가는지로
-판정한다. 04에서 균등 분할된 두 토큰도 중점이 원래 구간 안에 있으므로 같은 단어로 간다.
+**① Assign phonemes to words** (`assign_words`) — decided by which `words` span the phoneme's
+**midpoint** falls into. Even the two tokens that 04 split evenly have midpoints inside the
+original span, so they go to the same word.
 
-**② 노트가 덮은 무음은 흡수** (`absorb_silence`) — 이 파이프라인에서 가장 중요한 규칙이다.
-korean_mfa 는 말소리로 학습돼 **긴 지속음을 무음으로 라벨한다.** 실측: 코퍼스 시간의
-**52.2%(15.11시간)** 가 "MFA 는 무음, ROSVOT 은 노래"인 구간이고 그 구간의 노트 커버율
-중앙값은 **1.00** 이다. 그대로 두면 노래하는 구간에서 모델에게 조용히 하라고 가르치게 된다.
-그래서 노트가 50 ms 이상 덮은 무음은 **앞 음소의 끝을 늘려 흡수**하고, 노트가 없는
-무음(0.74시간)만 `SP` 로 남긴다.
+**② Absorb silence covered by a note** (`absorb_silence`) — the single most important rule in
+this pipeline. korean_mfa was trained on speech and **labels long sustained tones as
+silence.** Measured: **52.2% (15.11 hours)** of corpus time is "MFA says silence, ROSVOT says
+singing", and the median note coverage of those spans is **1.00**. Left alone, it teaches the
+model to be quiet exactly where the singer is singing. So silence covered by a note for 50 ms
+or more is **absorbed by extending the preceding phoneme's end**, and only silence with no
+note (0.74 hours) remains as `SP`.
 
-**③ 20 ms 미만 음소는 이웃에 접는다** (`merge_tiny`) — 44.1 kHz · hop 512 에서 한 프레임이
-11.6 ms 라 그 아래는 0프레임으로 반올림된다. 접히는 쪽의 구간은 살아남은 이웃이 물려받는다.
+**③ Fold phonemes under 20 ms into a neighbour** (`merge_tiny`) — at 44.1 kHz with hop 512,
+one frame is 11.6 ms, so anything below that rounds to zero frames. The folded phoneme's span
+is inherited by the surviving neighbour.
 
-**④ 경계 재유도** — 음소 구간이 발화를 빈틈없이 덮도록 첫 음소는 0.0, 마지막은 발화 길이로
-고정한 뒤 `ph_dur` 를 경계에서 다시 뽑는다. 반올림이 총합을 파형 길이에서 밀어내지 못하게.
+**④ Re-derive boundaries** — the first phoneme is pinned to 0.0 and the last to the utterance
+length so that the phoneme spans tile the utterance without gaps, then `ph_dur` is re-derived
+from the boundaries. This stops rounding from pushing the total away from the waveform
+length.
 
-**⑤ `ph_num` 생성** (`group_words`) — MFA `words` tier 는 **어절 단위**(공백 토큰)라 2음절
-어절이 한 덩어리로 온다. 사전이 예측한 음소열과 실제 음소열이 **정확히 일치하면** 음절 단위로
-쪼개고 (나간다 → 2/3/2), 연음으로 개수가 달라진 어절은 (굴러 → `g u L eo`, 사전은
-`g u L r eo`) **추측하지 않고 통째로 둔다.**
+**⑤ Produce `ph_num`** (`group_words`) — MFA's `words` tier is in **eojeol units**
+(whitespace tokens), so a two-syllable eojeol arrives as one chunk. When the dictionary's
+predicted phoneme sequence **matches the actual one exactly**, it is split into syllables
+(나간다 → 2/3/2); an eojeol whose count changed through liaison
+(굴러 → `g u L eo`, dictionary says `g u L r eo`) is **left whole rather than guessed at**.
 
-**⑥ 노트 타임라인** (`note_timeline`) — 노트 사이 빈틈을 `rest` 로 채워 `[0, duration]` 을
-빈틈없이 타일링한다. 음이름은 `librosa.midi_to_note`.
+**⑥ Note timeline** (`note_timeline`) — gaps between notes are filled with `rest` so that
+`[0, duration]` is tiled without holes. Note names come from `librosa.midi_to_note`.
 
-> **왜 `is_slur` 가 사라졌나.** 옛(MoonInTheRiver) 포맷은 멜로디를 음소 축에 얹었다 —
-> `note_seq`/`midi_dur`/`is_slur` 가 모두 `ph_seq` 와 같은 길이여야 해서 한 모음이 노트 N개에
-> 걸치면 그 모음을 N번 복제하고 2번째부터 `is_slur=1` 을 붙였다. 판소리처럼 한 음절을 길게
-> 굴리는 음악에서는 이 복제가 라벨의 상당 부분을 차지한다. openvpi 는 두 축을 분리해서
-> (`preprocessing/variance_binarizer.py`) 노트가 자기 duration 을 갖고 프레임에 독립적으로
-> 정렬된다. **복제도 슬러 플래그도 필요 없고, 시김새는 "한 단어 위에 노트 여러 개"로 그대로
-> 표현된다** — 정보 손실이 아니라 표현이 더 자연스러워진 것이다. 실제 발화 `01ed19bb_0003`
-> 기준으로 음소 16개가 옛 포맷에서는 24칸이 되고 그중 8칸이 복제였다.
+> **Why `is_slur` disappeared.** The old (MoonInTheRiver) format laid the melody onto the
+> phoneme axis — `note_seq`/`midi_dur`/`is_slur` all had to be the same length as `ph_seq`,
+> so when one vowel spanned N notes the vowel was duplicated N times with `is_slur=1` from
+> the second copy onward. In music that rolls one syllable at length, as pansori does, that
+> duplication accounts for a substantial fraction of the labels. openvpi separates the two
+> axes (`preprocessing/variance_binarizer.py`), so notes carry their own duration and align
+> to frames independently. **Neither the duplication nor the slur flag is needed, and
+> sigimsae is expressed directly as "several notes over one word"** — not a loss of
+> information, just a more natural representation. For the real utterance `01ed19bb_0003`,
+> 16 phonemes became 24 slots in the old format, 8 of them duplicates.
 
 ---
 
-### 07 — 검증 `preprocess/07_validate.py`
+### 07 — validation `preprocess/07_validate.py`
 
 | | |
 |---|---|
-| 입력 | `transcriptions.csv` (+ `segments.jsonl`) |
-| 출력 | stdout PASS/FAIL, FAIL 이면 exit 1 |
+| In | `transcriptions.csv` (+ `segments.jsonl`) |
+| Out | PASS/FAIL on stdout; exit 1 on FAIL |
 | env | `pansori` |
 
-openvpi 의 binarizer 는 **워커 프로세스 안에서 assert 로 죽는다** — 항목을 스킵하는 게 아니라
-40분짜리 작업 전체가 중간에 멈춘다. 그래서 그 assert 들을 전부 앞당겨 검사한다.
+openvpi's binarizer **dies on an assert inside a worker process** — it does not skip the
+item, it halts a 40-minute job partway. So every one of those asserts is checked up front.
 
-binarizer 가 부딪히는 순서대로:
+In the order the binarizer hits them:
 
 - `len(ph_seq) == len(ph_dur)` — acoustic + variance
 - `sum(ph_num) == len(ph_seq)` — variance, `predict_dur`
 - `len(note_seq) == len(note_dur)` — variance, `predict_pitch`
-- 비-rest 노트가 최소 하나 — variance, `predict_pitch`
+- At least one non-rest note — variance, `predict_pitch`
 - `ph_dur ≥ 0`, `note_dur ≥ 0`
-- 모든 음소가 사전에서 해결됨 — `PhonemeDictionary.encode` KeyError
+- Every phoneme resolves in the dictionary — `PhonemeDictionary.encode` KeyError
 
-binarizer 가 **하지 않는** 검사도 같이 한다:
+It also runs checks the binarizer **does not**:
 
-- `sum(ph_dur) ≈ sum(note_dur) ≈ wav 길이` (허용 0.05초) — 조용한 프레임 드리프트
-- 0프레임으로 반올림되는 음소 (토큰 낭비, 치명적이지는 않음)
+- `sum(ph_dur) ≈ sum(note_dur) ≈ wav length` (0.05 s tolerance) — quiet frame drift
+- Phonemes that round to zero frames (a wasted token; not fatal)
 
-**PASS 없이 binarize 하지 않는다.** 현재 상태: 26,955 항목 전부 PASS, 0프레임 음소 0개.
+**Never binarize without a PASS.** Current state: all 26,955 items PASS, zero zero-frame
+phonemes.
 
 ---
 
-### 08 — 내보내기 `preprocess/08_export.py`
+### 08 — export `preprocess/08_export.py`
 
 | | |
 |---|---|
-| 입력 | `segments.jsonl` + `spk_map.json` + `transcriptions.csv` + 원본 `Audio/` |
-| 출력 | `data/pansori/{화자}/wavs/*.wav` + `{화자}/transcriptions.csv` + `datasets.yaml` |
-| env | `pansori` · 약 20분 |
+| In | `segments.jsonl` + `spk_map.json` + `transcriptions.csv` + the source `Audio/` |
+| Out | `data/pansori/{speaker}/wavs/*.wav` + `{speaker}/transcriptions.csv` + `datasets.yaml` |
+| env | `pansori` · about 20 minutes |
 
-01이 만든 wav 를 쓰지 않고 **원본에서 다시 자른다.** 원본이 이미 44.1 kHz 스테레오라
-리샘플링 없이 스테레오→모노 평균 + 샘플 그리드 슬라이스만 한다 (PCM_16). 곡 하나를 열어
-그 곡의 모든 세그먼트를 뽑는 식이라 I/O 가 곡 수만큼만 발생한다.
+It does not use the wavs 01 made; it **re-cuts from the source.** The source is already
+44.1 kHz stereo, so there is no resampling — just a stereo→mono average and a sample-grid
+slice (PCM_16). It opens one piece and extracts all of that piece's segments, so I/O happens
+only as many times as there are pieces.
 
-**화자 지정 방식이 바뀌었다.** 옛 파이프라인은 binarizer 서브클래스에서 화자를 오버라이드했지만
-openvpi 는 config 의 `datasets:` 항목 단위로 지정한다 (`basics/base_binarizer.py:75-94`).
-그래서 화자별 디렉토리로 부채꼴 전개하고, 발화 수 내림차순으로 정렬한 `datasets.yaml` 을
-함께 쓴다 — `spk_id 0` 이 가장 데이터가 많은 화자가 되도록.
+**How speakers are specified has changed.** The old pipeline overrode the speaker in a
+binarizer subclass; openvpi specifies it per `datasets:` entry in the config
+(`basics/base_binarizer.py:75-94`). So the export fans out into per-speaker directories and
+writes a `datasets.yaml` sorted by utterance count descending — so that `spk_id 0` is the
+speaker with the most data.
 
-> 옛 `08_f0.py`(CREPE `.npy` 주입)는 폐기했다. openvpi 는 binarize 때 `pe: rmvpe` 로 f0 를
-> 직접 뽑는다. 주입은 불필요할 뿐 아니라 **틀리다** — 옛 그리드는 hop 128 @ 24 kHz (5.33 ms),
-> 지금은 hop 512 @ 44.1 kHz (11.6 ms)다.
+> The old `08_f0.py` (injecting CREPE `.npy`) was retired. openvpi extracts f0 itself at
+> binarize time via `pe: rmvpe`. Injection is not merely unnecessary but **wrong** — the old
+> grid was hop 128 @ 24 kHz (5.33 ms), and it is now hop 512 @ 44.1 kHz (11.6 ms).
 
-최종 코퍼스 (`data/pansori/`, 8.7 GB):
+The final corpus (`data/pansori/`, 8.7 GB):
 
-| 화자 | 발화 | 시간 | 비중 | 홀드아웃 |
+| Speaker | Utterances | Hours | Share | Hold-out |
 |---|---:|---:|---:|---|
 | unknown | 5,759 | 6.16 h | 21.3% | |
 | 이일주 | 3,792 | 4.06 h | 14.0% | `c235c995` |
@@ -313,98 +345,110 @@ openvpi 는 config 의 `datasets:` 항목 단위로 지정한다 (`basics/base_b
 | 박양덕 | 245 | 0.27 h | 0.9% | |
 | 김수연 | 240 | 0.26 h | 0.9% | |
 | 안향련 | 228 | 0.24 h | 0.8% | |
-| 정권진 | 226 | 0.24 h | 0.8% | **자동 해제** |
+| 정권진 | 226 | 0.24 h | 0.8% | **released automatically** |
 | 김정문 | 148 | 0.15 h | 0.5% | |
 | 이동백 | 47 | 0.05 h | 0.2% | |
 | 김창룡 | 46 | 0.05 h | 0.2% | |
 
-화자 편중이 극단적이다 — 상위 3명(unknown 제외 시 이일주·김소희·조상현)이 36%,
-이동백·김창룡은 각각 3분 남짓이다.
+(Speaker directories keep their Hangul names, which is why they appear untranslated here.)
+
+The speaker skew is extreme — the top 3 excluding `unknown` (이일주, 김소희, 조상현) are 36%,
+while 이동백 and 김창룡 are barely three minutes each.
 
 ---
 
-### 중간 검문소 — 음소 매핑 채점기
+### A checkpoint in the middle — the phoneme-mapping scorer
 
-`alignment/check_dict_agreement.py`. IPA→Coda 매핑표는 **손으로 만든 것**이라 고칠 때마다
-추측이었다. 그래서 채점기부터 만들었다.
+`alignment/check_dict_agreement.py`. The IPA→Coda mapping table was **made by hand**, so
+every edit to it was guesswork. So the scorer was built first.
 
-원리: `dictionaries/korean-coda.txt` 는 `build_dictionary.py` 의 자모 표에서 기계적으로
-생성돼 **`ipa_to_coda.csv` 와 완전히 독립**이므로 정답지 역할을 할 수 있다. MFA TextGrid 의
-원본 IPA 를 04와 같은 문맥 규칙으로 변환해 사전과 대조하면 변경의 옳고 그름이 숫자로 나온다.
-모호성이 없는 **1음절 어절 89,303개**로 잰다.
+The principle: `dictionaries/korean-coda.txt` is generated mechanically from
+`build_dictionary.py`'s jamo tables and is **completely independent of `ipa_to_coda.csv`**,
+so it can serve as the answer key. Converting the raw IPA in MFA's TextGrid with the same
+contextual rules 04 uses and comparing against the dictionary turns the rightness of a change
+into a number. It is measured over the **89,303 single-syllable eojeol**, which are
+unambiguous.
 
-이 하네스로 잡아낸 결함 3갈래:
+Three defects this harness caught:
 
-| 결함 | 증상 | 조치 | 기호별 일치율 |
+| Defect | Symptom | Action | Agreement by symbol |
 |---|---|---|---|
-| 구개음화 활음 미반영 | 냐 → `n a` | `c cʰ cʰː c͈ ç ɲ ɟ ʝ ɕʰ ɕ͈` 에 ` y` 추가 | ç 22.8→**74.1** · ɲ 61.0→**84.5** · c 79.0→**96.2** |
-| `ɸ → p` 오매핑 (ɸ 는 ㅍ 이 아니라 **ㅎ 의 원순모음 앞 변이**) | 후 → `p w u` | `ɸ→h`, `ɸʷ→h w`, `ʷ` 가 o/u 앞이면 활음 생략 | ɸ 0→**96.9** · ʷ 전체 **93.9** |
-| `ʎ` 가 모든 위치에서 오답 | 빨리 → `pp a L i` | `L r\|L y` — 모음 사이면 앞 음절 종성 + 뒤 음절 초성 **두 토큰**, 자음 앞이면 종성 하나 | ʎ 0→**84.5** |
+| Palatalisation glide not applied | 냐 → `n a` | Added ` y` to `c cʰ cʰː c͈ ç ɲ ɟ ʝ ɕʰ ɕ͈` | ç 22.8→**74.1** · ɲ 61.0→**84.5** · c 79.0→**96.2** |
+| `ɸ → p` mis-mapping (ɸ is not ㅍ but **ㅎ's allophone before rounded vowels**) | 후 → `p w u` | `ɸ→h`, `ɸʷ→h w`, drop the glide when `ʷ` precedes o/u | ɸ 0→**96.9** · ʷ overall **93.9** |
+| `ʎ` wrong in every position | 빨리 → `pp a L i` | `L r\|L y` — between vowels, **two tokens**: the previous syllable's coda plus the next one's onset; before a consonant, one coda | ʎ 0→**84.5** |
 
-전체 일치율 **1음절 87.92 → 89.59%**, 2음절 75.01 → 76.43%.
-이 수정 때문에 `convert_phone` 이 위치 대안에 **여러 토큰**을 담을 수 있게 됐다
-(빨리 = `pp a` + `L r` + `i`). 활음 생략 규칙도 일반화됐다 — `ʲ` 는 `i` 앞에서, `ʷ` 는 `o`/`u`
-앞에서 떨어진다. 후행 모음이 이미 그 조음을 갖고 있으면 활음이 아니라 동시조음이기 때문이다.
+Overall agreement **1 syllable 87.92 → 89.59%**, 2 syllables 75.01 → 76.43%.
+It is these fixes that gave `convert_phone` the ability to hold **multiple tokens** in a
+positional alternative (빨리 = `pp a` + `L r` + `i`). The glide-dropping rule was generalised
+at the same time — `ʲ` drops before `i` and `ʷ` drops before `o`/`u`, because when the
+following vowel already carries that articulation it is co-articulation, not a glide.
 
-수정 반영: 26,955 항목 중 **3,109개(11.5%)** 의 `ph_seq` 가 바뀌었고 07은 PASS.
-음소 인벤토리 34종 유지, OOV 0.
+Applying the fixes changed the `ph_seq` of **3,109 of 26,955 items (11.5%)**, and 07 passes.
+The phoneme inventory stays at 34 and OOV at 0.
 
-> **일치율 100% 는 목표가 아니다.** 남은 불일치의 다수는 정상적인 **연음**이다
-> (은 → `eu n`, 좋 → `j o`). 문맥 없는 음절 사전으로는 재현할 수 없는 것이 맞다.
-> 이 숫자는 절대 평가가 아니라 **변경 전후의 차분**으로 쓴다.
+> **100% agreement is not the goal.** Most of the remaining disagreement is normal
+> **liaison** (은 → `eu n`, 좋 → `j o`). A context-free syllable dictionary genuinely cannot
+> reproduce that. Use this number not as an absolute score but as **the difference before and
+> after a change.**
 
 ```sh
-python pansori/alignment/check_dict_agreement.py                       # 1음절
+python pansori/alignment/check_dict_agreement.py                       # 1 syllable
 python pansori/alignment/check_dict_agreement.py --syllables 2 --focus ʎ
 ```
 
 ---
 
-## B. 학습 준비
+## B. Training preparation
 
 ```sh
 conda activate dsp && export PYTHONPATH=. PYTHONNOUSERSITE=1 CUDA_VISIBLE_DEVICES=0
 ```
 
-### B1. 사전 생성 `build_dictionary.py`
+### B1. Build the dictionary `build_dictionary.py`
 
-한글 **11,172음절 전체** → Coda 34음소. `dictionaries/korean-coda.txt`.
+**All 11,172 Hangul syllables** → the 34 Coda phonemes. `dictionaries/korean-coda.txt`.
 
-옛 파이프라인에는 이 파일이 없었다 — 음소 인벤토리가 `CODA_36` 으로 하드코딩돼 있었고
-**가사→음소 경로 자체가 없었다.** openvpi 는 `dictionaries:` 에 적힌 파일에서 음소셋을 만들고
-(`utils/phoneme_utils.py`) 추론 때 같은 파일로 가사를 음소로 바꾼다. 즉 이 파일이 생기면서
-**녹음 없는 새 노래를 부르게 하는 길이 열렸다.**
+The old pipeline had no such file — the phoneme inventory was hardcoded as `CODA_36` and
+**there was no lyrics→phoneme path at all.** openvpi builds the phoneme set from the file
+named in `dictionaries:` (`utils/phoneme_utils.py`) and converts lyrics to phonemes with that
+same file at inference. In other words, this file existing is what **opened the path to
+singing a new song with no recording of it.**
 
-음절을 `[초성] [활음] 모음 [종성]` 으로 적는다 — 갸 → `g y a`, 의 → `eu i`, 왕 → `w a NG`.
-생성 후 실제 코퍼스가 쓰는 34종과 대조해 불일치하면 **에러를 내고 멈춘다.**
+A syllable is written `[onset] [glide] vowel [coda]` — 갸 → `g y a`, 의 → `eu i`,
+왕 → `w a NG`. After generation it is checked against the 34 the corpus actually uses, and
+**errors out and stops** on a mismatch.
 
-한계는 명시해 뒀다: 음절 단위 매핑이라 **연음이 없다.** 학습 라벨은 MFA 산출이라 연음이
-적용돼 있으므로 (책이 → `ch e g i`, `ch e K i` 아님) 추론 음소와 학습 음소가 일부 음절
-경계에서 다르다. 음절 사전의 본질적 한계이고 upstream 도 같은 절충을 한다.
+The limitation is stated explicitly: being a per-syllable mapping, it has **no liaison.** The
+training labels come from MFA and therefore do have liaison applied (책이 → `ch e g i`, not
+`ch e K i`), so the inference phonemes and the training phonemes differ at some syllable
+boundaries. That is an intrinsic limitation of a syllable dictionary, and upstream makes the
+same trade-off.
 
-### B2. config 생성 `make_configs.py`
+### B2. Generate the configs `make_configs.py`
 
-`configs/pansori/{acoustic,variance}.yaml` 을 **생성**한다 (직접 편집 금지 — 생성기를 고칠 것).
-`datasets:` 블록이 08이 디스크에 실제로 쓴 것과 일치해야 하기 때문이다.
+**Generates** `configs/pansori/{acoustic,variance}.yaml` (do not edit them directly — fix the
+generator). The reason is that the `datasets:` block has to match what 08 actually wrote to
+disk.
 
-핵심 키:
+The key settings:
 
-| 키 | 값 | 이유 |
+| Key | Value | Why |
 |---|---|---|
-| `f0_min` / `f0_max` | **55 / 750** | 이 코퍼스 최저 노트가 MIDI 35(61.7 Hz). 기본값 65 Hz 면 남성 통성 저음이 통째로 무성 처리된다 |
-| `merged_phoneme_groups` | `[[SP, AP]]` | `AP`(들숨)는 음소셋에 하드코딩돼 있고(`utils/phoneme_utils.py:18`) binarize 는 셋의 모든 항목이 코퍼스에 나타나야 통과시킨다. 우리 라벨에 들숨 구분이 없다 |
-| `use_spk_id` / `num_spk` | true / 24 | 화자 23명 + 여유 1 |
-| `pe` / `pe_ckpt` | `rmvpe` | binarize 때 f0 추출 |
+| `f0_min` / `f0_max` | **55 / 750** | This corpus's lowest note is MIDI 35 (61.7 Hz). At the default 65 Hz the low register of male *tongseong* is treated as unvoiced wholesale |
+| `merged_phoneme_groups` | `[[SP, AP]]` | `AP` (breath) is hardcoded into the phoneme set (`utils/phoneme_utils.py:18`) and binarize only passes if every member of the set appears in the corpus. Our labels carry no breath distinction |
+| `use_spk_id` / `num_spk` | true / 24 | 23 speakers + 1 of headroom |
+| `pe` / `pe_ckpt` | `rmvpe` | f0 extraction at binarize time |
 | `max_batch_frames` | 50,000 (ac) / 80,000 (var) | |
 | `pl_trainer_precision` | `16-mixed` | |
-| 증강 | 전부 off | 판소리는 이미 음역이 넓고, key_shift/speed 임베딩이 붙으면 추론 시에도 그 값을 넘겨야 해 파이프라인이 하나 더 는다 |
+| Augmentation | All off | Pansori's range is already wide, and attaching key_shift/speed embeddings means those values have to be passed at inference too — one more stage in the pipeline |
 
-**홀드아웃**은 곡 단위다 — `test_prefixes` 에 8자리 uuid 하나를 넣으면
-`split_train_valid_set` 이 `startswith` 로 매칭해 곡 하나를 통째로 뺀다.
-명창 6인에 하나씩 지정했는데, **홀드아웃 곡이 한 화자의 전부를 차지하면 생성기가 자동으로
-해제한다.** 정권진(226발화)이 그 경우다 — 학습 데이터가 0이면 화자 임베딩에 gradient 가
-한 번도 안 가는데 검증은 그 화자를 통과한다. 배울 수 없는 홀드아웃을 지키느니 화자를
-학습시키는 쪽이 낫다.
+**Hold-out is per piece** — put one 8-digit uuid in `test_prefixes` and
+`split_train_valid_set` matches it by `startswith`, pulling one whole piece out. One was
+assigned for each of six myeongchang, but **when the hold-out piece accounts for a speaker's
+entire output, the generator releases it automatically.** 정권진 (226 utterances) was that
+case — with zero training data, the speaker embedding never receives a gradient, yet
+validation runs through that speaker. Better to train the speaker than to protect a hold-out
+that cannot be learned from.
 
 ### B3. binarize
 
@@ -413,258 +457,283 @@ python scripts/binarize.py --config configs/exp/ac_v1.yaml
 python scripts/binarize.py --config configs/exp/var_v1.yaml
 ```
 
-결과: **acoustic 4.5 GB / variance 381 MB**, train **27.8 h** · valid **1.08 h**,
-23화자 전원 학습 데이터 보유. 예상보다 작다 — 파형을 담지 않고, 44.1 kHz·hop 512 는
-24 kHz·hop 128 보다 프레임이 적어서다 (구 파이프라인 16 GB 의 약 1/3).
+Result: **acoustic 4.5 GB / variance 381 MB**, train **27.8 h** · valid **1.08 h**, and all
+23 speakers have training data. Smaller than expected — it stores no waveforms, and 44.1 kHz
+at hop 512 has fewer frames than 24 kHz at hop 128 (about a third of the old pipeline's
+16 GB).
 
-> **acoustic binarize 도 HN-SEP 체크포인트를 요구한다.** breathiness/voicing/tension 을 전부
-> 꺼도 `DecomposedWaveform` 은 무조건 생성되고 기본 `hnsep: vr` 이 `checkpoints/vr/` 를 찾는다.
-> 선행 다운로드 3종: `checkpoints/rmvpe/`,
-> `checkpoints/pc_nsf_hifigan_44.1k_hop512_128bin_2025.02/`, `checkpoints/vr/`.
+> **Acoustic binarize also demands the HN-SEP checkpoint.** With breathiness, voicing and
+> tension all switched off, `DecomposedWaveform` is still built unconditionally and the
+> default `hnsep: vr` looks for `checkpoints/vr/`. The three prerequisite downloads are
+> `checkpoints/rmvpe/`, `checkpoints/pc_nsf_hifigan_44.1k_hop512_128bin_2025.02/` and
+> `checkpoints/vr/`.
 
-### B4. spec 통계 부트스트랩 — 순서가 있다
+### B4. Spec-statistics bootstrap — the order matters
 
 ```sh
 python pansori/compute_spec_stats.py     # → configs/pansori/spec_stats.yaml
-python pansori/make_configs.py           # 위 파일을 base_config 에 얹어 재생성
+python pansori/make_configs.py           # regenerate with that file layered into base_config
 ```
 
-openvpi 기본값 `spec_max: [0]` 은 이 코퍼스에 맞지 않는다. **실측 상한이 +2.838** 이라
-그대로 두면 정규화 후 diffusion 타깃이 `[-1, 1]` 을 벗어난다. 하한은 반대로 안전하다 —
-`nvSTFT` 가 `log(clamp(x, 1e-5))` 로 압축하므로 −11.513 아래가 존재할 수 없고 실측 하한은
-−11.563(여유 0.05 포함)이다.
+openvpi's default `spec_max: [0]` does not suit this corpus. **The measured ceiling is
++2.838**, so left alone the diffusion target leaves `[-1, 1]` after normalisation. The floor
+is safe the other way — `nvSTFT` compresses with `log(clamp(x, 1e-5))`, so nothing below
+−11.513 can exist, and the measured floor is −11.563 (including 0.05 of headroom).
 
-그래서 순서가 **기본값으로 한 번 binarize → 실측 → config 재생성 → 학습** 이다.
-`spec_min`/`spec_max` 는 **학습 시점에만 쓰이므로 재-binarize 는 필요 없다.**
+So the order is **binarize once with the defaults → measure → regenerate the configs →
+train.** `spec_min`/`spec_max` are **used only at training time, so no re-binarize is
+needed.**
 
 ---
 
-## C. 학습
+## C. Training
 
 ```sh
 python scripts/train.py --config configs/exp/ac_v1.yaml --exp_name pansori_ac_v1 --reset
 python scripts/train.py --config configs/exp/var_v1.yaml --exp_name pansori_var_v1 --reset
 ```
 
-> 한 스텝 안에서 무슨 일이 벌어지는지 — 배치 구성부터 손실·옵티마이저·체크포인트 규칙까지는
-> [`TRAINING.md`](TRAINING.md) 에 따로 적었다. 아래는 결과 요약이다.
+> What happens inside a single step — from batch assembly through the losses, the optimizer
+> and the checkpoint rules — is written up separately in [`TRAINING.md`](TRAINING.md). What
+> follows is a summary of the results.
 
-둘 다 **scratch 학습**이다 (사전학습 체크포인트 미사용 — 공개 모델은 중국어 음소셋이라
-phoneme embedding 이 통째로 어긋난다. config 에 `finetune_*` 자리는 만들어 뒀지만 `false`).
+Both are **trained from scratch** (no pre-trained checkpoint — the published models use a
+Chinese phoneme set, so the phoneme embedding is wholly mismatched. The `finetune_*` slots
+exist in the config but are `false`).
 
-### 모델 두 개가 하는 일
+### What the two models do
 
-| 모델 | 입력 | 출력 |
+| Model | In | Out |
 |---|---|---|
-| **variance** | 가사(음소) + 노트 | 음소별 길이 `ph_dur` + f0 곡선 |
-| **acoustic** | 음소 + `ph_dur` + f0 + 화자 | mel 스펙트로그램 (128빈) |
-| **NSF-HiFiGAN** (학습 안 함) | mel | 파형 44.1 kHz |
+| **variance** | Lyrics (phonemes) + notes | Per-phoneme duration `ph_dur` + the f0 curve |
+| **acoustic** | Phonemes + `ph_dur` + f0 + speaker | Mel spectrogram (128 bins) |
+| **NSF-HiFiGAN** (not trained) | mel | Waveform at 44.1 kHz |
 
-둘 다 **reflow 기반 생성 모델**이고 euler 20 step 으로 샘플링한다. 이 사실이 뒤의 평가 전부를
-지배한다 — 같은 입력이 매번 다른 답을 낸다.
+Both are **reflow-based generative models** sampled with 20 euler steps. That fact governs
+every evaluation that follows — the same input gives a different answer every time.
 
-### 학습 결과
+### Training results
 
-| | 돌린 step | 최저 검증 | 마지막 | 상태 |
+| | Steps run | Lowest validation | Last | Status |
 |---|---|---|---|---|
-| acoustic | **100,000** (설정대로 완주, 123 epoch) | **0.17800 @ 28,000** | 0.18834 | 28k 이후 72k step 동안 0.178–0.203 진동만 |
-| variance | **32,796** (중단, 40 epoch) | **0.08761 @ 20,000** | 0.10423 | `dur_loss` 3회 연속 상승해 중단 |
+| acoustic | **100,000** (ran to the configured end, 123 epochs) | **0.17800 @ 28,000** | 0.18834 | After 28k, only oscillation between 0.178 and 0.203 for 72k steps |
+| variance | **32,796** (stopped, 40 epochs) | **0.08761 @ 20,000** | 0.10423 | Stopped after `dur_loss` rose three times in a row |
 
-VRAM 은 24 GB 중 **6.1 GB** 만 썼다.
+VRAM used was **6.1 GB** of 24 GB.
 
-**acoustic 은 필요보다 3.5배 오래 돌았다.** 28,000 step 이 최선이었고 나머지 72,000 step 은
-GPU 3시간을 태웠을 뿐이다. 마지막 체크포인트는 최선보다 **6% 나쁘다** — 학습 손실만 보고
-있었으면 그걸 골랐을 것이다.
+**acoustic ran 3.5× longer than it needed to.** 28,000 steps was the best, and the remaining
+72,000 merely burned three GPU-hours. The last checkpoint is **6% worse** than the best — and
+watching only the training loss, that is the one you would have picked.
 
-**더 위험한 것은 `num_ckpt_keep: 8` 이다.** 4,000 step 마다 저장하므로 최근 32,000 step 치만
-남는다. 100,000 step 에서 멈췄을 때 **28,000 체크포인트는 이미 삭제돼 있었다.**
-`checkpoints/best/` 에 따로 복사해 두지 않았다면 남은 것 중 최저인 76,000(0.18335)으로
-조용히 내려앉았을 것이다.
+**The more dangerous part is `num_ckpt_keep: 8`.** Saving every 4,000 steps, only the most
+recent 32,000 steps' worth survives. When it stopped at 100,000, **the 28,000 checkpoint had
+already been deleted.** Without the separate copy in `checkpoints/best/` it would have
+quietly settled for the lowest survivor, 76,000 (0.18335).
 
-### 체크포인트는 헤드마다 따로 고른다
+### Checkpoints are chosen per head
 
-variance 는 duration 과 pitch 를 함께 학습하는데 두 헤드의 검증 손실이 **서로 반대로 간다.**
+variance trains duration and pitch together, and the two heads' validation losses **move in
+opposite directions.**
 
-| 지표 | 최저 step | 값 |
+| Metric | Lowest step | Value |
 |---|---|---|
 | acoustic `validation/total_loss` | **28,000** | 0.17800 |
-| variance `validation/dur_loss` | **16,000** | 0.07797 — 이후 계속 상승 |
-| variance `validation/pitch_loss` | **32,000** | 0.00861 — 중단 시점까지 하강 중 |
-| variance `validation/total_loss` | 20,000 | dur 이 지배하는 절충값 |
+| variance `validation/dur_loss` | **16,000** | 0.07797 — rises continuously after |
+| variance `validation/pitch_loss` | **32,000** | 0.00861 — still falling when stopped |
+| variance `validation/total_loss` | 20,000 | A compromise dominated by dur |
 
-`total_loss` 로 고른 20k 로 피치를 뽑으면 32k 보다 **f0 오차가 25% 크다.**
-그래서 `run_examples.sh` 는 헤드별로 고르고 **variance 를 두 번 돌린다** —
-1차 `--predict dur`, 2차는 그 산출물에 `--predict pitch` (이때 `ph_dur` 는 manual 로 읽힌다).
-체크포인트 하나로 두 헤드를 다 만족시킬 수 없다면, 하나만 고를 이유도 없다.
+Pulling pitch from the 20k that `total_loss` picks gives **25% more f0 error** than 32k. So
+`run_examples.sh` picks per head and **runs variance twice** — first `--predict dur`, then
+`--predict pitch` over that output (with `ph_dur` read as manual). If no single checkpoint can
+satisfy both heads, there is no reason to pick only one.
 
-도구가 이걸 지킨다:
+The tooling enforces this:
 
-- `examples/best_ckpt.py {exp} [--metric ...]` — 검증 손실 최저 step 을 고른다
-- `checkpoints/best/{exp}_step{N}.ckpt` — 최적 체크포인트를 따로 보관 (1.6 GB, gitignore)
-- `run_examples.sh` 가 실행 전에 실험 디렉토리로 **복원**한다 (이번에 실제로 발동했다)
+- `examples/best_ckpt.py {exp} [--metric ...]` — picks the lowest-validation-loss step
+- `checkpoints/best/{exp}_step{N}.ckpt` — the best checkpoints kept separately (1.6 GB,
+  gitignored)
+- `run_examples.sh` **restores** them into the experiment directory before running (it
+  actually fired this time)
 
-현재 쓰는 조합: **acoustic 28,000 · variance dur 16,000 · variance pitch 32,000**
-(`examples/out/CKPT_STEPS`).
+The combination currently in use: **acoustic 28,000 · variance dur 16,000 · variance pitch
+32,000** (`examples/out/CKPT_STEPS`).
 
 ---
 
-## D. 추론
+## D. Inference
 
-### D1. `.ds` 만들기 `make_ds.py`
+### D1. Building the `.ds` `make_ds.py`
 
-openvpi 추론은 `.ds` 파일을 읽는데, 보통 OpenUtau 같은 에디터에서 나온다. 그걸 만드는 CLI 가
-없고 판소리는 export 할 에디터 프로젝트도 없어서 양쪽 끝을 이 스크립트가 메운다.
+openvpi inference reads a `.ds` file, which normally comes out of an editor such as OpenUtau.
+There is no CLI that makes one, and pansori has no editor project to export from, so this
+script fills in both ends.
 
-**`from-label`** — 라벨에 있는 발화로 `.ds` 를 만든다. 무엇을 넣고 무엇을 뺄지로
-**단계를 하나씩 분리**할 수 있다.
+**`from-label`** — builds a `.ds` from an utterance that exists in the labels. Choosing what
+to supply and what to withhold **isolates one stage at a time**.
 
-- `--with-dur` : 실제 `ph_dur` 주입
-- `--with-f0` : 원본 wav 에서 f0 추출해 주입 (5 ms 그리드). binarizer 와 **같은 추출기·같은
-  범위**를 쓰려고 config 를 읽어 `initialize_pe()` 로 뽑는다 — 기본값 65 Hz 면 남성 통성이 잘린다
+- `--with-dur` : inject the real `ph_dur`
+- `--with-f0` : extract f0 from the source wav and inject it (5 ms grid). To use **the same
+  extractor and the same range** as the binarizer, it reads the config and extracts via
+  `initialize_pe()` — at the default 65 Hz, male *tongseong* gets cut off
 
-`--with-dur` 없이 추론하려면 **`note_slur` 가 필요하다.** 노트를 단어에 묶는 정보인데
-(`inference/ds_variance.py:193` — 0이 새 단어 시작, 1이 이어짐, 단어마다 정확히 하나가 0)
-우리 라벨은 노트와 단어를 독립 축으로 두므로 그 묶음을 기록한 적이 없다. 그래서 실측 타이밍에서
-**DP 로 복원한다** (`derive_note_slur`). 탐욕법이 아니라 DP 인 이유는 배정이 **단조 증가**여야
-하고 모든 단어가 노트를 하나씩 받아야 하기 때문이다 — 탐욕법은 짧은 단어를 굶겨 조용히
-망가진 `.ds` 를 만든다.
+To infer without `--with-dur`, **`note_slur` is required.** It is the information binding
+notes to words (`inference/ds_variance.py:193` — 0 starts a new word, 1 continues, exactly
+one 0 per word), and since our labels keep notes and words on independent axes, that binding
+was never recorded. So it is **recovered by DP** from the measured timings
+(`derive_note_slur`). DP rather than a greedy method because the assignment has to be
+**monotonically increasing** and every word must receive at least one note — a greedy method
+starves short words and quietly produces a broken `.ds`.
 
-**`from-score`** — 녹음 없이 가사 + 멜로디만으로. 사전이 가사→음소를 맡는다.
+**`from-score`** — lyrics plus melody only, no recording. The dictionary handles
+lyrics→phonemes.
 
 ```
-_   rest  0.30      # '_' 는 쉼표 → SP
+_   rest  0.30      # '_' is a rest -> SP
 춘  A4    0.45
 향  G4    0.40
--   F4    0.55      # '-' 는 앞 음절이 이어짐 (시김새·melisma)
+-   F4    0.55      # '-' continues the previous syllable (sigimsae / melisma)
 ```
 
-`ph_seq`·`ph_num` 은 사전이, `note_slur` 는 `-` 표기가 그대로 만든다.
-`examples/scores/` 에 `.txt` 를 넣으면 `run_examples.sh` 가 자동으로 3화자 합성한다.
+`ph_seq` and `ph_num` come from the dictionary; `note_slur` comes straight from the `-`
+notation. Drop a `.txt` into `examples/scores/` and `run_examples.sh` synthesises it for
+three speakers automatically.
 
-> **`--spk` 는 한글 화자명을 못 받는다.** `utils/infer_utils.py:55` 가 `[0-9A-Za-z_-]+` 로
-> 파싱한다. upstream 을 건드리지 않으려고 `make_ds.py` 가 `.ds` 의 `spk_mix` / `ph_spk_mix` 에
-> 직접 쓴다 — `--spk` 가 채웠을 필드와 같은 dict 다.
+> **`--spk` cannot take a Hangul speaker name.** `utils/infer_utils.py:56` parses it as
+> `[0-9A-Za-z_-]+`. To avoid touching upstream, `make_ds.py` writes `spk_mix` / `ph_spk_mix`
+> into the `.ds` directly — the same dict `--spk` would have filled.
 
-### D2. 사다리 4단 `examples/run_examples.sh`
+### D2. The 4-rung ladder `examples/run_examples.sh`
 
-합성이 나빴을 때 **어느 단계 탓인지** 알 수 없으면 고칠 수가 없다. 그래서 홀드아웃 발화마다
-실측값을 하나씩 빼고 예측값으로 바꾼 4단 사다리를 만든다.
+When the synthesis is bad, you cannot fix it without knowing **which stage is at fault**. So
+for each hold-out utterance a 4-rung ladder is built, replacing one measured value with a
+predicted one at each rung.
 
-| | 준 것 | 모델이 만든 것 |
+| | Given | Model produced |
 |---|---|---|
-| `1_orig` | — | — (원본 녹음, 상한) |
-| `2_resynth` | `ph_dur` + `f0` | mel — **acoustic 단독 성능** |
-| `3_pitch` | `ph_dur` | `f0` + mel — 피치 예측만 추가 |
-| `4_full` | 노트 + 가사 | `ph_dur` + `f0` + mel — 전체 추론 |
-| `5_score` | 악보 + 가사 (녹음 없음) | 전부 |
+| `1_orig` | — | — (the original recording, the ceiling) |
+| `2_resynth` | `ph_dur` + `f0` | mel — **acoustic alone** |
+| `3_pitch` | `ph_dur` | `f0` + mel — pitch prediction added |
+| `4_full` | Notes + lyrics | `ph_dur` + `f0` + mel — full inference |
+| `5_score` | Score + lyrics (no recording) | Everything |
 
-예시 발화 3개 — 남창/여창을 섞었다 (남성 통성은 `f0_min: 55` 없으면 통째로 무성 처리되는 구간):
+Three example utterances, mixing male and female voices (male *tongseong* has spans that go
+entirely unvoiced without `f0_min: 55`):
 
-- `d207244a_0085` 김소희 · 춘향가 이도령 이별 · 여창
-- `8b4d0824_0078` 조상현 · 춘향가 그때의 어사또는 · 남창
-- `e719dced_0197` 박동진 · 수궁가 · 남창
+- `d207244a_0085` Kim So-hee · Chunhyangga, Yi Doryeong's farewell · female voice
+- `8b4d0824_0078` Cho Sang-hyeon · Chunhyangga, "and then the royal inspector" · male voice
+- `e719dced_0197` Park Dong-jin · Sugungga · male voice
 
-스크립트가 하는 일: `checkpoints/best/` 복원 → 헤드별 최적 체크포인트 선택 →
-**시드 고정**(`SEED=20260818`) → 사다리 4단 × 3발화 → 악보 2개 × 3화자 → 스펙트로그램.
+What the script does: restore from `checkpoints/best/` → select the best checkpoint per head →
+**fix the seed** (`SEED=20260818`) → 4 rungs × 3 utterances → 2 scores × 3 speakers →
+spectrograms.
 
-시드를 고정하지 않으면 같은 입력이 실행마다 다른 결과를 내고 표의 숫자가 흔들린다
-(실측: f0 RMSE 가 회당 40~90 센트 움직인다).
+Without a fixed seed, the same input gives a different result every run and the numbers in
+the table wobble (measured: f0 RMSE moves 40–90 cents between runs).
 
 ---
 
-## E. 평가
+## E. Evaluation
 
-### E1. 사다리 점수 `examples/measure.py`
+### E1. Ladder scores `examples/measure.py`
 
-f0 RMSE 는 양쪽 다 유성으로 판정한 프레임에서 잰 **센트** 오차(100센트 = 반음),
-mel L1 은 모델이 실제로 최적화하는 128빈 로그-mel 공간의 거리다. 둘 다 원본 기준, 낮을수록 가깝다.
+f0 RMSE is the error in **cents** (100 cents = a semitone) over frames both sides judged
+voiced; mel L1 is a distance in the 128-bin log-mel space the model actually optimises. Both
+are against the original; lower is closer.
 
-| 발화 | 트랙 | f0 RMSE (cent) | mel L1 | 유무성 일치 |
+| Utterance | Track | f0 RMSE (cents) | mel L1 | Voiced agreement |
 |---|---|---:|---:|---:|
-| 김소희 `d207244a_0085` | 2_resynth | **52.2** | 1.011 | 86.4% |
+| Kim So-hee `d207244a_0085` | 2_resynth | **52.2** | 1.011 | 86.4% |
 | | 3_pitch | 297.9 | 1.130 | 82.3% |
 | | 4_full | 268.4 | 1.428 | 79.4% |
-| 조상현 `8b4d0824_0078` | 2_resynth | **86.8** | 0.959 | 90.2% |
+| Cho Sang-hyeon `8b4d0824_0078` | 2_resynth | **86.8** | 0.959 | 90.2% |
 | | 3_pitch | 405.1 | 1.037 | 89.6% |
 | | 4_full | 347.5 | 1.224 | 79.2% |
-| 박동진 `e719dced_0197` | 2_resynth | **84.5** | 1.599 | 93.4% |
+| Park Dong-jin `e719dced_0197` | 2_resynth | **84.5** | 1.599 | 93.4% |
 | | 3_pitch | 384.7 | 1.721 | 85.6% |
 | | 4_full | 394.1 | 1.643 | 85.4% |
 
-읽는 법: **재합성(실측 f0 주입)은 52–87센트**로 반음 안쪽이다 — acoustic + 보코더 경로는
-제자리에 있다. 피치를 모델이 만들기 시작하면 268–405센트로 뛴다 — **현재 병목은 variance 의
-피치 예측**이다. `4_full` 이 `3_pitch` 보다 나아 보이는 칸이 있는데, 아래 편차 폭을 보면
-그 차이는 의미가 없다.
+How to read it: **resynthesis (with the measured f0 injected) is 52–87 cents**, inside a
+semitone — the acoustic + vocoder path is where it should be. The moment the model starts
+producing the pitch it jumps to 268–405 cents — **the current bottleneck is variance's pitch
+prediction.** There are cells where `4_full` looks better than `3_pitch`; given the spread
+below, that difference is meaningless.
 
-### E2. 시드 편차 `examples/seed_spread.py` — 숫자를 믿기 전에
+### E2. Seed spread `examples/seed_spread.py` — before trusting a number
 
-**위 숫자들은 한 번의 추첨 결과다.** 두 모델 다 reflow 샘플러라 시드만 바꿔도
-**f0 RMSE 가 ±17%, mel L1 이 ±8%** 움직인다. 트랙끼리 비교하려면 시드를 고정하거나
-여러 번 뽑아 중앙값을 써야 한다. 표의 값 하나로 두 트랙의 우열을 가리기에는 폭이 너무 크다.
+**The numbers above are the result of one draw.** Both models are reflow samplers, so
+changing nothing but the seed moves **f0 RMSE by ±17% and mel L1 by ±8%.** To compare tracks,
+either fix the seed or draw several times and use the median. A single value from the table
+is far too wide a measurement to rank two tracks by.
 
-### E3. 시김새 평탄화 `examples/f0_report.py --seeds 5`
+### E3. Sigimsae flattening `examples/f0_report.py --seeds 5`
 
-구 파이프라인의 진단은 **피치 평탄화**였다 — 결정론적 회귀에 L1 손실을 걸면 조건부 중앙값으로
-수렴하고, 그러면 시김새(이 음악에서 표현의 대부분을 지고 있는 장식음)가 평균으로 뭉개진다는 것.
+The old pipeline's diagnosis was **pitch flattening** — put an L1 loss on a deterministic
+regression and it converges to the conditional median, which smears sigimsae (the
+ornamentation that carries most of the expression in this music) into an average.
 
-**그 논증은 새 모델에 그대로 옮겨오지 않는다.** openvpi 의 피치 예측기는 결정론적 회귀가 아니라
-reflow 생성 모델이다. 그러니 가정할 게 아니라 다시 재야 했다.
+**That argument does not carry over to the new model.** openvpi's pitch predictor is not a
+deterministic regression but a reflow generative model. So rather than assume, it had to be
+re-measured.
 
-재는 값: 프레임 사이 피치 이동량 `|Δf0|` 의 **중앙값을 원본 대비 비율**로. 음정은 맞히면서
-그 사이의 움직임만 잃는 것이 평탄화의 서명이므로, 이 비율이 1보다 **일관되게** 낮으면 평탄화다.
-"일관되게"가 중요하다 — 같은 발화가 시드에 따라 0.46 과 1.01 을 오갔다. 그래서 트랙마다
-시드를 바꿔 5회 재생성하고 **중앙값과 범위**로 본다.
+What is measured: the **median of the inter-frame pitch movement `|Δf0|`, as a ratio against
+the original**. The signature of flattening is hitting the notes while losing the movement
+between them, so if that ratio is **consistently** below 1, it is flattening. "Consistently"
+matters — the same utterance swung between 0.46 and 1.01 across seeds. So each track is
+regenerated 5 times with different seeds and read as a **median and a range**.
 
-| 발화 | 트랙 | 진폭비 중앙값 | 5회 범위 | 1.0 포함 |
+| Utterance | Track | Median amplitude ratio | Range over 5 | Includes 1.0 |
 |---|---|---:|---|:--:|
-| 조상현 | 실제 f0 | 0.859 | 0.810 – 0.875 | |
-| | f0 예측 | 0.723 | 0.644 – 0.943 | |
-| | dur·f0 예측 | 0.825 | 0.652 – 0.993 | |
-| 김소희 | 실제 f0 | 0.871 | 0.810 – 0.951 | |
-| | f0 예측 | 0.847 | 0.637 – 1.006 | ✓ |
-| | dur·f0 예측 | 1.071 | 0.635 – 1.105 | ✓ |
-| 박동진 | 실제 f0 | 0.977 | 0.914 – 1.040 | ✓ |
-| | f0 예측 | 0.852 | 0.709 – 1.306 | ✓ |
-| | dur·f0 예측 | 0.882 | 0.642 – 1.207 | ✓ |
+| Cho Sang-hyeon | Real f0 | 0.859 | 0.810 – 0.875 | |
+| | f0 predicted | 0.723 | 0.644 – 0.943 | |
+| | dur + f0 predicted | 0.825 | 0.652 – 0.993 | |
+| Kim So-hee | Real f0 | 0.871 | 0.810 – 0.951 | |
+| | f0 predicted | 0.847 | 0.637 – 1.006 | ✓ |
+| | dur + f0 predicted | 1.071 | 0.635 – 1.105 | ✓ |
+| Park Dong-jin | Real f0 | 0.977 | 0.914 – 1.040 | ✓ |
+| | f0 predicted | 0.852 | 0.709 – 1.306 | ✓ |
+| | dur + f0 predicted | 0.882 | 0.642 – 1.207 | ✓ |
 
-**결론: 체계적 평탄화는 재현되지 않는다.** 예측 트랙 6개 중 4개는 범위가 1.0 을 가로지른다.
-그리고 실측 f0 를 그대로 주입한 트랙조차 0.86–0.98 이므로 — **감쇠의 2–14% 는 acoustic 과
-보코더에서 이미 생긴다.** 피치 예측기 탓이 아니다. contour tokenizer 를 붙일 근거는 적어도
-이 측정에는 없다.
+**Conclusion: systematic flattening does not reproduce.** Four of the six predicted tracks
+have ranges straddling 1.0. And even the track with the measured f0 injected directly sits at
+0.86–0.98 — so **2–14% of the attenuation already happens in the acoustic model and the
+vocoder.** It is not the pitch predictor's fault. At least by this measurement, there is no
+basis for attaching a contour tokenizer.
 
-### E4. 스펙트로그램 `examples/spectrograms.py`
+### E4. Spectrograms `examples/spectrograms.py`
 
-사다리 4단의 mel 을 한 장으로 그린다. 점수가 "왜" 나쁜지는 그림에서만 보인다.
+Draws the 4 rungs' mels on a single sheet. *Why* a score is bad is only visible in the
+picture.
 
-### E5. 리포트 `examples/build_report.py`
+### E5. Report `examples/build_report.py`
 
-설명 + 오디오를 한 페이지로 렌더링한다. 페이지가 주장하는 모든 수치는 손으로 적는 게 아니라
-산출물에서 **다시 읽어 온다** — 코퍼스 표는 `data/pansori` 에서, 점수는 `measure.py`/`f0_report.py`
-결과에서, 오디오는 `examples/out` 에서. 오디오는 base64 mp3 로 **박아 넣는다** (Artifact 의
-CSP 가 외부 호스트를 전부 막아서 링크된 오디오는 재생되지 않는다).
+Renders the explanation and the audio as one page. Every number the page claims is not typed
+in by hand but **read back out of the artefacts** — the corpus table from `data/pansori`, the
+scores from the `measure.py` / `f0_report.py` outputs, the audio from `examples/out`. The
+audio is **embedded** as base64 mp3 (the Artifact CSP blocks every external host, so linked
+audio will not play).
 
-발행본: <https://claude.ai/code/artifact/fe492821-71fa-4566-8b8d-459e6d619fc6>
+Published: <https://claude.ai/code/artifact/fe492821-71fa-4566-8b8d-459e6d619fc6>
 
 ---
 
-## F. 전체 재현
+## F. Full reproduction
 
 ```sh
-# --- 전처리 (라벨만 고칠 때는 MFA 재실행 불필요) ---------------------------
+# --- Preprocessing (no MFA re-run needed when only the labels change) ------
 cd pansori/preprocess
 conda activate pansori && python 01_segment.py --out_dir ../data/full
 python 02_speaker_map.py --set full
 python 03_transcribe.py --set full
 conda activate aligner
-python 04_align.py --set full            # 매핑만 고쳤으면 --skip_align (~2분)
-                                         # SOFA 로 돌리려면 --aligner sofa (README §3.1)
+python 04_align.py --set full            # if only the mapping changed, --skip_align (~2 min)
+                                         # to run under SOFA, --aligner sofa (README §8)
 python 05_notes.py  --set full
 conda activate pansori
 python 06_merge.py    --set full
-python 07_validate.py --set full         # PASS 확인 필수
-python 08_export.py   --set full --out data/pansori   # 재커팅 ~20분
+python 07_validate.py --set full         # confirming PASS is mandatory
+python 08_export.py   --set full --out data/pansori   # re-cut, ~20 min
 
-# --- 학습 준비 -------------------------------------------------------------
+# --- Training preparation --------------------------------------------------
 conda activate dsp && export PYTHONPATH=. PYTHONNOUSERSITE=1 CUDA_VISIBLE_DEVICES=0
 python pansori/build_dictionary.py
 python pansori/make_configs.py
@@ -672,11 +741,11 @@ python scripts/binarize.py --config configs/exp/ac_v1.yaml
 python scripts/binarize.py --config configs/exp/var_v1.yaml
 python pansori/compute_spec_stats.py && python pansori/make_configs.py
 
-# --- 학습 ------------------------------------------------------------------
+# --- Training --------------------------------------------------------------
 python scripts/train.py --config configs/exp/ac_v1.yaml --exp_name pansori_ac_v1 --reset
 python scripts/train.py --config configs/exp/var_v1.yaml --exp_name pansori_var_v1 --reset
 
-# --- 추론 · 평가 · 리포트 ---------------------------------------------------
+# --- Inference · evaluation · report ---------------------------------------
 bash pansori/examples/run_examples.sh
 python pansori/examples/measure.py
 python pansori/examples/f0_report.py --seeds 5
@@ -685,42 +754,44 @@ python pansori/examples/build_report.py
 
 ---
 
-## G. 밟으면 아픈 것들
+## G. Things that hurt when you step on them
 
-**환경**
-- `PYTHONNOUSERSITE=1` 없이 `dsp` 를 쓰면 tensorboard import 가 protobuf 에서 죽는다
-- 전처리를 `base` env 로 돌리면 numba ↔ numpy 2.5 충돌로 06이 죽는다
-- `requirements.txt` 에 `torchaudio` 가 없다 (RMVPE 가 쓴다)
+**Environment**
+- Using `dsp` without `PYTHONNOUSERSITE=1` kills the tensorboard import at protobuf
+- Running preprocessing under the `base` env kills 06 on the numba ↔ numpy 2.5 conflict
+- `requirements.txt` has no `torchaudio` (RMVPE uses it)
 
-**데이터**
-- 발화는 **6초 이하** — 넘으면 MFA 정렬이 붕괴한다
-- `labels_2.json` 의 경로 문자열은 NFC/NFD 가 섞여 있다 → **8자리 uuid 접두로 조인**
-- 노트가 덮은 무음은 쉼이 아니라 **지속음**이다 (코퍼스 시간의 52.2%)
+**Data**
+- Utterances must be **6 seconds or less** — past that, MFA alignment collapses
+- The path strings in `labels_2.json` mix NFC and NFD → **join on the 8-digit uuid prefix**
+- Silence covered by a note is not a rest but a **sustained tone** (52.2% of corpus time)
 
-**config**
-- `f0_min: 55` / `f0_max: 750` 을 빠뜨리면 남성 통성 저음이 통째로 무성 처리된다
-- `spec_max` 기본값 `[0]` 을 그대로 두면 diffusion 타깃이 `[-1, 1]` 을 벗어난다 (실측 상한 +2.838)
-- acoustic binarize 도 HN-SEP(`checkpoints/vr/`) 을 요구한다
+**Config**
+- Omitting `f0_min: 55` / `f0_max: 750` makes the low register of male *tongseong* come out
+  unvoiced wholesale
+- Leaving `spec_max` at its default `[0]` lets the diffusion target escape `[-1, 1]`
+  (measured ceiling +2.838)
+- Acoustic binarize also demands HN-SEP (`checkpoints/vr/`)
 
-**학습·추론**
-- **가장 최근 체크포인트가 최선이 아니다.** 그리고 `num_ckpt_keep: 8` 은 최적을 지워 버린다
-- variance 는 헤드마다 최적 step 이 다르다 → 두 번 돌린다
-- **한 번 뽑은 결과로 모델을 판단하지 말 것** (f0 RMSE ±17%, mel L1 ±8%)
-- `--spk` 는 한글 화자명을 못 받는다 → `.ds` 의 `spk_mix` 로 우회
-- `git merge` / `git remote add` 금지 — 두 저장소는 공통 조상이 없다
-- 구 체크포인트 3개는 재사용 불가 (24 kHz·80 mel·FastSpeech2)
+**Training and inference**
+- **The most recent checkpoint is not the best.** And `num_ckpt_keep: 8` deletes the optimum
+- variance's best step differs per head → run it twice
+- **Do not judge a model from a single draw** (f0 RMSE ±17%, mel L1 ±8%)
+- `--spk` cannot take a Hangul speaker name → work around it via the `.ds`'s `spk_mix`
+- No `git merge` / `git remote add` — the two repositories share no common ancestor
+- The three old checkpoints cannot be reused (24 kHz / 80 mel / FastSpeech2)
 
 ---
 
-## H. 아직 열려 있는 것
+## H. Still open
 
-측정만 해두고 손대지 않은 것들 — 자세한 것은 [`NEXT.md`](NEXT.md).
+Measured but not acted on — details in [`NEXT.md`](NEXT.md).
 
-| 이슈 | 근거 | 규모 |
+| Issue | Evidence | Scale |
 |---|---|---|
-| 사전의 ㅈ/ㅉ/ㅊ + 활음 | 죠는 [tɕo] 라 MFA 는 `j o`, 사전은 `j y o`. 죠/조가 동음이라 **사전 쪽** 문제 — 매핑에 `y` 를 붙이면 훨씬 흔한 조가 깨진다 | 96건+ |
-| 요 → `y eo` vs 사전 `y o` | 모음 쪽 이슈, 미조사 | 156건 |
-| ㄴ 이 `d` 로 (내/나/니/너) | MFA 오인식. 매핑으로는 못 고친다 | 700건+ |
-| 무음 흡수 임계 | 50 ms 만 겹쳐도 무음 전체를 흡수. 커버율 50% 미만인 흡수 구간 | 6.2% (3,772개) |
-| 들숨(AP) 라벨링 | 판소리는 들숨이 크게 들린다. 하려면 06에 에너지 기반 판정 + 재-binarize | — |
-| 다음 학습 | `max_updates` 축소 또는 조기 종료, `num_ckpt_keep` 상향, 증강 검토 | — |
+| ㅈ/ㅉ/ㅊ + glide in the dictionary | 죠 is [tɕo], so MFA says `j o` while the dictionary says `j y o`. 죠 and 조 are homophones, so this is a **dictionary-side** problem — adding `y` to the mapping breaks the far more common 조 | 96+ |
+| 요 → `y eo` vs dictionary `y o` | A vowel-side issue, not yet investigated | 156 |
+| ㄴ coming out as `d` (내/나/니/너) | MFA misrecognition. The mapping cannot fix it | 700+ |
+| Silence-absorption threshold | A 50 ms overlap absorbs the entire silence; absorbed spans with under 50% coverage | 6.2% (3,772) |
+| Breath (AP) labelling | Pansori's breaths are loudly audible. There is now a path for this — SOFA + FoxBreatheLabeler behind `breath_ap.enabled` in `preprocess/align.yaml` (README §8); what remains is to run it and measure | — |
+| The next training run | Cut `max_updates` or add early stopping, raise `num_ckpt_keep`, consider augmentation | — |
