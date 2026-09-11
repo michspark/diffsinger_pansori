@@ -1,7 +1,8 @@
-# acoustic · whisper 라벨 (baseline)
+# acoustic · whisper labels (baseline)
 #
-# 실측: 검증 최저는 28,000 (0.17800). 남은 72,000 스텝은 0.178~0.203 을 오갔고
-# 마지막(0.18834)은 최적보다 6% 나쁘다. 다시 돌린다면 max_updates 를 줄일 것.
+# Measured: the validation minimum is at 28,000 (0.17800). The remaining 72,000 steps
+# wandered between 0.178 and 0.203, and the last one (0.18834) is 6% worse than the
+# optimum. If this is run again, lower max_updates.
 
 base_config:
   - configs/pansori/acoustic.yaml

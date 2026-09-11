@@ -1,6 +1,6 @@
-# variance · 창본 스냅 라벨 (가사 A/B 의 두 번째 팔)
+# variance · changbon-snapped labels (the second arm of the lyrics A/B)
 #
-# 32,000 은 baseline pansori_var_v1 이 실제로 멈춘 지점이다 (config 의 80,000 이 아니라).
+# 32,000 is where the baseline pansori_var_v1 actually stopped (not the 80,000 in its config).
 
 base_config:
   - configs/pansori/variance.yaml

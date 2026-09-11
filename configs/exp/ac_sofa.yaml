@@ -1,11 +1,12 @@
-# acoustic · SOFA 정렬 (정렬기 A/B의 처치군)
+# acoustic · SOFA alignment (the treatment arm of the aligner A/B)
 #
-# MFA 팔(ac_v1) 대비: 0.03초 하한선 36.8% → 19.9% (-46%), 1초+ 침묵 1.29s → 0.08s
-# (표본 288발화). 들숨(AP)이 실제로 라벨돼 있어 make_configs 가
-# merged_phoneme_groups 를 자동으로 뺀다.
+# Against the MFA arm (ac_v1): the 0.03 s floor rate goes 36.8% -> 19.9% (-46%), and 1s+
+# silence 1.29s -> 0.08s (sample of 288 utterances). Breath (AP) is genuinely labelled, so
+# make_configs drops merged_phoneme_groups automatically.
 #
-# max_updates: ac_v1 은 100k 를 돌렸지만 검증 최저가 28k 였고 나머지 72k 는 GPU 3시간을
-# 태웠을 뿐이다 (docs/NEXT.md A1). 40k 로 자르고 num_ckpt_keep 을 올려 최적점을 남긴다.
+# max_updates: ac_v1 ran 100k, but its validation minimum was at 28k and the other 72k
+# merely burned three GPU-hours (docs/NEXT.md A1). Cut to 40k with num_ckpt_keep raised so
+# the optimum survives.
 
 base_config:
   - configs/pansori/acoustic.yaml

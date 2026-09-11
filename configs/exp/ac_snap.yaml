@@ -1,8 +1,9 @@
-# acoustic · 창본 스냅 라벨 (가사 A/B 의 두 번째 팔)
+# acoustic · changbon-snapped labels (the second arm of the lyrics A/B)
 #
-# 오디오·노트·홀드아웃·spec 통계가 baseline 과 동일하고 라벨만 다르다.
-# 스텝 수는 baseline 에 맞춘 것이다 — 한쪽만 오래 돌리면 비교가 기운다.
-# num_ckpt_keep 을 올리는 이유: 실측 최적이 초반이라 기본값 8 이면 지워진다.
+# Audio, notes, hold-out and spec statistics are identical to the baseline; only the
+# labels differ. The step count is matched to the baseline — running one arm longer
+# tilts the comparison. num_ckpt_keep is raised because the measured optimum is early
+# and the default of 8 would delete it.
 
 base_config:
   - configs/pansori/acoustic.yaml
