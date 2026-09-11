@@ -4,12 +4,11 @@
 Three kinds of damage are covered, and they are different kinds:
 
   * **Irrecoverable within the repo** -- history rewrites, hard resets, and the
-    shared stash stack (this repo is checked out as two worktrees, so a bare
-    `git stash pop` can swallow the *other* session's work).
+    stash stack (a bare `git stash pop` drops the entry as it applies, so a conflict
+    can leave the work in neither the tree nor the stack).
   * **Irrecoverable outside it** -- pushing to `upstream`, which is MoonInTheRiver,
-    not ours. Ours is `pansori` (michspark/diffsinger_pansori). `origin` currently
-    points at michspark/DiffSinger, which does not exist, so a push there only
-    errors; it is not guarded. CLAUDE.md asks before any push.
+    not ours. Ours is `pansori` (michspark/diffsinger_pansori), our only other
+    remote. CLAUDE.md asks before any push.
   * **Irreproducible** -- `01_segment.py`. It completes happily and looks fine;
     what it destroys is the correspondence between every existing phones.jsonl
     and the audio, because librosa.effects.split lands 3-11 ms differently in a
@@ -55,8 +54,8 @@ RULES = [
      'Delete specific paths by name instead, after saying which.'),
 
     (r'\bgit\s+stash\b(?!\s+(list|show|push\s+.*-m))',
-     'Refused: the stash stack is shared with the /home/sangheon/Desktop/DiffSinger worktree,\n'
-     'so a bare stash/pop can swallow the other session\'s work.\n'
+     'Refused: a bare stash/pop drops the entry as it applies, so a conflict can leave\n'
+     'the work in neither the tree nor the stack.\n'
      'Use a WIP commit instead, or `git stash push -u -m "<unique-tag>"` and `apply` by SHA.'),
 
     (r'\bgit\s+(merge|remote\s+add)\b(?=.*[Mm]oon)',

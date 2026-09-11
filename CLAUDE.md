@@ -43,9 +43,9 @@ did not reproduce; item closed).
    `phones.jsonl`. To get the wavs back: `python pansori/preprocess/01b_recut_wavs.py --set full`.
 4. **Never binarize without a `07_validate.py` PASS.** The binarizer asserts inside
    worker processes — it kills a 40-minute job midway, it does not skip the item.
-5. **Never push to `upstream`** — it is MoonInTheRiver. Ours is `pansori`
-   (michspark/diffsinger_pansori); ask before pushing there. `origin` points at
-   michspark/DiffSinger, **which does not exist** — a push to it just fails.
+5. **Never push to `upstream`** — it is MoonInTheRiver. `pansori`
+   (michspark/diffsinger_pansori) is our only other remote, and `main` is its only
+   branch; ask before pushing there.
    **Never `git merge` or `git remote add` the moonInRiver repo**: the two histories
    have no common ancestor.
 
