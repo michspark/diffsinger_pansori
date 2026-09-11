@@ -1,63 +1,67 @@
-# 학습은 이렇게 진행된다 — 한 스텝씩
+# How training actually proceeds — one step at a time
 
-전처리가 끝난 뒤(`PIPELINE.md` A·B 단계) `scripts/train.py` 를 치면 안에서 무슨 일이 벌어지는지,
-**배치 하나가 만들어져 파라미터가 한 번 갱신되기까지**를 순서대로 적은 문서다.
+Once preprocessing is done (`PIPELINE.md` stages A and B) and you type
+`scripts/train.py`, this document records what happens inside, in order —
+**from a batch being assembled to the parameters being updated once.**
 
-- 파이프라인 전체 기록은 [`PIPELINE.md`](PIPELINE.md), 실행법 요약은 [`../README.md`](../README.md).
-- 여기 나오는 수치는 전부 이번에 실제로 돌린 `pansori_ac_v1` / `pansori_var_v1` 의 로그와
-  텐서보드에서 뽑은 것이다. 추정치가 아니다.
+- The full pipeline record is in [`PIPELINE.md`](PIPELINE.md); the command summary is in
+  [`../README.md`](../README.md).
+- Every number here was pulled from the actual logs and TensorBoard of the
+  `pansori_ac_v1` / `pansori_var_v1` runs. None of it is an estimate.
 
 ---
 
-## 0. 한 장 요약
+## 0. One-page summary
 
-**모델 두 개를 따로 학습한다.** 서로 주고받는 것 없이 완전히 독립이고, 순서도 상관없다
-(이번에는 acoustic 을 돌리는 중간에 variance 를 같이 띄웠다).
+**Two models are trained separately.** They exchange nothing, are entirely independent, and
+the order does not matter (this time variance was started while acoustic was mid-run).
 
-| | 파라미터 | 무엇을 받아 | 무엇을 배우나 |
+| | Parameters | What it takes in | What it learns |
 |---|---|---|---|
-| **variance** `pansori_var_v1` | 25.1 M | 음소 + 노트(MIDI·길이) | ① 음소별 길이 `ph_dur` ② f0 곡선 |
-| **acoustic** `pansori_ac_v1` | 69.1 M | 음소 + `ph_dur` + f0 + 화자 | mel 스펙트로그램 (128빈) |
-| NSF-HiFiGAN | — | mel + f0 | 파형 — **학습하지 않는다.** 받아서 그대로 쓴다 |
+| **variance** `pansori_var_v1` | 25.1 M | Phonemes + notes (MIDI, duration) | ① per-phoneme duration `ph_dur` ② the f0 curve |
+| **acoustic** `pansori_ac_v1` | 69.1 M | Phonemes + `ph_dur` + f0 + speaker | The mel spectrogram (128 bins) |
+| NSF-HiFiGAN | — | mel + f0 | The waveform — **not trained.** Taken and used as-is |
 
-한 스텝의 뼈대는 둘 다 같다:
+The skeleton of one step is the same for both:
 
 ```
-  binary 데이터에서 배치 하나 꺼내기
+  pull one batch from the binary data
         ↓
-  [인코더] 음소 → 벡터 → 프레임 축으로 늘리기 = condition
+  [encoder] phonemes → vectors → stretched onto the frame axis = condition
         ↓
-  [헤드]  condition 을 조건으로 정답을 맞히기
+  [head]    hit the target, conditioned on condition
         ↓
-  손실 → 역전파 → Muon+AdamW 한 번 갱신
+  loss → backprop → one Muon+AdamW update
         ↓
-  4,000 스텝마다: 검증 + 그림/오디오 + 체크포인트
+  every 4,000 steps: validation + figures/audio + checkpoint
 ```
 
-용어는 이 다섯 개만 알면 된다.
+Five terms are all you need.
 
-| 이름 | 모양 | 뜻 |
+| Name | Shape | Meaning |
 |---|---|---|
-| `tokens` | `[T_ph]` | 음소 번호 열. 이 코퍼스는 36종(Coda 34 + `SP`/`AP` 병합 + PAD) |
-| `ph_dur` | `[T_ph]` | 음소별 길이 (**프레임 수**, 초가 아니다) |
-| `mel2ph` | `[T_s]` | 프레임마다 "몇 번째 음소인가". `ph_dur` 을 펼친 것 |
-| `condition` | `[T_s, 384]` | 프레임 단위로 늘려 놓은 조건 벡터. 모든 헤드의 입력 |
-| `base_pitch` | `[T_s]` | 노트를 프레임으로 펼쳐 부드럽게 만든 기준 음고 (semitone) |
+| `tokens` | `[T_ph]` | The phoneme index sequence. This corpus has 36 (Coda 34 + merged `SP`/`AP` + PAD) |
+| `ph_dur` | `[T_ph]` | Per-phoneme duration (**in frames**, not seconds) |
+| `mel2ph` | `[T_s]` | Per frame, "which phoneme is this". `ph_dur` unrolled |
+| `condition` | `[T_s, 384]` | The condition vector stretched to frame resolution. Every head's input |
+| `base_pitch` | `[T_s]` | The reference pitch, notes unrolled to frames and smoothed (semitones) |
 
-**프레임**은 44,100 / 512 = **초당 86.13개**다. 평균 발화 3.82초 ≈ **329 프레임**.
-아래에서는 이 평균 발화(음소 14개 · 329 프레임)를 계속 예로 든다.
+A **frame** is 44,100 / 512 = **86.13 per second**. The mean utterance of 3.82 s ≈ **329
+frames**. Everything below keeps using that mean utterance (14 phonemes · 329 frames) as the
+example.
 
 ---
 
-## 1. `train.py` 를 치면 — 시작 전 준비
+## 1. When you type `train.py` — setup before anything starts
 
 ```sh
 python scripts/train.py --config configs/exp/ac_v1.yaml --exp_name pansori_ac_v1 --reset
 ```
 
-### 1-1. config 를 겹쳐 쌓는다
+### 1-1. Configs are layered
 
-`base_config:` 를 따라 재귀적으로 병합한다. 실제 체인은 로그 첫 줄에 찍힌다:
+Merged recursively by following `base_config:`. The actual chain is printed on the log's
+first line:
 
 ```
 | Hparams chains: ['configs/base.yaml', 'configs/acoustic.yaml',
@@ -65,385 +69,411 @@ python scripts/train.py --config configs/exp/ac_v1.yaml --exp_name pansori_ac_v1
                    'configs/pansori/data_pansori.yaml', 'configs/exp/ac_v1.yaml']
 ```
 
-**뒤에 오는 것이 이긴다.** `f0_min` 이 base 에서 65 였다가 pansori 에서 55 로 덮이는 식이다.
-병합 결과는 `checkpoints/{exp}/config.yaml` 에 통째로 저장되고, **다음 실행부터는 이 파일이
-기준이 된다.** `--reset` 은 "저장본을 무시하고 yaml 에서 다시 만들라"는 뜻이다
-(`utils/hparams.py:87-115`). config 를 고쳤는데 `--reset` 없이 재실행하면 고친 게 안 먹는다.
+**Later wins.** `f0_min` is 65 in base and gets overwritten to 55 by pansori, for instance.
+The merged result is saved whole to `checkpoints/{exp}/config.yaml`, and **from the next run
+onward that file is the authority.** `--reset` means "ignore the saved copy and rebuild from
+the yaml" (`utils/hparams.py:87-115`). Edit a config and re-run without `--reset` and your
+edit does nothing.
 
-### 1-2. task 클래스를 문자열로 찾아 띄운다
+### 1-2. The task class is found by string and started
 
-`task_cls: training.acoustic_task.AcousticTask` 를 `importlib` 으로 import 해서
-`AcousticTask.start()` 를 부른다 (`scripts/train.py:22-27`). config 만 바꾸면 다른 모델이
-돌아가는 구조다.
+`task_cls: training.acoustic_task.AcousticTask` is imported via `importlib` and
+`AcousticTask.start()` is called (`scripts/train.py:22-27`). The structure lets a different
+model run purely by changing the config.
 
-### 1-3. Trainer 조립 (`basics/base_task.py:398-440`)
+### 1-3. Trainer assembly (`basics/base_task.py:398-440`)
 
-| 설정 | 값 | 뜻 |
+| Setting | Value | Meaning |
 |---|---|---|
-| `precision` | `16-mixed` | forward/backward 는 fp16, 가중치·옵티마이저는 fp32 |
-| `max_steps` | 100,000 (ac) / 80,000 (var) | 여기 닿으면 종료 |
-| `val_check_interval` | 4,000 | **epoch 이 아니라 step 기준** |
-| `check_val_every_n_epoch` | `None` | epoch 경계는 아예 무시한다 |
-| `accumulate_grad_batches` | 1 | 배치 1개 = 스텝 1개 |
+| `precision` | `16-mixed` | forward/backward in fp16; weights and optimizer in fp32 |
+| `max_steps` | 100,000 (ac) / 80,000 (var) | Stop on reaching this |
+| `val_check_interval` | 4,000 | **In steps, not epochs** |
+| `check_val_every_n_epoch` | `None` | Epoch boundaries are ignored entirely |
+| `accumulate_grad_batches` | 1 | One batch = one step |
 | `gradient_clip_val` | 1.0 | |
-| `num_sanity_val_steps` | 1 | 학습 전에 검증 배치 **1개**만 돌려 본다 |
+| `num_sanity_val_steps` | 1 | Runs exactly **one** validation batch before training |
 | callbacks | `DsModelCheckpoint`, `DsTQDMProgressBar` | |
 | logger | `DsTensorBoardLogger` → `checkpoints/{exp}/lightning_logs/latest` | |
 
-### 1-4. 추론이 쓸 물건을 work_dir 로 복사한다
+### 1-4. What inference will need is copied into work_dir
 
-`spk_map.json` · `lang_map.json` · `dictionary-ko.txt` 를 binary 디렉토리에서
-`checkpoints/{exp}/` 로 복사한다 (`base_task.py:444-462`).
-**나중에 사전을 고쳐도 이 체크포인트는 학습 당시의 사전으로 추론한다.** 화자 번호와 음소 번호가
-어긋나는 사고를 막는 장치다.
+`spk_map.json`, `lang_map.json` and `dictionary-ko.txt` are copied from the binary directory
+into `checkpoints/{exp}/` (`base_task.py:444-462`).
+**Edit the dictionary later and this checkpoint still infers with the dictionary it was
+trained on.** It is a guard against speaker indices and phoneme indices drifting apart.
 
-### 1-5. 이어하기가 기본값이다
+### 1-5. Resuming is the default
 
 ```python
 trainer.fit(task, ckpt_path=get_latest_checkpoint_path(work_dir))
 ```
 
-`checkpoints/{exp}/model_ckpt_steps_*.ckpt` 중 **step 이 가장 큰 것**을 자동으로 찾아 재개한다
-(가장 최신이 아니라 **step 이 가장 큰** 것 — 파일 시각이 아니라 이름으로 고른다).
-옵티마이저 상태·스케줄러·epoch 까지 복원한다. 처음부터 다시 하려면 디렉토리를 비워야 한다.
+Among `checkpoints/{exp}/model_ckpt_steps_*.ckpt` it automatically resumes from **the one
+with the largest step** — largest step, not most recent; it picks by name, not by file time.
+Optimizer state, scheduler and epoch are all restored. To start over, the directory has to
+be emptied.
 
-> 재개 시 옵티마이저 하이퍼파라미터는 **config 값이 체크포인트를 덮는다**
-> (`base_task.py:471-514`). lr 을 고치고 재개하면 그 lr 이 먹고, 스케줄러는
-> `simulate_lr_scheduler` 로 현재 step 까지 다시 굴려 맞춘다.
+> On resume, the optimizer hyperparameters are **taken from the config, overriding the
+> checkpoint** (`base_task.py:471-514`). Change the lr and resume and that lr applies, with
+> the scheduler re-rolled up to the current step by `simulate_lr_scheduler`.
 
 ---
 
-## 2. 배치 하나가 만들어지기까지
+## 2. How a batch gets assembled
 
-### 2-1. 디스크에서
+### 2-1. From disk
 
-`data/pansori/binary_acoustic/` 에 `train.data` (한 덩어리 바이너리) + `train.idx` (오프셋 표)
-+ `train.meta` (길이·이름·화자명 같은 메타)가 있다. `IndexedDataset` 이 오프셋으로 바로 읽는다 —
-전체를 메모리에 올리지 않는다.
+`data/pansori/binary_acoustic/` holds `train.data` (one contiguous binary), `train.idx`
+(an offset table) and `train.meta` (metadata such as lengths, names and speaker names).
+`IndexedDataset` reads straight from the offset — nothing is loaded whole into memory.
 
-이번 코퍼스 기준:
+For this corpus:
 
-| | 발화 | 길이 |
+| | Utterances | Duration |
 |---|---|---|
 | train | 25,946 | 100,101.68 s = **27.8 h** |
 | valid | 1,009 | 3,881.78 s = **1.08 h** |
 
-valid 는 **홀드아웃 곡 5개**에서 나온 것이다 — 이일주·김소희·조상현·박동진·박초월 5명뿐이고,
-**나머지 18명은 valid 에 한 발화도 없다** (binarize 로그의 `valid respective duration`).
-검증 손실은 이 5명에 대한 값이라는 뜻이다. 원래 6명이었는데, 홀드아웃 곡이 화자의 전부를
-차지하던 정권진은 `make_configs.py` 가 자동으로 해제했다 (학습 데이터 0이면 화자 임베딩에
-gradient 가 한 번도 안 간다).
+valid comes from **5 hold-out songs** — only Lee Il-ju, Kim So-hee, Cho Sang-hyeon,
+Park Dong-jin and Park Cho-wol, and **the other 18 speakers have not a single utterance in
+valid** (see `valid respective duration` in the binarize log). That means the validation loss
+is a value about those 5. It was originally 6; Jeong Gwon-jin, whose hold-out song was that
+speaker's entire output, was released automatically by `make_configs.py` (with zero training
+data, a speaker embedding never receives a gradient at all).
 
-### 2-2. 배치로 묶기 — `DsBatchSampler` (`utils/training_utils.py:76-197`)
+### 2-2. Forming batches — `DsBatchSampler` (`utils/training_utils.py:76-197`)
 
-epoch 마다 이 순서로 돈다:
+Each epoch goes through this order:
 
-1. **셔플** — 전체 인덱스를 무작위로 섞는다.
-2. **길이순 정렬** — 길이를 6프레임 격자(`sampler_frame_count_grid`)로 반올림해 내림차순 정렬.
-   → **비슷한 길이끼리 한 배치에 모인다. 패딩을 줄이려는 것이다.**
-   (1번 셔플은 길이가 같은 것들 사이의 순서를 매 epoch 바꾸는 역할을 한다.)
-3. **잘라 담기** — `max_batch_frames` 50,000 / `max_batch_size` 32 중 **먼저 걸리는 쪽**에서 끊는다.
-4. **배치 순서 셔플** — 이렇게 만든 배치들의 순서를 다시 섞는다. 안 그러면 긴 발화만 나오는
-   구간이 생긴다.
+1. **Shuffle** — the full index list is randomly permuted.
+2. **Sort by length** — lengths are rounded to a 6-frame grid
+   (`sampler_frame_count_grid`) and sorted descending.
+   → **Similar lengths end up in the same batch. The point is to reduce padding.**
+   (Step 1's shuffle is what varies the order among equal-length items each epoch.)
+3. **Cut into batches** — cut at whichever of `max_batch_frames` 50,000 or
+   `max_batch_size` 32 hits first.
+4. **Shuffle the batch order** — the batches themselves are shuffled again, or there would be
+   stretches containing nothing but long utterances.
 
-**실측: 항상 32가 먼저 걸린다.** 평균 329프레임 × 32 ≈ 10,500 프레임, 최장 6초(517프레임)라도
-32개면 16,500 프레임이라 5만 프레임 상한에 절대 안 닿는다. 그래서 로그의 `batch_size` 는
-언제나 32이고, **epoch 당 배치 수는 811개**(= ⌈25,946 / 32⌉)로 고정이다.
+**Measured: 32 always hits first.** The mean of 329 frames × 32 ≈ 10,500 frames, and even at
+the 6-second maximum (517 frames), 32 of them is 16,500 frames — nowhere near the 50,000
+cap. So the log's `batch_size` is always 32, and **the number of batches per epoch is fixed
+at 811** (= ⌈25,946 / 32⌉).
 
 ```
-100,000 step ÷ 811 batch/epoch = 123.3 epoch   ← 로그의 마지막 줄이 "Epoch 123"
+100,000 steps ÷ 811 batches/epoch = 123.3 epochs   ← the log's last line says "Epoch 123"
 ```
 
-### 2-3. 패딩 — `collater`
+### 2-3. Padding — `collater`
 
-배치 안에서 가장 긴 것에 맞춰 채운다. **채우는 값이 항목마다 다르다**:
+Padded to the longest item in the batch. **The fill value differs per field**:
 
-| 항목 | 패딩 값 | 이유 |
+| Field | Pad value | Why |
 |---|---|---|
-| `tokens`, `mel2ph`, `ph_dur` | `0` | 0은 PAD 음소. `mel2ph > 0` 이 곧 유효 프레임 마스크 |
-| `mel` | `log(1e-5)` = −11.513 | 진짜 무음. 0으로 채우면 최대 진폭이 된다 |
-| `note_midi` | `-1` | 음수를 패딩 표시로 쓴다 (`padding_mask = note_midi < 0`) |
-| `note_rest` | `True` | 패딩은 쉼표로 취급 |
+| `tokens`, `mel2ph`, `ph_dur` | `0` | 0 is the PAD phoneme. `mel2ph > 0` *is* the valid-frame mask |
+| `mel` | `log(1e-5)` = −11.513 | Real silence. Filling with 0 would be maximum amplitude |
+| `note_midi` | `-1` | Negative marks padding (`padding_mask = note_midi < 0`) |
+| `note_rest` | `True` | Padding is treated as a rest |
 
 ---
 
-## 3. acoustic 한 스텝 — 69.1 M
+## 3. One acoustic step — 69.1 M
 
-`training/acoustic_task.py:run_model` 하나가 아래 3-1 ~ 3-4 전부다.
-배치 `B=32`, 예시 발화 `T_ph=14`, `T_s=329`, mel 빈 `M=128`.
+The single function `training/acoustic_task.py:run_model` is all of 3-1 to 3-4 below.
+Batch `B=32`, example utterance `T_ph=14`, `T_s=329`, mel bins `M=128`.
 
-### 3-1. condition 만들기 (`FastSpeech2Acoustic`)
+### 3-1. Building the condition (`FastSpeech2Acoustic`)
 
 ```
 tokens [32,14]  ──txt_embed(36→384)──────┐
-mel2ph [32,329] ──세어서 dur 복원─→ log(1+dur) ──dur_embed──┤
-                                          ├─→ encoder (4층, self-attn 2 head, RoPE)
+mel2ph [32,329] ──count → recover dur─→ log(1+dur) ──dur_embed──┤
+                                          ├─→ encoder (4 layers, self-attn 2 heads, RoPE)
                                           │        ↓  [32,14,384]
-                                          │   mel2ph 로 gather = 프레임 축으로 늘리기
+                                          │   gather by mel2ph = stretch onto the frame axis
                                           │        ↓  [32,329,384]
-                                     + stretch_embed   ← 이 음소가 얼마나 늘어났나
-                                     + spk_embed       ← 화자 24종
+                                     + stretch_embed   ← how much this phoneme was stretched
+                                     + spk_embed       ← 24 speakers
                                      + pitch_embed(f0) ← log(1 + f0/700)
                                           ↓
                                     condition [32,329,384]
 ```
 
-핵심은 **"늘리기"(length regulate)** 다. 음소 14개짜리 벡터열을 `mel2ph` 를 색인으로 써서
-329 프레임으로 복사·확장한다. 6프레임짜리 음소면 그 벡터가 6번 반복된다.
+The key move is **length regulation**. The 14-phoneme vector sequence is copied and expanded
+to 329 frames, using `mel2ph` as the index. A 6-frame phoneme has its vector repeated 6
+times.
 
-**학습 때는 정답 `ph_dur`(에서 만든 `mel2ph`)을 쓴다.** 즉 acoustic 은 길이를 스스로 정하지
-않는다 — 그건 variance 담당이다. 추론 때도 누군가(variance 또는 사람)가 길이를 줘야 한다.
+**During training the ground-truth `ph_dur` is used** (via the `mel2ph` built from it). So
+acoustic does not decide durations itself — that is variance's job. At inference too,
+somebody (variance, or a human) has to supply the durations.
 
-`stretch_embed` 는 "이 프레임이 속한 음소가 원래보다 몇 배 늘어났나"를 넣어 준다. 복사만
-하면 6프레임짜리 `a` 와 60프레임짜리 `a` 가 프레임 단위로는 구별이 안 되기 때문이다.
-판소리처럼 한 음을 길게 끄는 노래에서 특히 중요한 입력이다.
+`stretch_embed` supplies "by what factor was the phoneme this frame belongs to stretched".
+Copying alone leaves a 6-frame `a` and a 60-frame `a` indistinguishable frame by frame. It
+is an especially important input for singing that holds one note long, as pansori does.
 
-### 3-2. aux decoder — mel 을 한 번에 그려 본다
+### 3-2. aux decoder — draws the mel in one shot
 
-`use_shallow_diffusion: true` 라서 ConvNeXt 6층짜리 보조 디코더가 `condition` 에서 mel 을
-**생성 과정 없이 곧장** 뽑는다. 손실은 정규화 mel 에 대한 **L1**.
+Because `use_shallow_diffusion: true`, a 6-layer ConvNeXt auxiliary decoder pulls a mel
+**directly out of `condition`, with no generative process**. Its loss is **L1** against the
+normalised mel.
 
 ```python
 aux_cond = condition * 0.1 + condition.detach() * 0.9    # aux_decoder_grad
 ```
 
-보조 디코더의 gradient 는 **1/10 로만** 인코더에 흘린다. 인코더가 "대충 그리는 쪽"에
-끌려가지 않게 막는 장치다 (`modules/toplevel.py:109`).
+The auxiliary decoder's gradient reaches the encoder at **only 1/10** strength. It is a
+guard against the encoder being pulled towards "the rough-sketch side"
+(`modules/toplevel.py:109`).
 
-### 3-3. reflow — 진짜 mel 은 여기서 배운다
+### 3-3. reflow — this is where the real mel is learned
 
-`modules/core/reflow.py:36-56`. 네 줄로 끝난다.
+`modules/core/reflow.py:36-56`. Four lines.
 
 ```python
-spec  = norm_spec(gt_mel)                       # spec_min/max 로 [-1, 1] 정규화
-t     = 0.4 + 0.6 * rand(B)                     # 배치의 발화마다 스칼라 하나
+spec  = norm_spec(gt_mel)                       # normalised to [-1, 1] by spec_min/max
+t     = 0.4 + 0.6 * rand(B)                     # one scalar per utterance in the batch
 x_t   = noise + t * (spec - noise)              # noise ~ N(0, I)
-v_pred = backbone(x_t, t*1000, cond)            # LynxNet2 6층 × 1024ch, kernel 31
-loss   = L2(v_pred, spec - noise)               # 정답 속도 = 목적지 − 출발지
+v_pred = backbone(x_t, t*1000, cond)            # LynxNet2, 6 layers × 1024ch, kernel 31
+loss   = L2(v_pred, spec - noise)               # true velocity = destination − origin
 ```
 
-**노이즈와 정답 mel 을 직선으로 잇고, 그 위 무작위 한 지점에서 "어느 쪽으로 가야 하나"를
-맞히게 한다.** 정답 방향은 언제나 `spec - noise` 로 상수다. 추론 때는 이 속도장을 따라
-20번 나눠 걸어간다(euler).
+**A straight line is drawn from noise to the true mel, and the model is asked, at a random
+point on it, "which way should I go".** The true direction is always the constant
+`spec - noise`. At inference the model walks that velocity field in 20 steps (euler).
 
-**`T_start = 0.4` 가 이 모델의 성격을 결정한다.** `t` 를 `[0, 1]` 이 아니라 `[0.4, 1]` 에서만
-뽑기 때문에 **acoustic 은 순수 노이즈에서 출발하는 법을 배우지 않는다.** 0.4 지점의 출발선은
-추론 때 aux decoder 가 그린 mel 이 채운다:
+**`T_start = 0.4` determines this model's character.** Because `t` is drawn from `[0.4, 1]`
+rather than `[0, 1]`, **acoustic never learns to start from pure noise.** The starting line
+at 0.4 is filled at inference by the mel the aux decoder drew:
 
 ```
-추론:  x = 0.4 * aux_decoder(condition) + 0.6 * noise    ← 여기서 시작
-       euler 20 step, dt = (1 − 0.4)/20 = 0.03
+inference:  x = 0.4 * aux_decoder(condition) + 0.6 * noise    ← starts here
+            euler 20 steps, dt = (1 − 0.4)/20 = 0.03
 ```
 
-이게 shallow diffusion 이다. 밑바닥부터 안 그리니 20 스텝으로도 충분하다.
+That is shallow diffusion. Since it is not drawing from the ground up, 20 steps suffice.
 
-`main_loss_log_norm: false` (acoustic) 이므로 t 에 따른 손실 가중은 없다. 모든 t 가 동등하다.
+With `main_loss_log_norm: false` (acoustic), there is no t-dependent loss weighting. All t
+are equal.
 
-> **패딩이 손실 값에 섞인다.** 손실은 패딩 프레임을 0으로 만든 뒤 `.mean()` 을 취하는데,
-> 분모에는 패딩도 들어간다 (`modules/losses/reflow_loss.py:42-50`). 패딩이 많은 배치는
-> 손실이 낮게 나온다. 길이순 정렬(2-2)이 패딩을 줄이는 것이 학습 안정에도 도움이 되는 이유고,
-> **검증은 배치당 1발화라 패딩이 아예 없다** — 그래서 검증 손실은 이 영향에서 자유롭다.
+> **Padding mixes into the loss value.** The loss zeroes the padded frames and then takes
+> `.mean()`, but the denominator includes the padding
+> (`modules/losses/reflow_loss.py:42-50`). A batch with a lot of padding reports a lower
+> loss. That is another reason the length sort (2-2) helps training stability, and
+> **validation has no padding at all, being one utterance per batch** — so the validation
+> loss is free of this effect.
 
-### 3-4. 총 손실
+### 3-4. Total loss
 
 ```
 total_loss = mel_loss + 0.2 × aux_mel_loss
 ```
 
-로그에서 실제로 본 마지막 값: `mel_loss=0.15771`, `aux_mel_loss=0.01899`
-(이미 0.2가 곱해진 값이다 — `lambda` 를 곱한 뒤 dict 에 담는다).
+The last values actually seen in the log: `mel_loss=0.15771`, `aux_mel_loss=0.01899`
+(already multiplied by 0.2 — the `lambda` is applied before the dict is populated).
 
 ---
 
-## 4. variance 한 스텝 — 25.1 M, 헤드 두 개
+## 4. One variance step — 25.1 M, two heads
 
-`training/variance_task.py:run_model`. **한 스텝에서 duration 과 pitch 를 동시에 학습한다.**
+`training/variance_task.py:run_model`. **Duration and pitch are learned in the same step.**
 
-### 4-1. duration 헤드
+### 4-1. The duration head
 
 ```
 tokens ──txt_embed──┐
-onset  ─────────────┤   onset = 단어의 첫 음소인가 (ph2word 의 차분)
-word_dur ───────────┤   단어 길이 (정답 ph_dur 을 단어별로 합산)
-                    ├─→ encoder 4층 → encoder_out [B, T_ph, 384]
-                    │        + midi_embed (음소별 평균 MIDI, 128종 임베딩)
+onset  ─────────────┤   onset = is this the word's first phoneme (the diff of ph2word)
+word_dur ───────────┤   word duration (ground-truth ph_dur summed per word)
+                    ├─→ encoder, 4 layers → encoder_out [B, T_ph, 384]
+                    │        + midi_embed (mean MIDI per phoneme, 128-way embedding)
                     │        + spk_embed
                     │              ↓
-                    │      DurationPredictor (resnet 5층 × 256ch, Conv1d k=3)
-                    │              ↓  log 도메인 출력
+                    │      DurationPredictor (resnet 5 layers × 256ch, Conv1d k=3)
+                    │              ↓  output in the log domain
                     └─────→ ph_dur_pred [B, T_ph]
 ```
 
-**학습 때 단어 길이는 정답에서 만들어 준다** (`variance_encoder.py:76-79`). 즉 duration 헤드가
-배우는 것은 "이 문장이 몇 초냐"가 아니라 **"주어진 단어 길이를 음소들에 어떻게 나눠 줄 것이냐"**
-쪽에 가깝다. 추론 때는 `.ds` 의 노트 길이가 그 자리를 대신한다.
+**During training the word durations are built from ground truth**
+(`variance_encoder.py:76-79`). So what the duration head learns is less "how many seconds is
+this sentence" and more **"given a word's duration, how do I divide it among the
+phonemes"**. At inference the note durations in the `.ds` take that place.
 
-손실은 세 겹이고, 전부 **log 도메인 MSE** 다 (`modules/losses/dur_loss.py`):
+The loss has three layers, all **MSE in the log domain** (`modules/losses/dur_loss.py`):
 
-| 항 | 가중치 | 무엇을 맞히나 |
+| Term | Weight | What it targets |
 |---|---|---|
-| `pdur` | 0.3 | 음소 하나하나의 길이 |
-| `wdur` | 1.0 | 단어 단위 합계 |
-| `sdur` | **3.0** | 문장 전체 길이 |
+| `pdur` | 0.3 | Each individual phoneme's duration |
+| `wdur` | 1.0 | The per-word sum |
+| `sdur` | **3.0** | The whole sentence's duration |
 
-**문장 길이가 음소 길이보다 10배 무겁다.** 개별 음소가 조금씩 틀리는 것보다 총 길이가 밀리는
-쪽이 훨씬 나쁘기 때문이다 — 총 길이가 어긋나면 뒤따르는 f0 와 mel 이 통째로 노트에서 벗어난다.
-로그를 log 로 재는 것도 같은 이유다: 0.05초짜리 음소의 0.02초 오차와 2초짜리 음소의 0.02초
-오차를 같게 취급하지 않는다.
+**Sentence length weighs 10× more than phoneme length.** Individual phonemes each being
+slightly off is far less bad than the total length drifting — if the total drifts, the f0 and
+mel that follow leave the notes entirely. Measuring the log is for the same reason: a 0.02 s
+error on a 0.05 s phoneme is not treated the same as a 0.02 s error on a 2 s one.
 
-### 4-2. pitch 헤드
+### 4-2. The pitch head
 
 ```
-condition (음소를 프레임으로 늘린 것, acoustic 과 같은 방식)
-   + MelodyEncoder(note_midi, note_dur)  ← 노트 축을 따로 인코딩해 프레임으로 gather
-   + pitch_retake_embed                  ← 4-3 참조
+condition (phonemes stretched to frames, the same way acoustic does it)
+   + MelodyEncoder(note_midi, note_dur)  ← encodes the note axis separately, gathered to frames
+   + pitch_retake_embed                  ← see 4-3
    + delta_pitch_embed
         ↓
-   PitchRectifiedFlow      타깃 = pitch − base_pitch  (semitone 편차)
+   PitchRectifiedFlow      target = pitch − base_pitch  (deviation in semitones)
 ```
 
-**타깃이 f0 자체가 아니라 "노트에서 얼마나 벗어났는가"** 다. 절대 음고는 이미 노트가 알려
-주므로, 모델은 시김새·요성·이음새만 배우면 된다. 클립 범위 ±12 semitone, 정규화 범위 ±8.
+**The target is not f0 itself but "how far from the note".** The notes already carry absolute
+pitch, so the model only has to learn sigimsae, yoseong and the joins between them. Clipped
+to ±12 semitones, normalised over ±8.
 
-`repeat_bins: 64` — 프레임당 값 하나짜리 곡선을 64칸으로 복제해 mel 처럼 2D 로 만든다.
-같은 백본(LynxNet2)을 쓰기 위한 트릭이고, 추론 때는 64칸의 평균을 낸다.
+`repeat_bins: 64` — the one-value-per-frame curve is replicated into 64 bins to make it 2D
+like a mel. It is a trick for reusing the same backbone (LynxNet2); at inference the 64 bins
+are averaged.
 
-acoustic 과 다른 점 두 가지:
+Two differences from acoustic:
 
-- **`t ~ U(0, 1)`.** variance 는 shallow diffusion 이 아니다 (config 에 `use_shallow_diffusion`
-  이 없어 `RectifiedFlow` 가 `t_start` 를 0으로 강제한다). 순수 노이즈에서 시작한다.
-- **`main_loss_log_norm: true`.** t 에 로그정규 모양 가중이 붙어 **t≈0.5 부근을 무겁게** 본다
-  (`reflow_loss.py:27-35`). 양 끝(거의 노이즈 / 거의 정답)은 덜 중요하게 친다.
+- **`t ~ U(0, 1)`.** variance is not shallow diffusion (there is no `use_shallow_diffusion`
+  in its config, so `RectifiedFlow` forces `t_start` to 0). It starts from pure noise.
+- **`main_loss_log_norm: true`.** A log-normal-shaped weighting over t makes it **weight
+  t≈0.5 heavily** (`reflow_loss.py:27-35`). Both ends (nearly noise / nearly ground truth)
+  count for less.
 
-### 4-3. retake mask — 왜 학습 때 정답을 일부 보여 주나
+### 4-3. The retake mask — why part of the ground truth is shown during training
 
 ```python
-pitch_retake = random_retake_masks(B, T)   # 평균적으로 프레임의 절반이 True
+pitch_retake = random_retake_masks(B, T)   # on average half the frames are True
 ```
 
-`True` 인 구간은 "다시 그려라", `False` 인 구간은 **정답 피치를 그대로 입력으로 넣어 준다.**
-매 스텝 무작위로 연속 구간을 잡아 준다 (`variance_task.py:74-81`).
+Spans that are `True` mean "redraw this"; spans that are `False` **get the ground-truth pitch
+fed in as input.** A random contiguous span is chosen fresh every step
+(`variance_task.py:74-81`).
 
-편집기에서 **"이 부분만 다시 뽑기"** 를 쓰려면 모델이 "주어진 앞뒤 피치에 이어 붙이는 법"을
-알아야 한다. 전 구간을 항상 처음부터 그리게만 학습하면 부분 재생성 시 이음매가 튄다.
-추론 때 전체를 새로 뽑으면 마스크가 전부 `True` 가 된다.
+For an editor's **"re-roll just this part"** to work, the model has to know how to join onto
+given pitch before and after. Train it only to draw whole spans from scratch and the seams
+will jump on partial regeneration. At inference, redrawing everything makes the mask all
+`True`.
 
-### 4-4. 총 손실
+### 4-4. Total loss
 
 ```
 total_loss = 1.0 × dur_loss + 1.0 × pitch_loss
 ```
 
-**여기가 나중에 문제가 된다.** 두 헤드는 서로 다른 것을 배우는데 손실은 하나로 합쳐지고,
-`dur_loss` 가 `pitch_loss` 보다 자릿수가 커서 `total_loss` 는 사실상 `dur_loss` 다
-(7절 표를 볼 것). 체크포인트를 `total_loss` 로 고르면 피치를 버리게 된다.
+**This becomes a problem later.** The two heads learn different things but the losses are
+summed into one, and since `dur_loss` is an order of magnitude larger than `pitch_loss`,
+`total_loss` is effectively `dur_loss` (see the table in §7). Choose a checkpoint by
+`total_loss` and you throw away the pitch.
 
 ---
 
-## 5. 역전파와 갱신
+## 5. Backprop and update
 
-Lightning 이 알아서 하는 부분이지만 설정은 알아 둘 것.
+Lightning handles this part, but the settings are worth knowing.
 
-| | 값 | 메모 |
+| | Value | Note |
 |---|---|---|
-| 정밀도 | `16-mixed` | fp16 forward + `GradScaler`. VRAM 24 GB 중 **6.1 GB** 만 썼다 |
-| gradient clip | 1.0 (L2 norm) | |
-| 옵티마이저 | `Muon_AdamW` | **파라미터를 둘로 나눈다** ↓ |
+| Precision | `16-mixed` | fp16 forward + `GradScaler`. Used **6.1 GB** of 24 GB of VRAM |
+| Gradient clip | 1.0 (L2 norm) | |
+| Optimizer | `Muon_AdamW` | **Splits the parameters in two** ↓ |
 | lr | 6e-4 | betas (0.9, 0.98) |
-| 스케줄러 | `StepLR(5000, 0.8)` | **step 단위**. 5,000 스텝마다 0.8배 |
+| Scheduler | `StepLR(5000, 0.8)` | **In steps.** ×0.8 every 5,000 |
 
-**Muon 과 AdamW 를 섞어 쓴다** (`modules/optimizer/muon.py:161-200`):
+**Muon and AdamW are mixed** (`modules/optimizer/muon.py:161-200`):
 
-- **Muon** — 2차원 이상의 일반 weight (attention·conv 커널 등). Newton–Schulz 반복으로
-  gradient 를 직교화해서 적용한다. weight decay 0.1.
-- **AdamW** — `nn.Embedding`, `AdamWLinear`, `AdamWConv1d` 로 선언된 것과 모든 1차원 파라미터
-  (bias·LayerNorm). weight decay 0.
+- **Muon** — ordinary weights of 2 dimensions or more (attention and conv kernels, etc.). The
+  gradient is orthogonalised by Newton–Schulz iteration before being applied. weight decay
+  0.1.
+- **AdamW** — anything declared as `nn.Embedding`, `AdamWLinear` or `AdamWConv1d`, plus every
+  1-dimensional parameter (biases, LayerNorm). weight decay 0.
 
-`f0`·`ph_dur` 같은 **스칼라 하나를 384차원으로 올리는 투영은 전부 `AdamWLinear`** 로 선언돼
-있다. 입력이 1차원인 층은 Muon 의 직교화가 의미가 없어서다.
+**Every projection lifting a single scalar such as `f0` or `ph_dur` into 384 dimensions is
+declared `AdamWLinear`**, because orthogonalisation is meaningless for a layer with
+1-dimensional input.
 
-lr 실측: 100,000 스텝 시점에 **8.647e-06** — 초기값의 1/69 이다. 학습 후반은 사실상
-미세조정 구간이고, 이게 7절에서 손실이 안 움직이는 이유의 절반이다.
+lr measured: **8.647e-06** at step 100,000 — 1/69 of its initial value. The late stage of
+training is effectively a fine-tuning regime, and that is half the reason the loss stops
+moving in §7.
 
-**속도**: 약 **7.0 it/s** (RTX 4090, 배치 32). 811 배치 = 1 epoch ≈ 115초.
-100,000 스텝이면 검증 제외 **약 4시간**.
+**Speed**: about **7.0 it/s** (RTX 4090, batch 32). 811 batches = 1 epoch ≈ 115 s.
+100,000 steps is **about 4 hours**, validation excluded.
 
 ---
 
-## 6. 4,000 스텝마다 벌어지는 일
+## 6. What happens every 4,000 steps
 
-`val_check_interval: 4000`. epoch 과 무관하게 step 으로 끊는다.
+`val_check_interval: 4000`. Cut by step, independent of epochs.
 
-### 6-1. 검증 — 두 번 돈다
+### 6-1. Validation — runs twice
 
 ```python
-losses = self.run_model(sample, infer=False)     # ① 손실: 학습과 똑같이 계산
-if 이 배치에 index < 10 인 발화가 있으면:
-    out = self.run_model(sample, infer=True)     # ② 실제 생성: euler 20 step
+losses = self.run_model(sample, infer=False)     # ① loss: computed exactly as in training
+if this batch contains an utterance with index < 10:
+    out = self.run_model(sample, infer=True)     # ② real generation: 20 euler steps
 ```
 
-- **① 은 valid 전체 1,009 발화에 대해** 돈다. `max_val_batch_size: 1` 이라 **한 발화씩** —
-  패딩이 전혀 없다.
-- **② 는 앞 10개 발화만.** 실제로 20스텝 샘플링하고, acoustic 은 NSF-HiFiGAN 으로 파형까지
-  만들어 텐서보드에 **오디오와 mel 그림**을 올린다 (`num_valid_plots: 10`).
-  variance 는 duration 막대그래프와 피치 곡선을 그린다.
-- 검증은 `autocast` 를 끄고 fp32 로 돈다 (`base_task.py:266`).
+- **① runs over all 1,009 valid utterances.** With `max_val_batch_size: 1` it is **one
+  utterance at a time** — no padding whatsoever.
+- **② only the first 10 utterances.** These are really sampled over 20 steps, and for
+  acoustic the waveform is built with NSF-HiFiGAN and **audio and mel figures** are posted to
+  TensorBoard (`num_valid_plots: 10`). variance draws duration bar charts and pitch curves.
+- Validation runs in fp32 with `autocast` disabled (`base_task.py:266`).
 
-> **검증 손실에도 난수가 들어 있다.** ①은 학습과 같은 코드라 `t` 와 노이즈를 매번 새로 뽑는다.
-> 그래서 곡선의 한 칸(±0.005 정도) 차이는 신호가 아니다. **acoustic 의 28,000(0.17800)과
-> 64,000(0.17988)은 사실상 구분되지 않는다.** 추세만 볼 것.
+> **There is randomness in the validation loss too.** ① is the same code as training, so `t`
+> and the noise are drawn fresh each time. A one-notch difference in the curve (±0.005 or so)
+> is not a signal. **acoustic's 28,000 (0.17800) and 64,000 (0.17988) are effectively
+> indistinguishable.** Read the trend only.
 
-### 6-2. 체크포인트 — **손실 기준이 아니다**
+### 6-2. Checkpoints — **not chosen by loss**
 
 ```python
 DsModelCheckpoint(monitor='step', mode='max', save_top_k=num_ckpt_keep)
 ```
 
-`monitor='step'`, `mode='max'` — 즉 **"step 이 가장 큰 N개"**, 다시 말해 **최근 N개**를 남긴다.
-검증 손실은 보관 여부에 아무 영향도 주지 않는다. acoustic `num_ckpt_keep: 8`,
-variance `num_ckpt_keep: 5`.
+`monitor='step'`, `mode='max'` — it keeps **the N with the largest step**, that is, **the N
+most recent**. The validation loss has no influence on retention at all. acoustic
+`num_ckpt_keep: 8`, variance `num_ckpt_keep: 5`.
 
-영구 보존 규칙이 따로 있다 (`training_utils.py:269-286`): `step ≥ permanent_ckpt_start` 이고
-`(step − start) % permanent_ckpt_interval == 0` 이면 삭제 대상에서 빠진다.
-acoustic 은 start 60,000 / interval 10,000.
+There is a separate permanent-retention rule (`training_utils.py:269-286`): a checkpoint is
+exempt from deletion if `step ≥ permanent_ckpt_start` and
+`(step − start) % permanent_ckpt_interval == 0`. For acoustic, start 60,000 / interval
+10,000.
 
-**그런데 이 규칙은 절반만 발동한다.** 저장 자체가 4,000 배수에서만 일어나므로
-70,000 과 90,000 은 **애초에 존재한 적이 없다.** 실제로 살아남은 것:
+**But that rule only half fires.** Saving itself only happens at multiples of 4,000, so
+70,000 and 90,000 **never existed in the first place.** What actually survived:
 
 ```
-영구:   60,000 · 80,000 · 100,000          ← 4,000 과 10,000 의 공배수만
-최근 8: 72,000 76,000 80,000 84,000 88,000 92,000 96,000 100,000
+Permanent:  60,000 · 80,000 · 100,000          ← only common multiples of 4,000 and 10,000
+Recent 8:   72,000 76,000 80,000 84,000 88,000 92,000 96,000 100,000
 ```
 
-`checkpoints/pansori_ac_v1/` 의 파일 목록이 정확히 이것이다(+ `best/` 에서 되돌려 놓은
-12,000 · 28,000). **최저였던 28,000 은 학습이 끝났을 때 이미 지워져 있었다.**
-`checkpoints/best/` 에 따로 복사해 두지 않았다면 남은 것 중 최저인 76,000(0.18335)으로
-조용히 내려앉았을 것이다.
+The file listing in `checkpoints/pansori_ac_v1/` is exactly that (plus 12,000 and 28,000,
+restored from `best/`). **The lowest one, 28,000, had already been deleted by the time
+training ended.** Without the separate copy in `checkpoints/best/` it would have quietly
+settled for the lowest survivor, 76,000 (0.18335).
 
-> 4,000 과 10,000 이 안 맞는 것은 upstream 기본값의 문제다. `permanent_ckpt_interval` 을
-> `val_check_interval` 의 배수(예: 12,000)로 잡으면 규칙이 의도대로 작동한다.
+> 4,000 and 10,000 not lining up is an upstream default's problem. Set
+> `permanent_ckpt_interval` to a multiple of `val_check_interval` (12,000, say) and the rule
+> works as intended.
 
 ---
 
-## 7. 실제로 이렇게 흘러갔다
+## 7. How it actually went
 
 ### acoustic (`validation/*`)
 
 | step | total | mel | aux | |
 |---:|---:|---:|---:|---|
-| 0 | 1.25401 | 1.08727 | 0.16675 | sanity check, 배치 1개 — 곡선에서 제외할 것 |
+| 0 | 1.25401 | 1.08727 | 0.16675 | sanity check, one batch — exclude from the curve |
 | 4,000 | 0.19593 | 0.16167 | 0.03426 | |
 | 12,000 | 0.18394 | 0.15173 | 0.03220 | |
-| 16,000 | 0.20279 | 0.17124 | 0.03155 | 4,000 이후 최고 |
-| **28,000** | **0.17800** | 0.14499 | 0.03301 | ← **최저** |
+| 16,000 | 0.20279 | 0.17124 | 0.03155 | Highest after 4,000 |
+| **28,000** | **0.17800** | 0.14499 | 0.03301 | ← **lowest** |
 | 52,000 | 0.17981 | 0.14820 | 0.03161 | |
 | 64,000 | 0.17988 | 0.14747 | 0.03241 | |
-| 76,000 | 0.18335 | 0.15095 | 0.03240 | 남은 파일 중 최저 |
-| 100,000 | 0.18834 | 0.15625 | 0.03209 | 마지막 — 최저보다 **5.8% 나쁘다** |
+| 76,000 | 0.18335 | 0.15095 | 0.03240 | Lowest among the surviving files |
+| 100,000 | 0.18834 | 0.15625 | 0.03209 | Last — **5.8% worse** than the lowest |
 
-**4,000 스텝 만에 0.196 에 도달하고, 그 뒤 96,000 스텝 동안 0.178–0.203 사이를 진동만 했다.**
-`aux_mel_loss` 는 8,000 스텝 이후 0.032 에서 사실상 정지한다. 설정대로 100,000 을 완주했지만
-**필요했던 것은 3만 스텝 이하였다.**
+**It reached 0.196 within 4,000 steps and then merely oscillated between 0.178 and 0.203 for
+the next 96,000.** `aux_mel_loss` is effectively frozen at 0.032 after 8,000 steps. It ran
+the configured 100,000 to completion, but **under 30,000 was what it needed.**
 
 ### variance (`validation/*` + `metrics/*`)
 
@@ -457,65 +487,72 @@ acoustic 은 start 60,000 / interval 10,000.
 | 28,000 | 0.09877 | 0.09008 | 0.00868 | 0.575 | **0.501** |
 | **32,000** | 0.10423 | 0.09561 | **0.00861** | 0.650 | 0.416 |
 
-**두 헤드가 반대로 간다.** `dur_loss` 는 16,000 에서 바닥을 치고 그 뒤 계속 오르고,
-`pitch_loss` 는 32,000 까지 계속 내려간다. `total_loss` 는 `dur` 가 자릿수로 지배하므로
-사실상 `dur` 곡선이다 — 20,000 에서 최저를 찍은 것도 `dur` 때문이다.
+**The two heads move in opposite directions.** `dur_loss` bottoms out at 16,000 and rises
+steadily after; `pitch_loss` keeps falling all the way to 32,000. `total_loss` is dominated
+by `dur` by an order of magnitude, so it is effectively the `dur` curve — and its minimum at
+20,000 is `dur`'s doing.
 
-`dur_loss` 가 3회 연속 오른 32,796 스텝에서 중단했다.
+Training was stopped at step 32,796, after `dur_loss` rose three times in a row.
 
-### 그래서 체크포인트는 헤드마다 따로 고른다
+### Which is why checkpoints are chosen per head
 
-| 쓰는 곳 | 고른 기준 | step |
+| Used for | Chosen by | step |
 |---|---|---|
 | acoustic | `validation/total_loss` | **28,000** |
-| variance — 길이 | `validation/dur_loss` | **16,000** |
-| variance — 피치 | `validation/pitch_loss` | **32,000** |
+| variance — duration | `validation/dur_loss` | **16,000** |
+| variance — pitch | `validation/pitch_loss` | **32,000** |
 
-`total_loss` 로 고른 20,000 으로 피치를 뽑으면 32,000 보다 f0 오차가 **25% 크다.**
-그래서 `examples/run_examples.sh` 는 **variance 를 두 번 돌린다** — 1차 `--predict dur`,
-2차는 그 산출물에 `--predict pitch`.
+Pulling pitch from the 20,000 that `total_loss` picks gives **25% more f0 error** than
+32,000. That is why `examples/run_examples.sh` **runs variance twice** — first
+`--predict dur`, then `--predict pitch` over that output.
 
-도구: `python pansori/examples/best_ckpt.py {exp} [--metric validation/pitch_loss]`
-(step 0 은 sanity check 라 후보에서 뺀다. 파일이 남아 있는 step 만 후보로 친다.)
-
----
-
-## 8. 다음에 돌릴 때의 규칙
-
-1. **`max_updates` 를 믿지 말 것.** 설정된 100,000 은 근거가 없는 기본값이었다.
-   **검증 손실이 3회 연속(=12,000 스텝) 최저를 못 갱신하면 멈춘다** — variance 에는 이 규칙을
-   적용해 32,796 에서 끊었고, acoustic 에는 적용하지 않아 GPU 3시간을 태웠다.
-2. **멈추기 전에 `checkpoints/best/` 로 복사할 것.** `num_ckpt_keep` 은 손실을 보지 않는다.
-   최저 체크포인트는 학습이 계속되는 동안 조용히 지워진다.
-3. **헤드가 여러 개면 `total_loss` 를 쓰지 말 것.** 헤드별로 최저 step 을 따로 고른다.
-4. **곡선의 한 칸 차이는 무시할 것.** 검증 손실 자체에 난수가 들어 있다 (6-1).
-5. **variance 를 더 돌릴 여지가 있다.** `pitch_loss` 는 중단 시점까지 계속 내려가고 있었다.
-   dur 헤드만 얼려 두고(`frozen_params`) pitch 를 더 돌리는 것이 다음 실험 후보다.
-
-### 재실행 시 자주 밟는 것
-
-- **config 를 고치고 `--reset` 없이 재실행** → `checkpoints/{exp}/config.yaml` 저장본이 이겨서
-  고친 게 안 먹는다.
-- **`--reset` 을 붙였는데 디렉토리를 안 비움** → config 는 새로 만들지만 `trainer.fit` 은
-  여전히 마지막 체크포인트에서 **이어서** 돈다. `--reset` 은 config 만 리셋한다.
-- **`spec_min`/`spec_max` 를 고쳤을 때** → 학습 시점에만 쓰는 값이라 **재-binarize 불필요.**
-  `make_configs.py` 로 config 만 다시 만들면 된다.
-- **두 학습은 독립이다.** 각 6 GB 대라 4090 한 장에서 동시에 돌아간다.
+The tool: `python pansori/examples/best_ckpt.py {exp} [--metric validation/pitch_loss]`
+(step 0 is the sanity check and is excluded; only steps whose files still exist are
+candidates).
 
 ---
 
-## 9. 학습이 추론에서 어떻게 뒤집히나
+## 8. Rules for next time
 
-| | 학습 | 추론 |
+1. **Do not trust `max_updates`.** The configured 100,000 was a default with no basis behind
+   it. **Stop when the validation loss fails to set a new minimum three times in a row
+   (= 12,000 steps)** — that rule was applied to variance, cutting it at 32,796, and was not
+   applied to acoustic, which burned three GPU-hours.
+2. **Copy to `checkpoints/best/` before stopping.** `num_ckpt_keep` does not look at the
+   loss. The lowest checkpoint gets quietly deleted while training carries on.
+3. **With multiple heads, do not use `total_loss`.** Pick the minimum step per head.
+4. **Ignore a one-notch difference in the curve.** There is randomness in the validation loss
+   itself (6-1).
+5. **There is room to run variance longer.** `pitch_loss` was still falling when it stopped.
+   Freezing the dur head (`frozen_params`) and running pitch further is a candidate for the
+   next experiment.
+
+### Things frequently stepped on when re-running
+
+- **Editing a config and re-running without `--reset`** → the saved
+  `checkpoints/{exp}/config.yaml` wins and the edit does nothing.
+- **Adding `--reset` but not emptying the directory** → the config is rebuilt, but
+  `trainer.fit` still **resumes** from the last checkpoint. `--reset` resets only the config.
+- **Changing `spec_min`/`spec_max`** → these are used only at training time, so
+  **no re-binarize is needed.** Just regenerate the configs with `make_configs.py`.
+- **The two trainings are independent.** Each is around 6 GB, so both run concurrently on one
+  4090.
+
+---
+
+## 9. How training inverts at inference
+
+| | Training | Inference |
 |---|---|---|
-| `mel2ph` | 정답 `ph_dur` 에서 | variance 가 예측한 `ph_dur` 에서 |
-| f0 (acoustic 입력) | RMVPE 로 뽑은 실측 | variance 가 생성한 곡선 |
-| reflow | `t` 무작위 1개, 속도 1회 예측 | `t_start`→1 을 20등분해 20회 예측 |
-| retake mask | 무작위 연속 구간 | 전부 `True` (또는 편집 구간만) |
-| aux decoder | 손실 계산용 | **0.4 지점의 출발선 생성용** |
+| `mel2ph` | From ground-truth `ph_dur` | From the `ph_dur` variance predicted |
+| f0 (acoustic input) | Measured, extracted with RMVPE | The curve variance generated |
+| reflow | One random `t`, one velocity prediction | `t_start`→1 split into 20, 20 predictions |
+| retake mask | A random contiguous span | All `True` (or only the edited span) |
+| aux decoder | For computing the loss | **For generating the starting line at 0.4** |
 
-이 대응 관계 때문에 `examples/run_examples.sh` 의 **사다리 4단**이 진단 도구가 된다 —
-`2_resynth`(`ph_dur`+f0 제공) → `3_pitch`(`ph_dur`만) → `4_full`(노트+가사만) 로 내려가면서
-모델이 스스로 만들어야 하는 것이 하나씩 늘어난다. 어디서 무너지는지가 곧 어느 학습이 부족한지다.
+This correspondence is what makes the **4-rung ladder** in `examples/run_examples.sh` a
+diagnostic — descending `2_resynth` (`ph_dur`+f0 given) → `3_pitch` (`ph_dur` only) →
+`4_full` (notes and lyrics only), the model has to invent one more thing at each rung. Where
+it collapses tells you which training fell short.
 
-추론·평가는 [`PIPELINE.md`](PIPELINE.md) D·E 절.
+Inference and evaluation are in [`PIPELINE.md`](PIPELINE.md) sections D and E.
