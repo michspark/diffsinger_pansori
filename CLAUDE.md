@@ -43,9 +43,11 @@ did not reproduce; item closed).
    `phones.jsonl`. To get the wavs back: `python pansori/preprocess/01b_recut_wavs.py --set full`.
 4. **Never binarize without a `07_validate.py` PASS.** The binarizer asserts inside
    worker processes — it kills a 40-minute job midway, it does not skip the item.
-5. **Never push to `origin` or `upstream`** — they are openvpi and MoonInTheRiver. Ours
-   is the `pansori` remote. **Never `git merge` or `git remote add` the moonInRiver
-   repo**: the two histories have no common ancestor.
+5. **Never push to `upstream`** — it is MoonInTheRiver. Ours is `pansori`
+   (michspark/diffsinger_pansori); ask before pushing there. `origin` points at
+   michspark/DiffSinger, **which does not exist** — a push to it just fails.
+   **Never `git merge` or `git remote add` the moonInRiver repo**: the two histories
+   have no common ancestor.
 
 Rules 1–5 are enforced by hooks in `.claude/hooks/`. A refusal will name the alternative.
 
@@ -132,8 +134,11 @@ Two traps in upstream's loader:
   imperative, no conventional-commit prefix, no PR number, stating intent or effect rather
   than the mechanical change — `Split the config along the axes that actually vary`. Body:
   prose explaining *why*, with measured numbers and `file:line` citations where they apply.
-- **Ask before pushing.** Push only to `pansori`.
-- Docs and code comments in `pansori/` are Korean. Match the surrounding language when
-  editing them; this file and the harness are English.
+- **Ask before pushing.** `pansori` is the only remote that is both ours and real.
+- Docs and code comments in `pansori/` are English. The Korean that remains is data —
+  speaker names, the dictionary's syllables, score lyrics, and the orthography examples the
+  phoneme rules are argued from — plus the prose rendered into the generated reports
+  (`compare/report.py`, `compare/plots.py`, `examples/build_report.py` and the two HTML
+  templates). Leave those alone; write everything else in English.
 - Cite measured numbers, never estimates. Reports re-read their numbers from artifacts
   rather than transcribing them.

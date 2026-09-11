@@ -6,9 +6,10 @@ Three kinds of damage are covered, and they are different kinds:
   * **Irrecoverable within the repo** -- history rewrites, hard resets, and the
     shared stash stack (this repo is checked out as two worktrees, so a bare
     `git stash pop` can swallow the *other* session's work).
-  * **Irrecoverable outside it** -- pushing to `origin`/`upstream`, which are
-    openvpi and MoonInTheRiver, not ours. `pansori` is the fork to push to, and
-    even that is asked about first.
+  * **Irrecoverable outside it** -- pushing to `upstream`, which is MoonInTheRiver,
+    not ours. Ours is `pansori` (michspark/diffsinger_pansori). `origin` currently
+    points at michspark/DiffSinger, which does not exist, so a push there only
+    errors; it is not guarded. CLAUDE.md asks before any push.
   * **Irreproducible** -- `01_segment.py`. It completes happily and looks fine;
     what it destroys is the correspondence between every existing phones.jsonl
     and the audio, because librosa.effects.split lands 3-11 ms differently in a
@@ -34,10 +35,10 @@ from _common import deny, payload, run  # noqa: E402
 
 # (pattern, explanation). Checked in order against the whole command string.
 RULES = [
-    (r'\bgit\s+push\b(?=.*\b(origin|upstream)\b)',
-     'Refused: `origin` is openvpi/DiffSinger and `upstream` is MoonInTheRiver -- '
-     'neither is yours.\nYour fork is the `pansori` remote '
-     '(github.com/michspark/diffsinger_pansori).\nAnd ask before pushing there, per CLAUDE.md.'),
+    (r'\bgit\s+push\b(?=.*\bupstream\b)',
+     'Refused: `upstream` is MoonInTheRiver/DiffSinger -- not yours.\n'
+     'Yours is `pansori` (github.com/michspark/diffsinger_pansori).\n'
+     'Ask before pushing there, per CLAUDE.md.'),
 
     (r'\bgit\s+push\b(?=.*(--force(?!-with-lease)|\s-f\b))',
      'Refused: force-push rewrites published history.\n'
