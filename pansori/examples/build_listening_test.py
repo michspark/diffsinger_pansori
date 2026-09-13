@@ -52,31 +52,32 @@ def song_title(stem: str, speaker: str) -> str:
     return tail.replace('_', ' ').strip()
 
 
-def summarize(scores):
+def summarize(scores, arms):
     """Recompute the paired table so the page can never disagree with the data."""
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from ab_ladder import sign_test
 
+    arm_a, arm_b = arms
     changed, sc = scores['changed'], scores['scores']
     out = []
     for label, want in (('lyrics changed', True), ('control', False)):
-        subset = [i for i in sorted(sc['whisper'])
-                  if changed.get(i) is want and i in sc['snapped']]
+        subset = [i for i in sorted(sc[arm_a])
+                  if changed.get(i) is want and i in sc[arm_b]]
         group = {'label': label, 'n': len(subset), 'rows': []}
         for key, name, lower_better, digits in (
                 ('mel_l1', 'mel L1', True, 3),
                 ('f0_rmse_cent', 'f0 RMSE ¢', True, 0),
                 ('voiced_agree', 'voiced agreement', False, 3)):
-            pairs = [(sc['whisper'][i][key], sc['snapped'][i][key]) for i in subset
-                     if key in sc['whisper'][i] and key in sc['snapped'][i]]
+            pairs = [(sc[arm_a][i][key], sc[arm_b][i][key]) for i in subset
+                     if key in sc[arm_a][i] and key in sc[arm_b][i]]
             if not pairs:
                 continue
             wins, losses, p = sign_test([b - a for a, b in pairs], lower_better)
             group['rows'].append({
                 'metric': name, 'digits': digits,
-                'whisper': round(statistics.median(a for a, _ in pairs), digits),
-                'snapped': round(statistics.median(b for _, b in pairs), digits),
-                'snappedWins': wins, 'pairs': wins + losses, 'p': round(p, 3)})
+                'a': round(statistics.median(a for a, _ in pairs), digits),
+                'b': round(statistics.median(b for _, b in pairs), digits),
+                'bWins': wins, 'pairs': wins + losses, 'p': round(p, 3)})
         out.append(group)
     return out
 
@@ -86,14 +87,24 @@ def main() -> None:
     parser.add_argument('--n', type=int, default=40,
                         help='number of items. Fills with lyrics-changed first, then the control')
     parser.add_argument('--out', default=str(OUT_HTML))
+    parser.add_argument('--arms', nargs=2, default=['whisper', 'snapped'],
+                        help='the two ab_ladder arms, baseline first')
+    parser.add_argument('--lyrics', default='lyrics_snapped.jsonl',
+                        help='the treatment arm\'s lyrics file, for the text question')
+    parser.add_argument('--labels', nargs=2, default=None,
+                        help='what to call the two arms on the page (baseline first)')
+    parser.add_argument('--title', default=None, help='page headline')
+    parser.add_argument('--lede', default=None, help='page standfirst (HTML allowed)')
     args = parser.parse_args()
+    arm_a, arm_b = args.arms
+    label_a, label_b = args.labels or ('Whisper', '창본')
 
     scores = json.loads((AB_OUT / 'scores.json').read_text(encoding='utf-8'))
     changed_map = scores['changed']
     per_seed = scores['per_seed']
 
     lyrics = {}
-    for line in open(REPO / 'pansori/data/full/lyrics_snapped.jsonl', encoding='utf-8'):
+    for line in open(REPO / 'pansori/data/full' / args.lyrics, encoding='utf-8'):
         row = json.loads(line)
         if row['item_name'] in changed_map:
             lyrics[row['item_name']] = row
@@ -105,7 +116,7 @@ def main() -> None:
     spk_map = json.loads(
         (REPO / 'pansori/data/full/spk_map.json').read_text(encoding='utf-8'))['item2spk']
 
-    scored = sorted(i for i in changed_map if i in scores['scores']['snapped'])
+    scored = sorted(i for i in changed_map if i in scores['scores'][arm_b])
     treated = [i for i in scored if changed_map[i]]
     control = [i for i in scored if not changed_map[i]]
     picked = treated[:args.n] + control[:max(0, args.n - len(treated))]
@@ -120,14 +131,14 @@ def main() -> None:
             audio = {'orig': encode(
                 REPO / 'data/pansori' / speaker / 'wavs' / f'{item}.wav', tmp)}
             seeds, metrics = {}, {}
-            for arm in ('whisper', 'snapped'):
+            for key, arm in (('a', arm_a), ('b', arm_b)):
                 draws = per_seed[arm][item]
                 # play the draw whose number is on screen: the median-mel render
                 median = statistics.median(d['mel_l1'] for d in draws.values())
                 seed = min(draws, key=lambda s: abs(draws[s]['mel_l1'] - median))
-                seeds[arm] = int(seed)
-                metrics[arm] = scores['scores'][arm][item]
-                audio[arm] = encode(AB_OUT / arm / 'wav' / f'{item}__s{seed}.wav', tmp)
+                seeds[key] = int(seed)
+                metrics[key] = scores['scores'][arm][item]
+                audio[key] = encode(AB_OUT / arm / 'wav' / f'{item}__s{seed}.wav', tmp)
             total_bytes += sum(len(v) for v in audio.values())
             items.append({
                 'id': item,
@@ -136,8 +147,8 @@ def main() -> None:
                 'mode': segments[item].get('mode', ''),
                 'duration': round(segments[item]['duration'], 2),
                 'changed': bool(changed_map[item]),
-                'whisperText': row['text_whisper'],
-                'bookText': row['text'],
+                'textA': row['text_whisper'],
+                'textB': row['text'],
                 'matchScore': row.get('match_score'),
                 'seeds': seeds,
                 'metrics': metrics,
@@ -145,7 +156,21 @@ def main() -> None:
             })
             print(f'  [{index}/{len(picked)}] {item}  {speaker}', file=sys.stderr)
 
-    payload = {'items': items, 'summary': summarize(scores)}
+    payload = {
+        'items': items,
+        'summary': summarize(scores, (arm_a, arm_b)),
+        'labels': {
+            'a': label_a, 'b': label_b, 'bar': f'{label_b} 청취 검증',
+            'textA': f'{label_a} 전사', 'textB': label_b,
+            'modelA': f'{label_a} 라벨 모델', 'modelB': f'{label_b} 라벨 모델',
+            'title': args.title or f'{label_b}이 맞는가,<br>귀로 확인한다',
+            'lede': args.lede or (
+                f'{label_a} 전사를 {label_b} 쪽으로 고치면 DiffSinger 가 더 나아지는가 — '
+                '지표만으로는 답이 갈렸다. 원본 녹음을 듣고 <strong>두 가사 중 실제로 부른 쪽</strong>을 '
+                '고르고, 두 모델의 합성음 중 <strong>원본에 가까운 쪽</strong>을 고른다. '
+                '순서는 항목마다 섞여 있고 두 질문 사이에 상관이 없다.'),
+        },
+    }
 
     html = TEMPLATE.read_text(encoding='utf-8').replace(
         '"__PAYLOAD__"', json.dumps(payload, ensure_ascii=False, separators=(',', ':')))

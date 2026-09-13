@@ -17,6 +17,13 @@ __pycache__/
 # Measurement artefacts (jsonl, HTML, MFA working directories)
 eval/out/
 
+# Rendered pages. The generator and its *.template.html are tracked; the output is
+# not -- it carries base64 audio (the listening test runs to ~8 MB) and is rebuilt
+# from ab_out/ and wandb in one command.
+examples/listening_test*.html
+!examples/listening_test.template.html
+examples/training_report.html
+
 # The knowledge graph understand-anything builds — an artefact regenerated from the code.
 .ua/
 

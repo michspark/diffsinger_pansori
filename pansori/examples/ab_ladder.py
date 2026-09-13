@@ -52,6 +52,8 @@ ARMS = {
                     ac_exp='pansori_ac_snap', ckpt=36000),
     'sofa': dict(config='configs/exp/ac_sofa.yaml', data='data/pansori_sofa',
                  ac_exp='pansori_ac_sofa', ckpt=None),   # supplied via --ckpt sofa=N
+    'hybrid': dict(config='configs/exp/ac_hyb.yaml', data='data/pansori_hyb',
+                   ac_exp='pansori_ac_hyb', ckpt=None),
 }
 
 # Which two arms are compared. --arms changes it; it is passed to child processes as-is.
@@ -62,8 +64,13 @@ PAIR = ['whisper', 'snapped']
 # sequence changes, so that criterion separates nothing. Instead the treatment group is
 # the utterances where MFA actually collapsed (the top half by floor rate) -- because
 # those utterances are precisely why the aligner was changed.
+#
+# sofa vs hybrid is a lyrics A/B too -- the aligner and its checkpoint are held fixed and
+# only the .lab text differs -- so the same criterion applies. It separates cleanly here:
+# 6,979 of the shared 26,955 utterances differ in ph_seq and 19,976 do not.
 GROUP_LABELS = {
     ('whisper', 'snapped'): ('lyrics changed', 'lyrics identical (control)'),
+    ('sofa', 'hybrid'): ('lyrics changed', 'lyrics identical (control)'),
 }
 DEFAULT_LABELS = ('high MFA floor rate', 'low MFA floor rate (control)')
 
