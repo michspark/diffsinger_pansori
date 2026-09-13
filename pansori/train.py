@@ -49,7 +49,7 @@ def parse_wandb_args():
     parser.add_argument('--wandb-name', default=None,
                         help='defaults to --exp_name')
     parser.add_argument('--lyrics-source', default=None,
-                        choices=['whisper', 'snapped'],
+                        choices=['whisper', 'snapped', 'hybrid'],
                         help='the variable that distinguishes this run; recorded in the wandb config to filter on')
     parser.add_argument('--no-wandb', action='store_true')
     args, _ = parser.parse_known_args()
