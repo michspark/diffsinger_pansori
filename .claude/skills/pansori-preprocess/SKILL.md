@@ -16,6 +16,7 @@ in `pansori/data/{set}/` and take `--set` (in practice `--set full`).
 | 2 | `02_speaker_map.py` | segments → `spk_map.json` | `pansori` |
 | 3 | `03_transcribe.py` | wavs → `lyrics.jsonl` (whisper-large-v3) | `pansori` |
 | 3b | `03b_snap_lyrics.py` | + 창본 → `lyrics_snapped.jsonl` (optional) | `pansori` |
+| 3c | `03c_hybrid_lyrics.py` | snapped → `lyrics_hybrid.jsonl`, Whisper's syllable count kept (optional) | `pansori` |
 | 4 | `04_align.py` | lyrics + wavs → `phones.jsonl` | `aligner` |
 | 4b | `04b_sofa_data.py` | phones → SOFA training data (optional) | `pansori` |
 | 5 | `05_notes.py` | rosvot_midi → `notes.jsonl` | `aligner` |

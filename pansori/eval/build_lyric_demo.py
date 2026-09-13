@@ -311,10 +311,10 @@ def main():
     # "Changed lyrics" means the Hangul changed -- 5.2% of adopted rows only
     # respace Whisper, and there is nothing to listen for in those.
     changed = [r for r in rows
-               if r["source"] == "book"
+               if r["source"] != "whisper"          # 03b says "book", 03c says "hybrid"
                and "".join(HANGUL.findall(r["text_whisper"]))
                != "".join(HANGUL.findall(r["text"]))]
-    print(f"{len(rows):,} rows | adopted {sum(1 for r in rows if r['source']=='book'):,}"
+    print(f"{len(rows):,} rows | rewritten {sum(1 for r in rows if r['source']!='whisper'):,}"
           f" | text actually changed {len(changed):,}")
 
     picked = pick(changed, args.n, args.seed)

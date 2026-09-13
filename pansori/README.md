@@ -110,7 +110,8 @@ The corpus, the docs and some comments use Korean domain terms. This is all of t
   ├─ 01 segment ──────────────────────────► segments.jsonl + wavs/
   ├─ 02 speaker map ──────────────────────► spk_map.json
   ├─ 03 transcribe (whisper-large-v3) ────► lyrics.jsonl
-  │    └─ 03b snap to changbon (optional) ► lyrics_snapped.jsonl        [lyrics arm B]
+  │    ├─ 03b snap to changbon (optional) ► lyrics_snapped.jsonl        [lyrics arm B]
+  │    └─ 03c hybrid (optional) ─────────► lyrics_hybrid.jsonl         [lyrics arm C]
   ├─ 04 align (MFA | SOFA) ───────────────► phones.jsonl + aligned/*.TextGrid
   ├─ 05 notes (slice ROSVOT MIDI) ────────► notes.jsonl
   ▼
@@ -152,6 +153,8 @@ pansori/
 ├── preprocess/           Stages 01–08. jsonl between stages, so each re-runs alone
 │   ├── pansori_lib.py      Shared: source path, IPA→Coda rules, phone classes, jsonl IO
 │   ├── aligners.py         The MFA/SOFA backends behind stage 04 (§8)
+│   ├── lyricbook_lib.py    The changbon as an indexable syllable sequence (03b, 03c)
+│   ├── hybrid.py           03c's rule: borrow changbon syllables, keep Whisper's count
 │   └── align.yaml          ★ The aligner seam — one line picks the backend
 ├── alignment/            IPA→Coda mapping table and its scorer
 │   ├── ipa_to_coda.csv     korean_mfa IPA (108) → Coda (34)
@@ -166,6 +169,7 @@ pansori/
 │   ├── ab_ladder.py        Two models over N held-out pairs + sign test
 │   ├── build_listening_test.py   Blind listening page
 │   └── build_report.py     Explanation + audio, rendered as one page
+├── tests/                `python -m unittest pansori.tests.test_hybrid`
 ├── eval/                 ★ Label and pronunciation rulers (§12)
 │   ├── label_report.py     Diagnoses ph_dur in the labels — the MFA-vs-SOFA verdict table
 │   ├── intelligibility.py  5-rung ladder × {Whisper CER, MFA re-alignment}
@@ -265,6 +269,7 @@ needs it.
 | 2 | `02_speaker_map.py` | segments → `spk_map.json` | base |
 | 3 | `03_transcribe.py` | wavs → `lyrics.jsonl` (whisper-large-v3) | base |
 | 3b | `03b_snap_lyrics.py` | lyrics + changbon → `lyrics_snapped.jsonl` (optional) | pansori |
+| 3c | `03c_hybrid_lyrics.py` | snapped → `lyrics_hybrid.jsonl`; Whisper's syllable count kept (optional) | pansori |
 | 4 | `04_align.py` | lyrics + wavs → `phones.jsonl` (MFA or SOFA — below) | aligner |
 | 4b | `04b_sofa_data.py` | phones → SOFA training data (optional) | pansori |
 | 5 | `05_notes.py` | ROSVOT MIDI → `notes.jsonl` | aligner |

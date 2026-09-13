@@ -259,3 +259,26 @@ actually made at that point is the sound the singer sang, not the changbon's spe
 3. To dig further from here, either run 2–3 training runs per arm to confirm the
    interaction, or move to listening verification. Squeezing more out of the metrics is
    exhausted.
+
+---
+
+## 10. Follow-up — a third arm, not yet judged (2026-09-13)
+
+The span-length measurement behind `eval/build_lyric_demo.py` (§6) points at a mechanism
+the two verdicts above did not separate from the lyrics themselves: over the 11,174
+adopted rows the changbon span is a median 1.00× Whisper's syllable count, but p90 **2.00×**
+below `match_score` 0.55, and 41.5% of that band differs by three syllables or more. A
+label with twice the syllables of the singing is wrong however correct its spelling.
+
+`preprocess/03c_hybrid_lyrics.py` (rule in `preprocess/hybrid.py`) keeps Whisper's syllables
+one for one and borrows changbon syllables only for stretches of equal length pinned by exact
+matches; the count never changes. On the full corpus it rewrites 7,364 of the 11,174 placed
+rows (65.9%) and 20,374 of their 91,955 syllables (22.2%); 2,646 rows come out identical to
+03b's. Whether this arm sounds right is what §6's page is for:
+
+```sh
+python pansori/preprocess/03c_hybrid_lyrics.py --set full
+python pansori/eval/build_lyric_demo.py --lyrics lyrics_hybrid.jsonl --out pansori/eval/out/lyric_demo_hybrid.html
+```
+
+No judgement is recorded here yet.
