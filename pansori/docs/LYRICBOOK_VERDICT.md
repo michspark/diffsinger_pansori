@@ -149,7 +149,9 @@ correction partially is closed.**
   "does not fit the acoustics" was taken at face value.
 - **No listening verification was done.** Nobody has checked by ear which of the before/after
   texts matches the actual singing. §2's "the corrections are right" means only "they agree
-  with the lyricbook".
+  with the lyricbook". `pansori/eval/build_lyric_demo.py` renders the recording beside both
+  texts as one self-contained page — stratified over `match_score`, with a blind mode that
+  swaps the sides and hides the score — so this limit is now a run away from being closed.
 - The MFA floor rate is 34% even on the whisper side — higher than the 25.8% that
   SEGMENTATION_VERDICT.md measured under 6 seconds. In other words **neither one is a good
   alignment.** This compared two bad alignments.
@@ -245,7 +247,8 @@ actually made at that point is the sound the singer sang, not the changbon's spe
 - Only the `2_resynth` rung was measured. Whether full inference, including duration and
   pitch prediction, goes the same way is not something this table says (on a 3-utterance
   ladder it was buried in seed noise).
-- **There is still no listening verification.** §6's limit remains exactly as it was.
+- **There is still no listening verification.** §6's limit remains exactly as it was; §6 now
+  names the page that would close it.
 
 ### 9-5. Recommendations (these reinforce §7 rather than replacing it)
 
