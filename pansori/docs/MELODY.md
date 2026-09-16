@@ -26,9 +26,9 @@ melody model can be replaced wholesale without touching anything below it.
   function of its lyrics — the singer decides — so L1 or MSE is minimised by the mean and the
   model returns 0.3 s every time. The same failure the f0 predictor already has
   ([`SIGIMSAE_PLAN.md`](SIGIMSAE_PLAN.md): the model moves 12–20% as much as ground truth).
-  Durations go into **32 quantile bins**; measured requantisation error is 4.5 ms at the median
-  (16 bins: 6.8 ms, 64 bins: 2.0 ms). 4.5 ms is under one frame at hop 512 / 44.1 kHz, so the
-  binning gives up nothing the binariser would have kept.
+  Durations go into **40 bins** (§3); measured requantisation error is 4.3 ms at the median,
+  under one frame at hop 512 / 44.1 kHz, so the binning gives up nothing the binariser would
+  have kept.
 - **Notes per syllable is emitted, not predicted as a count.** One note at a time, then
   `CONT` or `NEXT`. 66.6% of syllables take one note but 6.3% take six or more, so a fixed
   count vocabulary truncates the very thing — sigimsae — the model exists to produce. `CONT`
@@ -81,8 +81,8 @@ already have. Reason (1) turned out to be most of it: §2.
          ▼
    melody_data.jsonl
          │
-   S3  tonic estimation     per-piece tonic + per-mode profile                  ⬜ next
-   S4  tokenisation         degrees, duration bins, CONT/NEXT                   ⬜
+   S3  tonic.py             per-piece tonic + per-mode profile                  ✅ §2
+   S4  tokens.py            degrees, duration bins, CONT/NEXT                  ✅ §3
 ```
 
 ### Why it reads `phones_sofa2.jsonl` and not `transcriptions.csv`
@@ -345,7 +345,83 @@ highest-value follow-up here.
 
 ---
 
-## 3. The models
+## 3. Tokenisation — `melody/tokens.py`
+
+Per note, three conversions at once, and their exact inverse.
+
+| | | |
+|---|---|---|
+| pitch | MIDI 69, tonic B3 | `DEG_+10` |
+| duration | 0.2145 s | `DUR_12` |
+| boundary | does the syllable continue | `CONT` / `NEXT` |
+
+```sh
+python pansori/melody/tokens.py --set full                        # -> tokenizer.json
+python pansori/melody/tokens.py --set full --show 02b8fd02_0000   # one utterance, both ways
+```
+
+A vocabulary of **83**: 37 degrees + `REST`, 40 durations, `CONT`/`NEXT`, 3 special. A median
+utterance is 36 tokens, p95 60, longest 96.
+
+### The three choices
+
+**Degrees are clamped to [−12, +24].** Measured over the 161,796 bound notes the range is
+−31..+23, and this window holds 99.30% of them; **0.672% are clamped**. The tail is ROSVOT
+octave slips and the very bottom of male tongseong, neither worth twenty tokens.
+
+**The octave anchor is a property of the piece, not the utterance.** `tonic.json` gives a pitch
+class; degrees need an origin with an octave. It is placed in the octave nearest the piece's
+duration-weighted median pitch, so the same phrase gets the same degrees wherever in the
+recording it falls. Anchoring per utterance would make degrees depend on where a phrase
+happened to start.
+
+**Durations are 32 quantile bins plus 8 log-spaced tail bins**, not 32 quantile bins alone.
+Quantiles leave the top bin open, and it swallows everything from the last quantile to 4.92 s —
+3.1% of notes at a median error of **209 ms**. Raising the bin count makes it *worse*, because
+the bin holds fewer notes but still spans the whole tail:
+
+| bins | median error | p99 | worst | top bin |
+|---|---|---|---|---|
+| 32 quantile | 4.1 ms | 270 ms | 3.8 s | 3.13% of notes, 209 ms median error |
+| 64 quantile | 2.0 ms | 207 ms | 3.5 s | 1.6%, 270 ms |
+| 96 quantile | 0.5 ms | 123 ms | 3.2 s | 1.0%, 293 ms |
+| **32 + 8 tail** | **4.3 ms** | **99 ms** | **0.64 s** | 0.02%, 148 ms |
+
+Eight extra tokens cut the p99 error by two thirds and the worst case by six. Long held tones
+are what pansori is made of, so the tail is worth its own edges.
+
+### Rests
+
+A rest belongs to no syllable, so it becomes one — `SP` in the encoder's input, `REST` in the
+target, `_` in the score. 74.3% of utterances have at least one.
+
+### The round trip
+
+`decode` is the exact inverse and emits the text score `make_ds.py from-score` reads, so the
+whole path is testable without a model. Taking `02b8fd02_0000` out of `melody_data.jsonl`,
+tokenising it and decoding it back:
+
+```
+아  A4    0.2181        아 이 고 장 군 님
+이  F#4   0.3091   ->   DEG_+10 DUR_12 NEXT  DEG_+7 DUR_21 NEXT  DEG_+0 DUR_21 NEXT
+고  B3    0.3091        DEG_+0 DUR_20 CONT  DEG_+2 DUR_4 NEXT
+장  B3    0.2934        DEG_+2 DUR_3 NEXT  DEG_+1 DUR_33 NEXT
+-   C#4   0.1500
+군  C#4   0.1387   ->   make_ds.py from-score --spk 박초월
+님  C4    1.1244        note_slur  0 0 0 0 1 0 0
+```
+
+Pitches return exactly; durations within their bin. **The `note_slur` `make_ds` derives from
+the decoded score is the same one the S2 DP found in the recording** — so a generated token
+sequence needs no further machinery to become audio, and the format seam of §0 is verified
+rather than assumed.
+
+The one visible loss is the held final note, 1.269 s encoded and 1.124 s returned: a tail bin,
+and the reason the tail bins exist at all.
+
+---
+
+## 4. The models
 
 Two stages, because rhythm is decided by the lyrics (how many syllables, where the phrase
 breaks) and pitch by the mode. Different conditioning, so they are learned apart — the split
@@ -377,11 +453,10 @@ that — not the individual — is the axis worth conditioning on.
 
 ---
 
-## 4. Order of work
+## 5. Order of work
 
 1. ~~**S3, tonic estimation.**~~ Done — §2. The gate opened at 72.3%.
-2. **S4, tokenisation.** Degrees against `tonic.json`, 32 quantile duration bins,
-   `CONT`/`NEXT`. A lookup over `melody_data.jsonl` at load time, not a stored file.
+2. ~~**S4, tokenisation.**~~ Done — §3. The round trip reaches a `.ds`.
 3. **[2] rhythm, then [3] pitch.** Rhythm first: it is conditioned only on the lyrics, so it
    can be judged on its own before the mode conditioning is in the way.
 4. **Decoding rewards for [3].** The S3 profile gives scale adherence directly; the cadence
