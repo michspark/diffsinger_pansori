@@ -13,7 +13,7 @@ the label: `segments.jsonl` has a human-annotated `mode` per utterance.
 
 ---
 
-## 0. What is settled, and what is still a question
+## 0. What is settled
 
 **Settled — the output format.** The generator emits the text score `make_ds.py from-score`
 already reads (`syllable note duration_seconds`, `-` for a held syllable, `_` for a rest). So
@@ -38,9 +38,14 @@ Because the destination is a `.ds` measured in **seconds**, none of this needs a
 which is fortunate: the corpus has no jangdan annotation. The bar/position tokens every
 lyric-to-melody paper uses are a detour we do not have to take.
 
-**The open question, and it is the one that decides whether any of this is worth building:**
-does the mode live in the *notes* at all? Measured on the raw note sequence, before any
-tonic-relative conversion, ujo and gyemyeonjo are nearly indistinguishable:
+**Settled, as of §2 — the mode is in the notes.** This was the question that decided whether
+any of the rest was worth building, and it is now answered: a probe reads ujo from gyemyeonjo
+at **72.3%** balanced accuracy off the note skeleton alone, and holds at 72.3% with whole
+singers held out. What follows is the evidence, kept because the raw numbers say the opposite
+and it is worth knowing why.
+
+Measured on the raw note sequence, before any tonic-relative conversion, ujo and gyemyeonjo
+are nearly indistinguishable:
 
 | mode | repeat (0) | +1 | −1 | −2 | +2 | leaps ≥5 |
 |---|---|---|---|---|---|---|
@@ -58,9 +63,8 @@ by 3–4 points. Two reasons it may be hiding rather than absent:
    gyemyeonjo are f0 movement inside a note, which in this pipeline belongs to the variance
    model's `base_pitch + deviation`, not to the note skeleton.
 
-**S3 is therefore the gate.** It needs no training — it is an aggregation over notes we
-already have. If the fitted per-mode profiles separate, build [2] and [3]. If they do not, the
-mode lives in the f0 deviation and the work belongs in variance, not in a new model.
+**S3 was therefore the gate.** It needs no training — it is an aggregation over notes we
+already have. Reason (1) turned out to be most of it: §2.
 
 ---
 
@@ -207,7 +211,94 @@ Separately, 765 aligned utterances have no note slice at all and never enter the
 
 ---
 
-## 2. The models, when S3 says to build them
+## 2. Tonic estimation — the gate, and its answer
+
+`melody/tonic.py`. Trains nothing: a duration-weighted pitch-class histogram per (piece, mode)
+span, each rotated onto its own estimated tonic, then the two modes compared.
+
+```sh
+python pansori/melody/tonic.py --set full          # -> data/full/tonic.json, docs/img/
+python pansori/melody/tonic.py --set full --sweep  # score every partner interval
+```
+
+Weighted by **how long** each pitch class sounds, not how often it is struck, because a tonic
+is held and a passing tone is not. Built from `notes.jsonl`, not `melody_data.jsonl`: the
+tonic is a property of the piece, and the binding QC has no bearing on which pitches a piece
+dwells on. Spans under 60 s are dropped — the corpus's median span is 87 s but its 10th
+percentile is 12 s, and at that length one held note decides the estimate. 470 spans over 355
+pieces survive.
+
+### Estimating the tonic
+
+The tonic is the pitch class maximising `h[p] + h[(p + interval) % 12]` — **the tonic and its
+structural partner together**, rather than the single loudest note, which picks whichever of
+the pair happened to be held longer that day.
+
+The partner interval is not assumed. `--sweep` scores all twelve:
+
+| partner | +0 | +1 | +2 | +3 | +4 | +5 | +6 | +7 | +8 | +9 | +10 | +11 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| probe | **73.0%** | 70.0% | 70.5% | 66.4% | 65.1% | **72.3%** | 64.5% | **72.3%** | 65.1% | 66.4% | 70.5% | 70.0% |
+
+(k and 12−k pick the same pair and differ only in which end is called the tonic, so they score
+identically.) **The fifth does not beat the plain argmax** — 72.3% against 73.0%, a 0.7 point
+gap on 470 spans, which is a tie. The default is +7 anyway, for two reasons that are not the
+probe's:
+
+- **It is the more robust of the two.** Held out by singer rather than by piece, +0 falls to
+  71.2% while +7 stays at 72.3%.
+- **It produces a profile that can be read.** Under +0 the aggregate is one 22% spike on the
+  tonic and eleven flat bars; under +7 the tonic/fifth pair stands out and the modal
+  differences below become legible. A skeleton nobody can interpret is not much use as the
+  conditioning signal for [3].
+
+### The profiles
+
+![ujo and gyemyeonjo on a common tonic](img/mode_profiles.png)
+
+| degree | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ujo | 17.0 | 7.6 | 4.6 | 5.0 | 6.3 | 6.9 | 8.2 | **17.0** | 10.7 | 5.2 | 3.9 | 7.7 |
+| gyemyeonjo | 18.1 | 6.7 | 6.3 | **8.2** | 6.8 | 4.9 | 7.1 | 13.8 | 8.3 | 6.2 | 5.4 | 8.1 |
+| ujo − gyem. | −1.2 | +0.8 | −1.7 | **−3.2** | −0.5 | +1.9 | +1.1 | **+3.2** | **+2.4** | −1.0 | −1.6 | −0.4 |
+
+Both modes rest on the tonic and its fifth, which is the pair the estimate was built to find.
+The largest differences are **gyemyeonjo's minor third (8.2% against 5.0%)** and **ujo's fifth
+and minor sixth (17.0 / 10.7 against 13.8 / 8.3)**. That is the direction the musicology
+describes, arrived at without being told it.
+
+### Does it mean anything
+
+| | |
+|---|---|
+| Jensen-Shannon divergence, ujo ‖ gyemyeonjo | **0.0091 bits** (0 identical, 1 disjoint) |
+| logistic probe, split by piece | **72.3%** balanced accuracy (chance 50%) |
+| ... whole singers held out | **72.3%** |
+| ... without the tonic rotation | 63.9% |
+| ... on shuffled labels | 51.4% |
+
+**The divergence and the probe disagree, and the probe is the one to believe.** A JSD of 0.0091
+bits says the two *average* profiles are nearly the same shape — true, and visible in the
+figure. But averaging is the wrong instrument: the modes differ along a direction that
+within-mode spread swamps in the mean, and a linear probe finds that direction. 72.3% is not a
+great classifier; it is decisive evidence that the signal is there.
+
+The three controls are what make it readable:
+
+- **Whole singers held out: unchanged at 72.3%.** Singers are skewed across the modes (정정렬
+  45% ujo, 이일주 14%), so a piece-level split still lets a probe learn a singer's habits.
+  It did not need them.
+- **Without the rotation: 63.9%.** The tonic estimate is worth 8.4 points, which is the
+  concrete answer to "does a mode need a reference pitch" — it does.
+- **Shuffled labels: 51.4%.** The protocol is not inventing the result.
+
+**Verdict: build [2] and [3].** With the caveat that 72.3% is not 95%: a good part of what
+makes a mode is still not in the note skeleton, and that part is the bent and shaken tones the
+variance model owns. The note generator is necessary, not sufficient.
+
+---
+
+## 3. The models
 
 Two stages, because rhythm is decided by the lyrics (how many syllables, where the phrase
 breaks) and pitch by the mode. Different conditioning, so they are learned apart — the split
@@ -239,11 +330,23 @@ that — not the individual — is the axis worth conditioning on.
 
 ---
 
-## 3. Order of work
+## 4. Order of work
 
-1. **S3, tonic estimation.** Duration-weighted pitch-class histogram per piece and mode span;
-   fit the rotation and the per-mode profile together across pieces. No training.
-2. **Read the profiles.** Do ujo and gyemyeonjo separate once every piece is on a common
-   tonic? Does the fitted profile resemble the skeletal tones the musicology describes?
-3. Only then S4 and the two models. If the profiles do not separate, the finding is that mode
-   lives in the f0 deviation, and the work moves to variance.
+1. ~~**S3, tonic estimation.**~~ Done — §2. The gate opened at 72.3%.
+2. **S4, tokenisation.** Degrees against `tonic.json`, 32 quantile duration bins,
+   `CONT`/`NEXT`. A lookup over `melody_data.jsonl` at load time, not a stored file.
+3. **[2] rhythm, then [3] pitch.** Rhythm first: it is conditioned only on the lyrics, so it
+   can be judged on its own before the mode conditioning is in the way.
+4. **Decoding rewards for [3].** The S3 profile gives scale adherence directly; the cadence
+   and contour terms need the phrase-final and interval statistics measured per mode first.
+
+Two things S3 left on the table, neither blocking:
+
+- **The tonic is quantised to a semitone, and pansori is not.** A piece whose tonic sits
+  between two semitones will split its own histogram across both, which is the most likely
+  reason the profiles are as smeared as they are. Estimating a continuous tonic from the f0
+  track rather than from ROSVOT's rounded notes would sharpen every number in §2.
+- **Within a piece, the two modes agree on a tonic only 42.7% of the time** (82 pieces carry
+  over 60 s of both). The next most common offset is one semitone, which looks like the same
+  quantisation jitter rather than a real modal shift. Worth resolving before the tonic is used
+  as a conditioning input rather than just as a rotation.
