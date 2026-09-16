@@ -145,6 +145,23 @@ one costs 2 minutes for 04 (`--skip_align`) → 06 → 07, plus 20 minutes for t
     (README §8). There is no longer any need to put energy-based detection into 06 directly.
     What remains is to actually run it and measure
 
+### F. The lyrics question, as it stands
+14. **03c is measured and it is a draw.** `LYRICS_AB.md` §7: 60 held-out pairs x 3 seeds,
+    `pansori_ac_sofa` (28k) against `pansori_ac_hyb2` (32k), and none of nine sign tests
+    reaches p < 0.05. 03b actively hurt; 03c does not, and does not help either. What is
+    left is the ear — `pansori/examples/listening_test.html` (8.2 MB, 40 items) is built
+    and **no listening judgement is recorded yet**. Nothing else is worth measuring on
+    this question until someone listens
+15. **`data/pansori_snap` and its two runs are now superseded.** 03b is a closed question
+    twice over (`LYRICBOOK_VERDICT.md`, `LYRICS_AB.md` §5). The corpus, the binaries and
+    `checkpoints/pansori_{ac,var}_snap` are candidates for deletion alongside item 12 —
+    `checkpoints/best/pansori_{ac,var}_snap_step*.ckpt` would be the only thing worth
+    keeping, and only to reproduce §5
+16. **`phones_sofa2.jsonl` is a cell of the grid nothing uses** — Whisper's lyrics aligned
+    by the hybrid-bootstrapped SOFA. It exists because both arms of round 2 were aligned
+    with the same checkpoint (`LYRICS_AB.md` §7.4). Keep it or drop it, but do not mistake
+    it for the whisper arm: that is `phones_sofa.jsonl`
+
 ## Things to watch
 
 - **No `git merge` / `git remote add`.** The two repositories share no common ancestor
