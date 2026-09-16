@@ -12,7 +12,7 @@ the shape it has. Sections 5 onward are the runbook.
 | Base model | [openvpi/DiffSinger](https://github.com/openvpi/DiffSinger) — acoustic + variance, reflow sampler, 44.1 kHz |
 | Corpus | 394 pansori recordings → **26,955 utterances / 28.9 h**, 23 speakers |
 | Language pipeline | Whisper transcription → forced alignment → Coda-34 phoneme set |
-| Branch | `feat/pansori` |
+| Branch | `main` |
 
 ---
 

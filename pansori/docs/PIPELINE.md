@@ -9,7 +9,7 @@ way · the measured numbers · the cost of re-running it**.
   [`TRAINING.md`](TRAINING.md); the basis for the 6-second constraint is in
   [`SEGMENTATION_VERDICT.md`](SEGMENTATION_VERDICT.md); what is left to do is in
   [`NEXT.md`](NEXT.md).
-- Branch `feat/pansori`. **Not one line of an upstream file has been changed.**
+- Branch `main`. **Not one line of an upstream file has been changed.**
 
 ```
 394 source recordings (28 GB)

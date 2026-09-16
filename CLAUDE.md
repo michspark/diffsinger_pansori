@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Pansori (판소리) fine-tuning of openvpi/DiffSinger. Branch `feat/pansori`.
+Pansori (판소리) fine-tuning of openvpi/DiffSinger. Branch `main`.
 
 This file is a map and a set of rules, not an explanation. The explanations already
 exist and are current — **read the relevant doc before acting on its subject.**

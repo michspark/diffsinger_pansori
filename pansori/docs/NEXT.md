@@ -1,6 +1,6 @@
 # Remaining work — paste this file into the next session to pick up where this left off
 
-Branch `feat/pansori`. The history is in `pansori/docs/PORTING.md`; the runbook is
+Branch `main`. The history is in `pansori/docs/PORTING.md`; the runbook is
 `pansori/README.md`.
 
 ## Done

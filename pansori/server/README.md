@@ -21,7 +21,7 @@ Logs go to `logs/`. The env name comes from `ENV_NAME` (default `dsp`), the GPU 
 The repository moves by git; the data is gitignored, so copy it separately.
 
 ```sh
-git clone <this repository> DiffSinger && cd DiffSinger && git checkout feat/pansori
+git clone <this repository> DiffSinger && cd DiffSinger
 rsync -av --info=progress2 ~/Desktop/DiffSinger/data/pansori/ server:~/DiffSinger/data/pansori/
 ```
 
