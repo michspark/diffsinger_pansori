@@ -26,6 +26,7 @@ import os
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
@@ -99,6 +100,19 @@ class Aligner:
     def parse(self, tg_path: Path) -> dict:
         raise NotImplementedError
 
+    # -- 4. provenance -----------------------------------------------------
+
+    def provenance(self) -> dict:
+        """What produced this alignment, for phones{suffix}.meta.json.
+
+        align.yaml records the *current* settings; an alignment on disk records
+        none. Two rounds of SOFA over this corpus differ only by which checkpoint
+        ran, and once align.yaml was edited back there was nothing left to say
+        which -- it took a bit-level comparison of 20,388 control utterances to
+        recover it. This is that answer, written down at the time.
+        """
+        return {"aligner": self.name, "min_hangul": self.min_hangul}
+
 
 class MfaAligner(Aligner):
     """korean_mfa + IPA->Coda conversion. The path this pipeline used from the start."""
@@ -149,6 +163,11 @@ class MfaAligner(Aligner):
                 phones.append([tok, start + k * step, start + (k + 1) * step])
 
         return {"phones": phones, "words": _words_tier(words)}
+
+
+    def provenance(self) -> dict:
+        return {**super().provenance(),
+                "acoustic_model": self.acoustic, "dictionary": self.dictionary}
 
 
 class SofaAligner(Aligner):
@@ -271,6 +290,22 @@ class SofaAligner(Aligner):
             self._add_breath(corpus, produced, aligned)
         else:
             self._collect(produced, aligned)
+
+    def provenance(self) -> dict:
+        """The checkpoint is the whole answer, so identify the file, not just its path:
+        two runs can name the same path and mean different weights."""
+        ckpt = self.ckpt.expanduser()
+        stat = ckpt.stat() if ckpt.exists() else None
+        return {**super().provenance(),
+                "ckpt": str(ckpt),
+                "ckpt_bytes": stat.st_size if stat else None,
+                "ckpt_mtime": (datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds")
+                               if stat else None),
+                "dictionary": str(self.dictionary),
+                "lab_unit": self.lab_unit,
+                "mode": self.mode,
+                "ap_detector": self.ap_detector,
+                "breath_ap": bool(self.breath.get("enabled"))}
 
     def _collect(self, produced: Path, aligned: Path) -> None:
         if aligned.exists():

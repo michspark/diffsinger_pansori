@@ -171,13 +171,20 @@ up in time**.
 | | |
 |---|---|
 | In | `segments.jsonl` + `lyrics.jsonl` + `wavs/*.wav` |
-| Out | `data/full/phones.jsonl` (`phones`, **`words`**) + `mfa_corpus/`, `aligned/` |
+| Out | `data/full/phones.jsonl` (`phones`, **`words`**) + `phones.meta.json` + `mfa_corpus/`, `aligned/` |
 | env | `aligner` |
 
 1. Lay out wav symlinks and `.lab` files (normalised text) in `mfa_corpus/`. Anything under
    2 Hangul characters is excluded.
 2. `mfa align {corpus} korean_mfa korean_mfa {aligned} --clean --output_format long_textgrid`
 3. Parse the TextGrid and convert **108 IPA symbols → the 34 jamo-based Coda phonemes**.
+4. Write `phones{suffix}.meta.json` beside the jsonl: which aligner, which lyrics file, and
+   for SOFA the checkpoint with its size and mtime. `align.yaml` records the settings in
+   force *now*, and an alignment sitting on disk records none — so a checkpoint swapped in
+   for one run and swapped back leaves nothing to say which weights produced the labels.
+   Recovering that for `phones_sofa2.jsonl` after the fact took a bit-level comparison of
+   20,388 control utterances (`docs/LYRICS_AB.md` §7). Pass `--sofa-ckpt` instead of editing
+   `align.yaml`, and the answer is written down at the time.
 
 `pansori_lib.convert_phone` does the conversion, with two kinds of contextual rule attached —
 whether a consonant is an onset or a coda, and whether to keep or drop the glide (`y`/`w`).

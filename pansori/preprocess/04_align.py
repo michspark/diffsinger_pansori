@@ -21,6 +21,7 @@ Input : data/{set}/segments.jsonl + lyrics.jsonl + wavs/*.wav
          two lyric sources -- or two aligners -- can be compared)
 Output: data/{set}/phones.jsonl   {item_name, phones:[[coda,start,end],...],
                                    words:[[word,start,end],...]}
+        data/{set}/phones.meta.json  which aligner, and under which settings
         (+ data/{set}/{mfa,sofa}_corpus/, data/{set}/aligned/ as intermediates)
 
 Run in the `aligner` env (praatio; the mfa CLI for the MFA arm). SOFA shells
@@ -28,6 +29,8 @@ out to its own conda env, so this env does not need torch.
 """
 
 import argparse
+import json
+from datetime import datetime
 from pathlib import Path
 
 from aligners import get_aligner
@@ -74,8 +77,14 @@ def main() -> None:
                         help="tag corpus/aligned/phones so runs can coexist")
     parser.add_argument("--items", default="",
                         help="file of item_names to align, one per line")
+    parser.add_argument("--sofa-ckpt", default="",
+                        help="SOFA checkpoint for this run, overriding align.yaml's "
+                             "sofa.ckpt. Use it rather than editing align.yaml: an edit "
+                             "that is reverted afterwards leaves the alignment unattributable")
     args = parser.parse_args()
 
+    if args.sofa_ckpt:
+        config.setdefault("sofa", {})["ckpt"] = args.sofa_ckpt
     aligner = get_aligner(args.aligner or config["aligner"], config)
     out_dir = set_dir(args.set)
     segments = read_jsonl(out_dir / "segments.jsonl")
@@ -97,10 +106,22 @@ def main() -> None:
         rows.append({"item_name": tg_path.stem, **aligner.parse(tg_path)})
 
     write_jsonl(out_dir / f"phones{args.suffix}.jsonl", rows)
+
+    meta = {"phones": f"phones{args.suffix}.jsonl",
+            "written": datetime.now().isoformat(timespec="seconds"),
+            "set": args.set, "lyrics": args.lyrics, "suffix": args.suffix,
+            "items": len(rows), "reparsed_only": args.skip_align,
+            **aligner.provenance()}
+    meta_path = out_dir / f"phones{args.suffix}.meta.json"
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n",
+                         encoding="utf-8")
+
     aligned_n = len(rows)
     oov = sorted({p[0] for r in rows for p in r["phones"] if p[0].startswith("<OOV")})
     breath = sum(1 for r in rows for p in r["phones"] if p[0] == "AP")
     print(f"aligned {aligned_n}/{len(segments)} -> phones{args.suffix}.jsonl")
+    print(f"provenance -> {meta_path.name}: "
+          + " ".join(f"{k}={v}" for k, v in aligner.provenance().items()))
     if breath:
         print(f"breaths (AP): {breath:,}")
     if oov:
