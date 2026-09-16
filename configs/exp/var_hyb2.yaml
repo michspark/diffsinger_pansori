@@ -1,0 +1,16 @@
+# variance · hybrid lyrics (03c) aligned by the SOFA fitted to them — the treatment arm of
+# the lyrics A/B.
+#
+# Matched to var_sofa in every run condition; ac_hyb2.yaml states what distinguishes the arm
+# and what the pairing guarantees.
+#
+# The heads bottom out at different steps (var_v1: dur 16,000 · pitch 32,000), so choose the
+# checkpoint per head with examples/best_ckpt.py and never on total_loss.
+
+base_config:
+  - configs/pansori/variance.yaml
+  - configs/pansori/data_hyb2.yaml
+
+binary_data_dir: data/pansori_hyb2/binary_variance
+max_updates: 40000
+num_ckpt_keep: 12
