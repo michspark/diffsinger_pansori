@@ -211,14 +211,20 @@ Separately, 765 aligned utterances have no note slice at all and never enter the
 
 ---
 
-## 2. Tonic estimation — the gate, and its answer
+## 2. Tonic estimation — what degrees are measured from
 
 `melody/tonic.py`. Trains nothing: a duration-weighted pitch-class histogram per (piece, mode)
-span, each rotated onto its own estimated tonic, then the two modes compared.
+span, each rotated onto its own estimated tonic.
+
+It exists for S4. `A#4` means nothing on its own — the same scale degree wears a different
+pitch name in every recording, so a model trained on names learns the recordings. It doubles
+as the gate of §0, because once every piece is on a common tonic the modes can finally be
+compared.
 
 ```sh
-python pansori/melody/tonic.py --set full          # -> data/full/tonic.json, docs/img/
-python pansori/melody/tonic.py --set full --sweep  # score every partner interval
+python pansori/melody/tonic.py --set full              # -> tonic.json, docs/img/
+python pansori/melody/tonic.py --set full --sweep      # score every partner interval
+python pansori/melody/tonic.py --set full --stability  # split-half reliability
 ```
 
 Weighted by **how long** each pitch class sounds, not how often it is struck, because a tonic
@@ -296,6 +302,47 @@ The three controls are what make it readable:
 makes a mode is still not in the note skeleton, and that part is the bent and shaken tones the
 variance model owns. The note generator is necessary, not sufficient.
 
+### Which tonic each utterance gets
+
+S4 needs a tonic for *every* utterance, and only 470 of the 762 spans clear 60 s. So the
+estimate falls back, and `tonic.json` records which level each came from — a corpus-level
+tonic is a guess and whatever consumes it should be able to say so.
+
+| level | | over the 14,413 bindable utterances |
+|---|---|---|
+| `span` | the utterance's own (piece, mode) | **92.1%** |
+| `piece` | the piece with its modes pooled | 7.3% |
+| `corpus` | the whole corpus | 0.6% |
+
+**Per (piece, mode) rather than per piece**, even though pooling is the steadier estimate,
+because the mode-specific tonic carries mode information that pooling throws away: rotating by
+the pooled tonic drops the probe from 72.3% to **67.8%**. The 4.5 points are the price of the
+steadier number, and they are the very thing being conditioned on.
+
+### How reliable the estimate is
+
+Split the utterances of a span into two halves, estimate from each, and ask whether the two
+agree (`--stability`). Nothing else can validate this estimate, so this is the check that
+matters.
+
+| scope | agreement | units |
+|---|---|---|
+| per (piece, mode) | **51.0%** | 732, median 91 s |
+| per piece | **62.1%** | 385, median 217 s |
+
+**This is not good**, and it is the weakest number in this document. Each half sees half the
+material, so the full-span estimate is better than 51% — Spearman-Brown puts it near 68% — but
+a tonic that changes when you look at a different half of the same span is not a firm frame to
+measure degrees against.
+
+It also explains §4's observation that a piece's two modes agree on a tonic only 42.7% of the
+time, with one semitone the commonest disagreement: most of that is this noise rather than a
+real modal shift. The likely cause is the same rounding — ROSVOT quantises to semitones and
+pansori does not sit on them, so a piece whose tonic falls between two semitones splits its own
+histogram across both. **Estimating a continuous tonic from the f0 track would address the
+reliability, the cross-mode disagreement and the smeared profiles at once**, and is the single
+highest-value follow-up here.
+
 ---
 
 ## 3. The models
@@ -340,13 +387,16 @@ that — not the individual — is the axis worth conditioning on.
 4. **Decoding rewards for [3].** The S3 profile gives scale adherence directly; the cadence
    and contour terms need the phrase-final and interval statistics measured per mode first.
 
-Two things S3 left on the table, neither blocking:
+What S3 left on the table, none of it blocking S4:
 
-- **The tonic is quantised to a semitone, and pansori is not.** A piece whose tonic sits
-  between two semitones will split its own histogram across both, which is the most likely
-  reason the profiles are as smeared as they are. Estimating a continuous tonic from the f0
-  track rather than from ROSVOT's rounded notes would sharpen every number in §2.
+- **A continuous tonic from the f0 track**, rather than from ROSVOT's semitone-rounded notes.
+  Pansori does not sit on semitones, so a piece whose tonic falls between two splits its own
+  histogram across both. This is the likely cause of all three of: 51.0% split-half agreement
+  (§2), the 42.7% cross-mode disagreement below, and the smeared profiles. One fix, three
+  numbers — the highest-value follow-up here.
 - **Within a piece, the two modes agree on a tonic only 42.7% of the time** (82 pieces carry
-  over 60 s of both). The next most common offset is one semitone, which looks like the same
-  quantisation jitter rather than a real modal shift. Worth resolving before the tonic is used
-  as a conditioning input rather than just as a rotation.
+  over 60 s of both). One semitone is the commonest offset, which given the split-half number
+  looks mostly like the same jitter rather than a real modal shift. Worth resolving before the
+  tonic is fed to a model as a conditioning input rather than only used as a rotation.
+- **The 0.6% of utterances on a corpus-level tonic** are a guess and are labelled as one in
+  `tonic.json`. If they prove harmful, dropping them costs 88 utterances.
