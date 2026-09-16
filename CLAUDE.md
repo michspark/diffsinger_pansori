@@ -17,6 +17,7 @@ exist and are current — **read the relevant doc before acting on its subject.*
 | What is in flight? | `pansori/docs/NEXT.md` |
 | How did this get ported from MoonInTheRiver? | `pansori/docs/PORTING.md` |
 | Old vs new model, quantitatively | `pansori/compare/README.md` |
+| Where does the score itself come from? | `pansori/docs/MELODY.md` |
 
 **Settled questions — read the verdict before re-proposing the idea:**
 `pansori/docs/LYRICBOOK_VERDICT.md` (snapping lyrics to the 창본 makes alignment *worse*;
