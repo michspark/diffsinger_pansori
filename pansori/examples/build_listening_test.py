@@ -87,7 +87,7 @@ def main() -> None:
     parser.add_argument('--n', type=int, default=40,
                         help='number of items. Fills with lyrics-changed first, then the control')
     parser.add_argument('--out', default=str(OUT_HTML))
-    parser.add_argument('--arms', nargs=2, default=['whisper', 'snapped'],
+    parser.add_argument('--arms', nargs=2, default=['sofa', 'hybrid'],
                         help='the two ab_ladder arms, baseline first')
     parser.add_argument('--lyrics', default='lyrics_snapped.jsonl',
                         help='the treatment arm\'s lyrics file, for the text question')

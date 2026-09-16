@@ -2,9 +2,10 @@
 """Paired A/B over many held-out utterances — does the treatment change the model?
 
 The two arms are chosen with --arms. It was built for the lyrics A/B (whisper vs
-snapped), but it is the same ruler for the aligner A/B (whisper vs sofa) -- whether
-what changed is the .lab or the aligner, the remaining question is the same one:
-"does the model trained on those labels sound closer to the original?"
+snapped) and serves the aligner A/B (whisper vs sofa) and the current lyrics A/B
+(sofa vs hybrid) unchanged -- whether what moved is the .lab, the aligner, or both
+at once, the remaining question is the same one: "does the model trained on those
+labels sound closer to the original?"
 
 `run_examples.sh` renders three utterances, and three is not enough here. Measured
 seed spread on a single clip is ±3-12% on mel L1 and ±13-28% on f0 RMSE
@@ -22,9 +23,8 @@ Three processes, not one, because `utils.hparams.set_hparams` writes a module-le
 global that every model constructor reads — the two arms have different configs and
 cannot coexist in one interpreter.
 
-    PYTHONPATH=. python pansori/examples/ab_ladder.py --n 30 --seeds 3
-    PYTHONPATH=. python pansori/examples/ab_ladder.py --arms whisper sofa \
-        --ckpt sofa=32000 --n 24 --seeds 3
+    PYTHONPATH=. python pansori/examples/ab_ladder.py --arms sofa hybrid \
+        --ckpt sofa=N --ckpt hybrid=N --n 60 --seeds 3
 
 Outputs `pansori/examples/ab_out/{arm}/` wavs and prints the paired table.
 """
@@ -34,6 +34,7 @@ import csv
 import json
 import os
 import random
+import re
 import statistics
 import subprocess
 import sys
@@ -45,32 +46,45 @@ sys.path.insert(0, str(REPO / 'pansori' / 'examples'))
 
 OUT_ROOT = REPO / 'pansori' / 'examples' / 'ab_out'
 
+# `lyrics` is the stage-03 file the arm's labels were made from. It is what separates
+# the treatment group from the control when the two arms do not share an aligner.
 ARMS = {
     'whisper': dict(config='configs/exp/ac_v1.yaml', data='data/pansori',
-                    ac_exp='pansori_ac_v1', ckpt=28000),
+                    ac_exp='pansori_ac_v1', ckpt=28000, lyrics='lyrics.jsonl'),
     'snapped': dict(config='configs/exp/ac_snap.yaml', data='data/pansori_snap',
-                    ac_exp='pansori_ac_snap', ckpt=36000),
+                    ac_exp='pansori_ac_snap', ckpt=36000, lyrics='lyrics_snapped.jsonl'),
     'sofa': dict(config='configs/exp/ac_sofa.yaml', data='data/pansori_sofa',
-                 ac_exp='pansori_ac_sofa', ckpt=None),   # supplied via --ckpt sofa=N
-    'hybrid': dict(config='configs/exp/ac_hyb.yaml', data='data/pansori_hyb',
-                   ac_exp='pansori_ac_hyb', ckpt=None),
+                 ac_exp='pansori_ac_sofa', ckpt=None,   # supplied via --ckpt sofa=N
+                 lyrics='lyrics.jsonl'),
+    'hybrid': dict(config='configs/exp/ac_hyb2.yaml', data='data/pansori_hyb2',
+                   ac_exp='pansori_ac_hyb2', ckpt=None, lyrics='lyrics_hybrid.jsonl'),
 }
 
 # Which two arms are compared. --arms changes it; it is passed to child processes as-is.
-PAIR = ['whisper', 'snapped']
+PAIR = ['sofa', 'hybrid']
 
-# What separates the control group. For the lyrics A/B the treatment group is
-# "utterances whose text changed", but for the aligner A/B every utterance's phoneme
-# sequence changes, so that criterion separates nothing. Instead the treatment group is
-# the utterances where MFA actually collapsed (the top half by floor rate) -- because
-# those utterances are precisely why the aligner was changed.
+# What separates the control group, and it is not one rule for every pair.
 #
-# sofa vs hybrid is a lyrics A/B too -- the aligner and its checkpoint are held fixed and
-# only the .lab text differs -- so the same criterion applies. It separates cleanly here:
-# 6,979 of the shared 26,955 utterances differ in ph_seq and 19,976 do not.
+#   ph_seq  whisper vs snapped. One aligner, one checkpoint, so a phone sequence moves
+#           only where the .lab text moved.
+#   text    sofa vs hybrid. Each arm is aligned by the SOFA fitted to its own lyrics, so
+#           the aligner's own judgement about silence shifts everywhere -- measured,
+#           22,305 of the shared 26,955 utterances differ in ph_seq (82.7%) although only
+#           7,274 (27.0%) differ in a single Hangul character. Splitting on ph_seq here
+#           would put utterances into the treatment group that no lyric edit ever touched.
+#           So the split is on the stage-03 text, leaving the control group as "same
+#           words, different aligner" -- which is exactly the aligner-only difference the
+#           treatment group has to beat. Hold-out: 245 changed, 764 identical.
+#   floor   whisper vs sofa, and any pair with no lyric contrast. Every phone sequence
+#           changes, so the treatment group is the utterances where MFA actually collapsed
+#           (the top half by floor rate) -- precisely why the aligner was changed.
+GROUP_BY = {
+    ('whisper', 'snapped'): 'ph_seq',
+    ('sofa', 'hybrid'): 'text',
+}
 GROUP_LABELS = {
     ('whisper', 'snapped'): ('lyrics changed', 'lyrics identical (control)'),
-    ('sofa', 'hybrid'): ('lyrics changed', 'lyrics identical (control)'),
+    ('sofa', 'hybrid'): ('lyrics changed', 'same lyrics, aligner only (control)'),
 }
 DEFAULT_LABELS = ('high MFA floor rate', 'low MFA floor rate (control)')
 
@@ -133,15 +147,37 @@ def _floor_rate(row):
     return sum(1 for d in phones if d <= MFA_FLOOR + EPS) / len(phones) if phones else 1.0
 
 
+HANGUL = re.compile(r'[\uac00-\ud7a3]')
+
+
+def lyric_text(arm):
+    """{item_name: its Hangul, nothing else} out of the arm's stage-03 lyrics file.
+
+    Hangul only, because 03c can respace or repunctuate a line it did not otherwise
+    touch, and a control group has to mean "the same words were sung", not "the same
+    bytes were written".
+    """
+    path = REPO / 'pansori' / 'data' / 'full' / ARMS[arm]['lyrics']
+    with open(path, encoding='utf-8') as f:
+        return {r['item_name']: ''.join(HANGUL.findall(r['text']))
+                for r in map(json.loads, f)}
+
+
 def pick_items(n, seed):
     a = corpus_rows(REPO / ARMS[PAIR[0]]['data'])
     b = corpus_rows(REPO / ARMS[PAIR[1]]['data'])
     prefixes = tuple(holdout_prefixes(REPO / ARMS[PAIR[0]]['config']))
     shared = sorted(set(a) & set(b))
     held = [i for i in shared if i.startswith(prefixes)]
-    if tuple(PAIR) in GROUP_LABELS:
-        # Only utterances whose text actually differs carry the treatment; the rest are
-        # a control group, and both are worth having in the table.
+    group_by = GROUP_BY.get(tuple(PAIR), 'floor')
+    if group_by == 'text':
+        # The aligner differs between these arms as well, so a phone sequence moves on
+        # utterances no lyric edit touched. Split on the words instead.
+        ta, tb = lyric_text(PAIR[0]), lyric_text(PAIR[1])
+        changed = [i for i in held if ta.get(i) != tb.get(i)]
+        same = [i for i in held if ta.get(i) == tb.get(i)]
+    elif group_by == 'ph_seq':
+        # One aligner across both arms, so a phone sequence moves only where the text did.
         changed = [i for i in held if a[i][1]['ph_seq'] != b[i][1]['ph_seq']]
         same = [i for i in held if a[i][1]['ph_seq'] == b[i][1]['ph_seq']]
     else:
@@ -149,6 +185,8 @@ def pick_items(n, seed):
         cut = statistics.median(rates.values()) if rates else 0.0
         changed = [i for i in held if rates[i] > cut]
         same = [i for i in held if rates[i] <= cut]
+    print(f'| items: {len(changed)} treatment, {len(same)} control '
+          f'(split on {group_by}, {len(held)} held-out)')
     rng = random.Random(seed)
     rng.shuffle(changed)
     rng.shuffle(same)
@@ -325,7 +363,7 @@ def main() -> None:
     parser.add_argument('--n', type=int, default=30, help='number of items (half are the control)')
     parser.add_argument('--seeds', type=int, default=3)
     parser.add_argument('--sample-seed', type=int, default=20260829)
-    parser.add_argument('--arms', nargs=2, default=['whisper', 'snapped'],
+    parser.add_argument('--arms', nargs=2, default=['sofa', 'hybrid'],
                         metavar=('A', 'B'), choices=list(ARMS),
                         help='the two arms to compare (e.g. --arms whisper sofa)')
     parser.add_argument('--ckpt', action='append', default=[], metavar='ARM=STEP',
