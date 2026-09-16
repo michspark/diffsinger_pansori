@@ -89,22 +89,29 @@ def main() -> None:
     parser.add_argument('--out', default=str(OUT_HTML))
     parser.add_argument('--arms', nargs=2, default=['sofa', 'hybrid'],
                         help='the two ab_ladder arms, baseline first')
-    parser.add_argument('--lyrics', default='lyrics_snapped.jsonl',
-                        help='the treatment arm\'s lyrics file, for the text question')
+    parser.add_argument('--lyrics', default='',
+                        help="the treatment arm's lyrics file, for the text question. "
+                             "Defaults to the one its ARMS entry names, so it cannot "
+                             "disagree with the labels the model was trained on")
     parser.add_argument('--labels', nargs=2, default=None,
                         help='what to call the two arms on the page (baseline first)')
     parser.add_argument('--title', default=None, help='page headline')
     parser.add_argument('--lede', default=None, help='page standfirst (HTML allowed)')
     args = parser.parse_args()
     arm_a, arm_b = args.arms
-    label_a, label_b = args.labels or ('Whisper', '창본')
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from ab_ladder import ARMS
+
+    lyrics_file = args.lyrics or ARMS[arm_b]['lyrics']
+    label_a, label_b = args.labels or ('Whisper', '음절수 보존 창본')
 
     scores = json.loads((AB_OUT / 'scores.json').read_text(encoding='utf-8'))
     changed_map = scores['changed']
     per_seed = scores['per_seed']
 
     lyrics = {}
-    for line in open(REPO / 'pansori/data/full' / args.lyrics, encoding='utf-8'):
+    for line in open(REPO / 'pansori/data/full' / lyrics_file, encoding='utf-8'):
         row = json.loads(line)
         if row['item_name'] in changed_map:
             lyrics[row['item_name']] = row
@@ -129,7 +136,7 @@ def main() -> None:
             speaker = spk_map[item]
             row = lyrics[item]
             audio = {'orig': encode(
-                REPO / 'data/pansori' / speaker / 'wavs' / f'{item}.wav', tmp)}
+                REPO / ARMS[arm_a]['data'] / speaker / 'wavs' / f'{item}.wav', tmp)}
             seeds, metrics = {}, {}
             for key, arm in (('a', arm_a), ('b', arm_b)):
                 draws = per_seed[arm][item]
