@@ -242,6 +242,58 @@ python pansori/examples/ab_ladder.py --arms sofa hybrid \
 python pansori/examples/build_listening_test.py --n 40
 ```
 
-### 7.6 Result
+### 7.6 Result (run of 2026-09-16)
 
-Not yet recorded.
+**Nothing separates the two arms.** 60 held-out pairs × 3 seeds at the `2_resynth` rung,
+acoustic checkpoints chosen per arm (`sofa` 28,000, `hybrid` 32,000), medians and a sign test:
+
+| group | metric | sofa | hybrid | hybrid wins | p |
+|---|---|---|---|---|---|
+| lyrics changed (30) | mel L1 | 0.914 | 0.921 | 10/30 | 0.099 |
+| | f0 RMSE ¢ | 39 | 51 | 14/30 | 0.856 |
+| | voiced agreement | 0.950 | 0.950 | 13/27 | 1.000 |
+| same lyrics, aligner only (30) | mel L1 | 1.060 | 1.101 | 17/30 | 0.585 |
+| | f0 RMSE ¢ | 37 | 35 | 16/30 | 0.856 |
+| | voiced agreement | 0.954 | 0.954 | 13/25 | 1.000 |
+| all (60) | mel L1 | 0.980 | 0.975 | 27/60 | 0.519 |
+| | f0 RMSE ¢ | 38 | 45 | 30/60 | 1.000 |
+| | voiced agreement | 0.952 | 0.951 | 26/52 | 1.000 |
+
+Not one test reaches p < 0.05. The nearest is mel L1 on the treatment group at **p = 0.099**,
+leaning to Whisper — and it should not be read as a near-miss: across three metrics and three
+groups that is one of nine tests, and the control group leans the *other* way on the same
+metric (17/30 to hybrid). A difference that flips sign between the group the treatment touched
+and the group it did not is noise.
+
+**This is a different outcome from §5, not a repeat of it.** 03b lost a metric outright
+(voiced agreement, 21–6 to whisper, p = 0.006, and 10–12 with p = 0.83 in its control). 03c
+loses nothing. Keeping Whisper's syllable count removed the harm that snapping to the changbon
+caused; it did not convert it into a gain.
+
+Two things this does **not** say. It does not say the hybrid text is wrong — 7.1 already
+established the aligner moves with the lyrics, so "no difference in synthesis" is a statement
+about the pipeline pair, not about the spelling. And it does not say the two arms are
+interchangeable at the level of the labels: the aligner alone changes ph_seq on 82.7% of
+utterances (§7.3), and the control group shows that difference costing nothing measurable
+either.
+
+Validation losses are **not** evidence here and are recorded only as each arm's own
+checkpoint selector: acoustic minimum 0.18113 @ 28k for `pansori_ac_sofa`, 0.17867 @ 32k for
+`pansori_ac_hyb2`. Each is computed against its own labels (§6), so the second being the
+smaller number means nothing.
+
+### 7.7 Listening
+
+The metrics are exhausted; what is left is the ear.
+
+```sh
+python pansori/examples/build_listening_test.py --n 40
+```
+
+`pansori/examples/listening_test.html` — 8.2 MB, 40 items (30 where the lyrics differ, 10
+control), each carrying the original recording, both candidate texts, and both models' renders
+of that utterance. Sides are swapped per item from the item name, so the order is stable across
+reloads and uncorrelated between the two questions. The summary table is recomputed from
+`ab_out/scores.json` at build time, so the page cannot disagree with the data above.
+
+No listening judgement is recorded yet.
