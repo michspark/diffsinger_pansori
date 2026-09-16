@@ -149,9 +149,10 @@ correction partially is closed.**
   "does not fit the acoustics" was taken at face value.
 - **No listening verification was done.** Nobody has checked by ear which of the before/after
   texts matches the actual singing. §2's "the corrections are right" means only "they agree
-  with the lyricbook". `pansori/eval/build_lyric_demo.py` renders the recording beside both
-  texts as one self-contained page — stratified over `match_score`, with a blind mode that
-  swaps the sides and hides the score — so this limit is now a run away from being closed.
+  with the lyricbook". A page that put the recording beside both texts was built and then
+  removed: judging a text against a recording answers "which spelling is right", and the
+  question that decides the corpus is "which labels train a better model". That one is
+  settled by ear on the synthesis, in `examples/build_listening_test.py` (`LYRICS_AB.md`).
 - The MFA floor rate is 34% even on the whisper side — higher than the 25.8% that
   SEGMENTATION_VERDICT.md measured under 6 seconds. In other words **neither one is a good
   alignment.** This compared two bad alignments.
@@ -264,7 +265,7 @@ actually made at that point is the sound the singer sang, not the changbon's spe
 
 ## 10. Follow-up — a third arm, not yet judged (2026-09-13)
 
-The span-length measurement behind `eval/build_lyric_demo.py` (§6) points at a mechanism
+The span-length measurement of §6 points at a mechanism
 the two verdicts above did not separate from the lyrics themselves: over the 11,174
 adopted rows the changbon span is a median 1.00× Whisper's syllable count, but p90 **2.00×**
 below `match_score` 0.55, and 41.5% of that band differs by three syllables or more. A
@@ -274,11 +275,11 @@ label with twice the syllables of the singing is wrong however correct its spell
 one for one and borrows changbon syllables only for stretches of equal length pinned by exact
 matches; the count never changes. On the full corpus it rewrites 7,364 of the 11,174 placed
 rows (65.9%) and 20,374 of their 91,955 syllables (22.2%); 2,646 rows come out identical to
-03b's. Whether this arm sounds right is what §6's page is for:
+03b's.
 
 ```sh
 python pansori/preprocess/03c_hybrid_lyrics.py --set full
-python pansori/eval/build_lyric_demo.py --lyrics lyrics_hybrid.jsonl --out pansori/eval/out/lyric_demo_hybrid.html
 ```
 
-No judgement is recorded here yet.
+Whether this arm is better is decided by training on it and listening to the synthesis, not
+by reading the text: `LYRICS_AB.md`. No judgement is recorded here yet.

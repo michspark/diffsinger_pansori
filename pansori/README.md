@@ -173,8 +173,7 @@ pansori/
 ├── eval/                 ★ Label and pronunciation rulers (§12)
 │   ├── label_report.py     Diagnoses ph_dur in the labels — the MFA-vs-SOFA verdict table
 │   ├── intelligibility.py  5-rung ladder × {Whisper CER, MFA re-alignment}
-│   ├── compare_lyrics_alignment.py   Paired MFA comparison of two lyric sources
-│   └── build_lyric_demo.py Whisper vs changbon + the audio, as one blind-capable page
+│   └── compare_lyrics_alignment.py   Paired MFA comparison of two lyric sources
 ├── metrics/              Per-phone-class duration metrics (torchmetrics)
 ├── compare/              Quantitative comparison against the previous model
 ├── lyricbook/            changbon → corpus.jsonl (regenerate with build_corpus.py)
