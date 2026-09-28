@@ -1,0 +1,440 @@
+%\documentclass[wcp,gray]{jmlr} % test grayscale version
+\documentclass[wcp]{jmlr}
+
+% Loaded automatically: amsmath, amssymb, natbib, graphicx, url, algorithm2e
+\usepackage{booktabs}
+\usepackage{pifont}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta}
+
+% Do not comment the following commands:
+\pagenumbering{gobble}
+\newcommand{\cs}[1]{\texttt{\char`\\#1}}
+\makeatletter
+\let\Ginclude@graphics\@org@Ginclude@graphics
+\makeatother
+
+% Decision-log tags, used in Fig. 1 and Table 1.
+\newcommand{\tagR}{\textsc{reused}}
+\newcommand{\tagA}{\textsc{adapted}}
+\newcommand{\tagN}{\textsc{new}}
+\newcommand{\tagX}{\textsc{rejected}}
+% Draft-only notes. Delete before submission.
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+
+\jmlryear{2026}
+\jmlrworkshop{ACML 2026 Workshop: AMIW}
+
+\title[Reusing an SVS Pipeline for Pansori]{Reuse Before You Rebuild: Adapting a
+Singing-Voice Synthesis Pipeline to Pansori, with a Human-in-the-Loop Composition Prototype}
+
+\author{\Name{Anonymous Author} \Email{}\\ \addr Anonymous Institution}
+
+\editors{Andy Song, Bo Han and Sarah Erfani}
+
+\begin{document}
+
+\makeatletter
+\let \@jmlrpages \@empty
+\makeatother
+
+\maketitle
+
+% NOTE: provisional -- rewrite last, once the body is final.
+\begin{abstract}
+Pansori, the Korean tradition of solo narrative singing, is heavily ornamented, sung over
+sustained tones that last several seconds, and survives as recordings without lyric text or
+rhythm annotation. We do not design a new model. Instead we ask how far an existing
+singing-voice synthesis (SVS) stack can be carried, and record each adaptation as a decision
+backed by a measurement. On 28.9\,h from 23 singers, the resulting system reproduces
+pansori's within-note pitch movement: against a prior model, the ratio of synthesized to
+recorded within-note variation rises from 0.29 to 0.92 (Holm $p{=}0.0005$). It does not
+reproduce \emph{where} that movement happens (correlation 0.04 for both models). Several
+plausible fixes were measured and rejected: snapping transcripts to published libretti, a
+sinusoidal vibrato model, and scale quantization. On top of the model we build a composition
+prototype, which retrieves a melodic skeleton for a requested mode, lets the user re-bind
+syllables to notes, and renders a line in 11.8\,s.
+\end{abstract}
+\begin{keywords}
+singing voice synthesis; pansori; Korean traditional music; low-resource music; human-AI
+co-creation
+\end{keywords}
+
+%==============================================================================
+\section{Introduction}
+%==============================================================================
+In \emph{pansori}, a single singer (\emph{sorikkun}) and a drummer perform a story that can
+run for hours. Sung passages alternate with spoken narration. The voice is deliberately
+rough, and its long sustained tones carry \emph{sigimsae}: bends, shakes and slides that can
+travel a semitone or more around the nominal note. Melodies are organized by mode
+(\emph{akjo}: \emph{gyemyeonjo}, \emph{ujo}, \emph{pyeongjo}, \ldots) and by rhythmic cycle
+(\emph{jangdan}).
+
+Modern SVS systems \citep{liu2022diffsinger,openvpi} assume inputs that pansori does not
+provide. Three gaps drive every design decision below.
+\begin{itemize}
+  \item \textbf{No lyrics.} The recordings come with section labels and automatically
+    transcribed notes, but no text.
+  \item \textbf{Speech aligners meet sustained tones.} A forced aligner trained on speech
+    cannot handle a four-second vowel. On our corpus, 22.3\% of all phones came out exactly
+    at the aligner's minimum duration.
+  \item \textbf{No music-theoretic scaffolding.} There is no machine-readable scale per
+    mode. The whole corpus has 47\,s of hand-corrected beats.
+\end{itemize}
+
+We take a \emph{reuse-first} position: every stage of an existing open SVS pipeline is kept
+unless a measurement on this corpus says otherwise. Each stage is tagged \tagR, \tagA,
+\tagN\ or \tagX\ (Fig.~\ref{fig:pipeline}, Table~\ref{tab:decisions}). We contribute:
+\begin{itemize}
+  \item a pansori SVS framework adapted from openvpi DiffSinger, documented as a decision
+    log in which each decision is paired with the measurement that settled it;
+  \item measured findings, negative ones included, that should transfer to other
+    traditional or low-resource singing styles;
+  \item a human-in-the-loop composition prototype that works without a melody model. It
+    retrieves melodic skeletons and lets the user edit how syllables attach to notes.
+\end{itemize}
+
+%==============================================================================
+\section{Related Work}
+%==============================================================================
+% NOTE: bullet-level on purpose -- the author knows the framing best.
+\todo{Turn into prose, $\sim$0.3 page.}
+\begin{itemize}
+  \item \textbf{Diffusion/flow SVS.} DiffSinger \citep{liu2022diffsinger}; the openvpi fork
+    \citep{openvpi}, which has separate variance and acoustic models and a rectified-flow
+    sampler \citep{liu2023flow}.
+  \item \textbf{Non-Western and low-resource singing.} GaMaDHaNi for Hindustani melodic
+    contours \citep{shikarpur2024gamadhani}. \todo{Chinese opera / Carnatic SVS; prior
+    computational pansori work.}
+  \item \textbf{Tools reused as-is.} HT-Demucs \citep{rouard2023htdemucs}, Whisper
+    \citep{radford2023whisper}, MFA \citep{mcauliffe2017mfa}, SOFA \citep{sofa}, ROSVOT
+    \citep{li2024rosvot}, RMVPE \citep{wei2023rmvpe}, NSF-HiFiGAN \citep{openvpivocoders}.
+\end{itemize}
+
+%==============================================================================
+\section{Framework}
+%==============================================================================
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  node distance=2.5mm and 2.5mm,
+  box/.style={draw, rounded corners=1.5pt, align=center, font=\scriptsize,
+              minimum height=9mm, text width=16mm, inner sep=1.5pt},
+  arr/.style={-{Stealth[length=1.6mm]}, thin}]
+  % row 1: audio -> text -> phones
+  \node[box] (sep) {demucs\\vocals\\[-1pt]\tiny\tagR};
+  \node[box, right=of sep] (seg) {01 segment\\$\le$6\,s\\[-1pt]\tiny\tagA};
+  \node[box, right=of seg] (spk) {02 speaker\\pooling\\[-1pt]\tiny\tagN};
+  \node[box, right=of spk] (asr) {03 Whisper\\lyrics\\[-1pt]\tiny\tagR};
+  \node[box, right=of asr] (aln) {04 SOFA\\fine-tuned\\[-1pt]\tiny\tagA};
+  \node[box, right=of aln] (ph)  {IPA$\to$\\Coda-34\\[-1pt]\tiny\tagN};
+  % row 2: labels -> model (right to left)
+  \node[box, below=of ph]  (mrg) {06 merge\\absorb silence\\[-1pt]\tiny\tagN};
+  \node[box, below=of aln] (nt)  {05 ROSVOT\\notes\\[-1pt]\tiny\tagR};
+  \node[box, left=of nt]   (val) {07 validate\\08 export\\[-1pt]\tiny\tagN};
+  \node[box, left=of val]  (f0)  {RMVPE f0\\55--750\,Hz\\[-1pt]\tiny\tagA};
+  \node[box, left=of f0]   (mdl) {variance +\\acoustic\\[-1pt]\tiny\tagR};
+  \node[box, left=of mdl]  (ck)  {per-head\\ckpt select\\[-1pt]\tiny\tagN};
+  \draw[arr] (sep)--(seg); \draw[arr] (seg)--(spk); \draw[arr] (spk)--(asr);
+  \draw[arr] (asr)--(aln); \draw[arr] (aln)--(ph);  \draw[arr] (ph)--(mrg);
+  \draw[arr] (nt)--(mrg);
+  \draw[arr] (mrg.south) -- ++(0,-2.5mm) -| (val.south);
+  \draw[arr] (val)--(f0);  \draw[arr] (f0)--(mdl);  \draw[arr] (mdl)--(ck);
+  % alternatives measured and rejected
+  \node[font=\tiny, above=0.5mm of asr, text=red!70!black] {libretto snap: \tagX};
+  \node[font=\tiny, below=0.5mm of mdl, text=red!70!black] {sine vibrato: \tagX};
+\end{tikzpicture}
+\caption{The pipeline, each stage tagged by how much of it we had to change. Numbers are
+stage indices in the code. Red labels are alternatives that were measured and rejected
+(Sec.~\ref{sec:lyrics}, Table~\ref{tab:decisions}).}
+\label{fig:pipeline}
+\end{figure}
+
+\subsection{Corpus}
+\begin{itemize}
+  \item \textbf{Source.} 394 commercial pansori recordings at 44.1\,kHz, with vocals
+    separated by HT-Demucs.
+  \item \textbf{Annotations.} Section labels mark each span as a mode (\emph{akjo}), speech
+    (\emph{aniri}) or other. Note MIDI was extracted automatically with ROSVOT, not
+    annotated by hand. There is no lyric text.
+  \item \textbf{Segmentation.} 31,529 utterances (33.5\,h) of 2--6\,s.
+  \item \textbf{After alignment.} 26,955 utterances, 28.93\,h: 27.8\,h training and
+    1.08\,h validation, held out by piece.
+  \item \textbf{Speakers.} Singers who could not be identified are pooled into one
+    \emph{unknown} speaker (21.3\% of the data). Otherwise they would form about 122
+    singleton speakers whose embeddings never train. That leaves 23 speakers.
+\end{itemize}
+
+\subsection{Lyrics without text}\label{sec:lyrics}
+Transcription uses Whisper-large-v3 in Korean \citep{radford2023whisper}. It is \tagR,
+with one adaptation: a sustained tone makes Whisper hallucinate long syllable repeats, so
+runs of three or more identical syllables are collapsed. The transcript is treated as a
+source of phones that line up in time, not as an edition of the text.
+
+The obvious improvement is to snap each transcript to the published libretto
+(\emph{changbon}). Selecting the right libretto was reliable (it matched the filename in
+every case), yet snapping made alignment \emph{worse}:
+\begin{itemize}
+  \item \textbf{Alignment.} On 182 clips, the share of phones at the aligner's floor rose
+    from 34.03\% to 38.54\%. 99 clips got worse and 65 improved.
+  \item \textbf{Downstream model.} We trained on both versions and compared 60 held-out
+    pairs over 3 seeds. On utterances whose lyrics had changed, the Whisper arm won
+    voiced/unvoiced agreement 21--6 (Holm $p{=}0.018$). On the 30 controls the split was
+    10--12 ($p{=}0.83$).
+\end{itemize}
+The snapped text is closer to the canonical words but further from what was sung.
+
+A hybrid keeps Whisper's syllable count and borrows only the libretto's spelling. It
+rewrote 22.2\% of syllables and removed the harm: none of nine sign tests reached
+$p{<}0.05$. It also brought no gain, so we record it as a draw. It is kept as an option, not
+adopted as an improvement.
+
+\subsection{Alignment}
+\textbf{Utterance length} (\tagA). We cap utterances at 6\,s.
+\begin{itemize}
+  \item \textbf{Probe.} In a 10-item probe with MFA \citep{mcauliffe2017mfa}, items of 6\,s
+    or less had a 25.8\% floor rate and no spurious silence of 1\,s or more. Longer items
+    had 39.9\% and 4.06\,s of such silence.
+  \item \textbf{Before the cap.} The earlier segmentation had a median of 7.06\,s.
+\end{itemize}
+
+\textbf{Aligner} (\tagA). Even at 6\,s or less, MFA leaves 26.4\% of exported phones at
+30\,ms or under, and 22.3\% exactly at its 0.03\,s floor. These are places where the aligner
+declined to place a boundary. Fine-tuning SOFA's multilingual singing checkpoint
+\citep{sofa}, with only its head re-initialized, brings the rate to 3.2\%.
+
+\textbf{Silence absorption} (\tagN). 52.2\% of corpus time (15.11\,h) is labelled silence
+by the aligner while a ROSVOT note covers it: a sustained tone, not a rest. Silence spans
+with at least 50\,ms of note coverage are absorbed into the preceding phone. That leaves
+0.74\,h as true rests.
+
+\subsection{Phoneme inventory}
+MFA's Korean model emits 108 IPA symbols, which we map onto the 34-phoneme Coda set.
+\begin{itemize}
+  \item \textbf{Mapping.} 62 symbols map directly and 46 need a contextual rule.
+  \item \textbf{Dictionary.} The same rules generate a syllable dictionary covering all
+    11,172 Hangul syllables.
+  \item \textbf{Scoring changes.} Each mapping change is scored by agreement with that
+    dictionary. Fixing three defects (a palatal glide, $\phi{\to}h$, $\lambda$) raised
+    single-syllable agreement from 87.92\% to 89.59\%.
+  \item \textbf{Remaining disagreement.} Most of it is regular liaison, which a context-free
+    dictionary cannot represent.
+\end{itemize}
+% NOTE: 34 phonemes. The model's token table has 36 (+ merged SP/AP + PAD) -- do not mix.
+
+\subsection{Model and training}
+We keep openvpi's two-model design unchanged (\tagR).
+\begin{itemize}
+  \item \textbf{Variance model} (25.1\,M parameters). Predicts phone durations and f0 from
+    phonemes and notes.
+  \item \textbf{Acoustic model} (69.1\,M parameters). Predicts a 128-bin mel spectrogram
+    from phonemes, durations, f0 and speaker. A pretrained NSF-HiFiGAN vocodes it.
+\end{itemize}
+Both are trained from scratch with rectified flow \citep{liu2023flow}. The f0 targets come
+from RMVPE \citep{wei2023rmvpe}.
+
+Two defaults had to change (\tagA).
+\begin{itemize}
+  \item \textbf{f0 range.} Widened to 55--750\,Hz. At the default floor, the low register of
+    male chest voice (\emph{tongseong}, down to MIDI 35) comes out unvoiced.
+  \item \textbf{\texttt{spec\_max}.} Set to the measured $+2.838$ instead of the default 0.
+    With the default, the diffusion target leaves $[-1,1]$ after normalization.
+\end{itemize}
+
+\textbf{Checkpoints are selected per head} (\tagN). The toolkit keeps the $N$ most
+\emph{recent} checkpoints, so the acoustic model's best step (28k of 100k) would have been
+deleted. The variance model's two heads also bottom out at different steps: duration at
+16k, pitch at 32k. Choosing the single step with the lowest total loss (20k) gives 25\% more
+f0 error. So at inference we run the variance model twice, once per head.
+
+\begin{table}[t]
+\centering\scriptsize
+\caption{Decision log. Each row is a place where reuse was questioned; measurements are on
+this corpus.}
+\label{tab:decisions}
+\begin{tabular}{@{}llp{0.55\linewidth}@{}}
+\toprule
+Decision & Tag & Evidence \\
+\midrule
+Whisper transcripts as lyrics & \tagR & libretto snap: floor 34.0$\to$38.5\%; V/UV loses 21--6 ($p_\text{Holm}{=}.018$) \\
+Hybrid libretto spelling & draw & 0/9 sign tests at $p{<}.05$ (60 pairs $\times$ 3 seeds) \\
+Utterances $\le$6\,s & \tagA & floor 25.8\% vs.\ 39.9\%; spurious $\ge$1\,s silence 0.00 vs.\ 4.06\,s \\
+SOFA instead of MFA & \tagA & phones $\le$30\,ms: 26.4\% $\to$ 3.2\% \\
+Absorb note-covered silence & \tagN & 52.2\% of time is ``silence'' under a note; 0.74\,h remains SP \\
+IPA$\to$Coda-34 mapping & \tagN & dictionary agreement 87.92$\to$89.59\% \\
+f0 range 55--750\,Hz & \tagA & lowest note MIDI 35 (61.7\,Hz) \\
+Per-head checkpoint & \tagN & choosing on total loss: +25\% f0 error \\
+Sine vibrato model & \tagX & fits another note's residual as well (0.829 vs.\ 0.782) \\
+Scale snapping (demo) & \tagX & no scale definition exists; ornaments look like off-scale notes \\
+\emph{Jangdan} grid (demo) & \tagX & 47\,s of hand-corrected beats; cycles of 9, 4, 4, 11 beats \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%==============================================================================
+\section{Composition Prototype}
+%==============================================================================
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.72\linewidth]{figs/demo.png}
+\caption{The composition prototype (UI in Korean). The six panels:
+\ding{172}~lyrics;
+\ding{173}~mode (\emph{gyemyeonjo}, \emph{ujo}, \emph{pyeongjo});
+\ding{174}~three retrieved skeletons with measured shape labels;
+\ding{175}~\emph{butimsae} editor, where syllable chips are dragged across notes and ``--''
+marks a melisma;
+\ding{176}~singer;
+\ding{177}~render, or redraw the ornamentation.}
+\label{fig:demo}
+\end{figure}
+
+A trained SVS model still needs a score, and pansori has no melody model yet. The prototype
+(Fig.~\ref{fig:demo}) fills the gap with retrieval and a human in the loop. It has six
+steps: lyrics, mode, skeleton, \emph{butimsae} (syllable--note binding), singer, render.
+The server first returns an editable \emph{plan}, and renders only the plan the user sends
+back.
+
+\textbf{Skeletons are retrieved, not generated} (\tagN).
+\begin{itemize}
+  \item \textbf{Source.} In the corpus, ROSVOT notes are already bound to syllables by
+    dynamic programming over the measured timings. We index the phrases that pass QC by mode:
+    10,309 \emph{gyemyeonjo}, 3,081 \emph{ujo} and 854 \emph{pyeongjo} skeletons, from 384
+    tracks, with a median of 6 syllables.
+  \item \textbf{Why mode is a sound key.} A linear probe separates \emph{ujo} from
+    \emph{gyemyeonjo} pitch-class profiles at 72.3\% balanced accuracy with whole singers
+    held out. On shuffled labels it gets 51.4\%.
+  \item \textbf{Fitting lyrics.} The user's lyrics are split at word boundaries, and each
+    chunk receives three candidate skeletons. The chosen skeleton is transposed into the
+    singer's range.
+  \item \textbf{Card labels.} Labels such as \emph{smooth}, \emph{leapy}, \emph{long
+    sustain} and \emph{dense sigimsae} are measured from the skeleton, with thresholds at
+    the index's tertiles.
+\end{itemize}
+% NOTE: the demo's README/build_index.py say "13,390"; the index actually holds 14,244
+%       (recounted from web/contours_index.json). Fix the demo docs, not this number.
+
+\textbf{What it deliberately does not do.}
+\begin{itemize}
+  \item \textbf{No scale snapping} (\tagX).
+    \begin{itemize}
+      \item No mode has a scale definition we could validate.
+      \item ROSVOT transcribes the shaking tone (\emph{tteoneunmok}) as chains of
+        semitone-neighbour notes, at the same rate in every mode: 1-semitone steps make up
+        25.4--27.7\% of steps in each mode.
+      \item Quantizing pitch would erase the very ornament that makes the output sound like
+        pansori.
+    \end{itemize}
+  \item \textbf{No \emph{jangdan} grid} (\tagX). There are only 47\,s of verified beats,
+    and even those cycles are irregular, so any grid would be invented, not measured.
+    Durations are edited in seconds instead.
+\end{itemize}
+
+\textbf{Seeds make edits audible.} The sampler is stochastic, so the two buttons divide the
+work.
+\begin{itemize}
+  \item \textbf{Render} keeps the seed. Re-rendering after an edit changes only what was
+    edited, and the same plan with the same seed gives a byte-identical file.
+  \item \textbf{Redraw sigimsae} changes only the seed.
+\end{itemize}
+A 4.8\,s line takes 11.8\,s on one RTX 4090: 0.9\,s to build the score, then 3.5\,s for
+duration, 3.5\,s for pitch and 3.9\,s for acoustics.
+% NOTE: the demo serves the SOFA + hybrid-lyrics checkpoints ("hyb2"); Table 2 is the
+%       MFA/Whisper v1 model. hyb2 vs sofa is a measured draw, so claim neither way.
+
+%==============================================================================
+\section{Evaluation}
+%==============================================================================
+We compare against a prior pansori model, a FastSpeech2-style cascade at 24\,kHz trained on
+CREPE f0.
+\begin{itemize}
+  \item \textbf{Items.} 19 held-out utterances with renders from both systems.
+  \item \textbf{Condition.} f0 is predicted from the score, with ground-truth durations.
+  \item \textbf{Draws.} The new model is a sampler, so each of its values is a 5-seed
+    median. The old model is a deterministic regression, so one render is its answer.
+  \item \textbf{Reference f0.} All f0 is measured with RMVPE on a common 10\,ms grid.
+  \item \textbf{Octave errors.} RMVPE's octave errors on male chest voice are folded in the
+    same way for every system.
+\end{itemize}
+A result is \emph{claimed} only if it clears three pre-registered conditions:
+\begin{enumerate}
+  \item it exceeds twice the seed-to-seed IQR;
+  \item its Holm-corrected Wilcoxon $p$ is below 0.05;
+  \item it exceeds the gap between vocoder resynthesis and the recording.
+\end{enumerate}
+
+\begin{table}[t]
+\centering\scriptsize
+\caption{Primary endpoints, old vs.\ new model (19 pairs). $\Delta$ is the median paired
+difference, oriented so that positive favours the new model, with a bootstrap 95\% CI. For
+the std ratio, 1.0 means the synthesis moves as much as the singer.}
+\label{tab:eval}
+\begin{tabular}{@{}lrrrrc@{}}
+\toprule
+Endpoint & Old & New & $\Delta$ [95\% CI] & $p_\text{Holm}$ & Claim \\
+\midrule
+Within-note f0 std ratio ($\to$1)  & 0.291 & \textbf{0.923} & 0.459 [0.415, 0.542] & \textbf{0.0005} & \checkmark \\
+Within-note f0 correlation with GT & 0.035 & 0.037 & $-$0.003 [$-$0.108, 0.081] & 0.587 & -- \\
+RPA-50                             & 0.285 & 0.242 & $-$0.040 [$-$0.088, 0.038] & 0.587 & -- \\
+Transition-direction agreement     & 0.60  & 0.50  & $-$0.083 [$-$0.222, 0.000] & 0.289 & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:eval} comes down to one sentence: \emph{the new model moves like pansori,
+but it does not move together with the original.}
+\begin{itemize}
+  \item \textbf{How much the pitch moves.} Within-note variation rises from 29\% to 92\% of
+    the singer's, clearing all three conditions (seed IQR 0.19). The exploratory
+    Wasserstein distance between within-note std distributions agrees, falling from 119.2 to
+    50.0 cents.
+  \item \textbf{Where it moves.} Correlation with the recorded contour stays at chance for
+    both systems.
+  \item \textbf{Pitch accuracy.} We claim no gain: neither RPA nor f0 RMSE (294 vs.\ 303
+    cents) separates the systems.
+  \item \textbf{Spectral distance.} Slightly worse for the new model: MCD 47.1 vs.\
+    50.2\,dB (uncorrected $p{=}0.055$).
+  \item \textbf{Representativeness.} On 196 further held-out utterances the std ratio has
+    median 0.986, not different from the paired set ($p{=}0.38$).
+\end{itemize}
+
+\textbf{Two failure modes we looked for and did not find.}
+\begin{itemize}
+  \item \textbf{Flattened f0.} This failure is often reported for pitch predictors. It did
+    not reproduce: in four of six predicted tracks, the 5-seed amplitude range includes 1.0.
+  \item \textbf{Periodic vibrato.} A sinusoidal vibrato model fitted a \emph{different}
+    note's residual as well as the note it was fitted to (median $R^2$ 0.829 vs.\ 0.782,
+    746 notes). Only 3.9\% of notes contain a clean periodic component. This is why we
+    evaluate distributions of movement rather than vibrato rate and extent.
+\end{itemize}
+% NOTE: vibrato numbers come from the pre-port repository; the script was not ported.
+
+%==============================================================================
+\section{Limitations and Future Work}
+%==============================================================================
+\textbf{Limitations.}
+\begin{itemize}
+  \item \textbf{Objective only.} A 40-item listening test is built but not yet run.
+  \item \textbf{Small comparison.} The paired comparison has 19 items, fixed by the prior
+    model's renders.
+  \item \textbf{Retrieved melody.} The prototype's melody is retrieved, not composed:
+    \begin{itemize}
+      \item the fit between lyric stress and melody is left to chance;
+      \item every chunk is transposed to the same centre, so phrase-level register is flat.
+    \end{itemize}
+  \item \textbf{No rhythm.} \emph{Jangdan} is not modelled.
+\end{itemize}
+
+\textbf{Next steps.}
+\begin{itemize}
+  \item a melody model conditioned on mode, trained on the skeleton index;
+  \item beat annotation, to make \emph{jangdan} measurable;
+  \item ornament modelling that is aware of placement, since the model now reproduces how
+    much the voice moves but not where.
+\end{itemize}
+Code, configurations and the demo will be released upon publication.
+
+%\acks{...}
+
+\bibliography{acml26}
+
+\end{document}
