@@ -102,6 +102,20 @@ def _index():
     return _INDEX
 
 
+def corpus_rows(data_dir):
+    """item name -> transcriptions.csv row, for any corpus laid out like data/pansori."""
+    root = Path(data_dir)
+    root = root if root.is_absolute() else C.REPO / root
+    rows = {}
+    for csv_path in sorted(root.glob('*/transcriptions.csv')):
+        with open(csv_path, encoding='utf-8') as f:
+            for row in csv.DictReader(f):
+                rows[row['name']] = row
+    if not rows:
+        raise FileNotFoundError(f'no transcriptions.csv under {root}')
+    return rows
+
+
 def lookup(item):
     try:
         return _index()[item]

@@ -10,6 +10,21 @@ cascade, 24 kHz) and this repository's `pansori_ac_v1` + `pansori_var_v1` (openv
 Within-note variation ratio 0.29 → 0.92 (Holm p = 0.0005, clearing both the seed-noise floor
 and the vocoder-ceiling gap); correlation with the original 0.035 → 0.037 (unchanged).
 
+**The same holds for `hyb2`, the checkpoints the composition demo serves** (SOFA alignment +
+hybrid lyrics; ac 32k, dur 28k, pitch 36k). Same 19 pairs × 5 seeds, same ruler, run
+2026-09-30 → `out/summary_hyb2.json`:
+
+| endpoint | old | hyb2 | Holm p | claim |
+|---|---|---|---|---|
+| within-note variation ratio | 0.291 | 0.945 | 0.0003 | ✓ (seed IQR 0.14, ceiling gap 0.04) |
+| within-note correlation with GT | 0.035 | 0.158 | 0.24 | — (Δ 0.106 < 2 × seed IQR 0.144) |
+| RPA-50 | 0.285 | 0.291 | 0.88 | — |
+| transition direction agreement | 0.600 | 0.625 | 0.88 | — |
+
+The correlation's median is higher than v1's (0.158 vs 0.037), but v1 and hyb2 were never
+compared with each other and neither clears the claim rule against the old model, so no
+statement about placement follows from it.
+
 ## Running it
 
 ```sh
@@ -33,6 +48,43 @@ python pansori/compare/stats.py     # picks up results_ext.jsonl automatically i
 
 **If `smoke.py` fails, every number after it is void.** In particular, if G1 (sample-rate
 invariance) breaks, a 24 kHz system and a 44.1 kHz system cannot go in the same table.
+
+### A second system, after the old repository left the disk
+
+`~/Desktop/DiffSinger_moonInRiver` is no longer on this machine (checked 2026-09-30), so
+the old ladder cannot be re-measured and `--items fair`, which reads it, fails. Its
+**rows** survive in `out/results.jsonl`, and that is enough: they depend only on the old
+wavs and the reference, and neither has changed. So a second new-side system is measured
+against the stored old rows:
+
+```sh
+R=pansori/compare/out/results.jsonl
+python pansori/compare/smoke.py --system hyb2 --items rows:$R
+python pansori/compare/render_new.py --system hyb2 --items rows:$R --seeds 5   # ~45 s
+python pansori/compare/collect.py --items rows:$R --old-rows $R \
+       --new-dir pansori/compare/out/new_hyb2 --out pansori/compare/out/results_hyb2.jsonl
+python pansori/compare/stats.py --results pansori/compare/out/results_hyb2.jsonl \
+       --json pansori/compare/out/summary_hyb2.json --extended /nonexistent
+```
+
+- `--system` picks an entry of `config.SYSTEMS` and renders into `out/new{tag}` /
+  `out/ds{tag}`; v1's `out/new`, `out/ds`, `results.jsonl` and `summary.json` are never
+  written. The `.ds` inputs are built from **the system's own labels**
+  (`data/pansori_hyb2`), the ones it was trained on.
+- `--items rows:FILE` is the set of items with old-model rows in FILE, i.e. the fair 19.
+- `--old-rows FILE` reuses the old-model and CREPE rows, but first recomputes the
+  reference's own rows and refuses to continue unless they equal FILE's
+  (`collect.assert_same_reference`). The GT rows pass through the extractor, the
+  staircase and the sigimsae code, so equality means the ruler has not moved. On the hyb2
+  run it held for all 19 items and 3,781 old-side rows were reused.
+- `smoke.py` reports G2/G3 (old note grid, old rung lengths) and G4 (exclusion count, read
+  off the old ladder) as **SKIP**, never PASS, when the old repository is absent. It adds
+  **G5**: the measured system's labels must carry `data/pansori`'s note grid, because the
+  staircase is built from `data/pansori`. For hyb2 all 19 items agree to < 1 ms; only the
+  phone sequences differ.
+- `--extended /nonexistent` keeps v1's 200-utterance extension out of hyb2's summary.
+- `8b4d0824_0056` has no `4_full` rung under hyb2 (note_slur recovery fails on its hyb2
+  labels). `4_full` is outside every primary endpoint.
 
 ## The five traps this code knows about
 
@@ -101,7 +153,7 @@ invariance) breaks, a 24 kHz system and a 44.1 kHz system cannot go in the same 
 | `stats.py` | Wilcoxon · bootstrap CI · Holm · seed floor · extension representativeness |
 | `plots.py` | Inline SVG (theme-aware) |
 | `report.py` | Self-contained HTML |
-| `smoke.py` | Gates G1–G5 + null controls |
+| `smoke.py` | Gates G1–G5 + null controls (G5: the measured system's note grid) |
 
 `render_new.py` loads the model once per process. Spawning `scripts/infer.py` per render
 takes ~2.6 hours for the same work, nearly all of it model loading — measured: 304 renders

@@ -8,6 +8,14 @@ change -- so it is measured rather than assumed.
 
 Usage (dsp env, from the repo root):
   PYTHONPATH=. python pansori/compare/smoke.py
+  PYTHONPATH=. python pansori/compare/smoke.py --system hyb2 \
+      --items rows:pansori/compare/out/results.jsonl
+
+G2 and G3 read the old repository's files. When that repository is not on disk
+they are reported as SKIP, never as PASS: they were settled against those files
+(2026-08-23, compare/README.md) and nothing on the new side can re-settle them.
+G5 is the new side's half of G2: the system being measured must carry the same
+note grid as data/pansori, or one staircase cannot measure it.
 """
 
 import json
@@ -27,6 +35,12 @@ from pansori.compare import pitch_metrics as P  # noqa: E402
 from pansori.compare import sigimsae as S  # noqa: E402
 
 FAILED = []
+SKIPPED = []
+
+
+def skip(name, reason):
+    print(f'  [SKIP] {name}: {reason}')
+    SKIPPED.append(name)
 
 
 def gate(name, ok, detail):
@@ -80,6 +94,9 @@ def g2_note_grid(fair):
     measuring two different things and calling them one.
     """
     print('\nG2 note-grid identity (against the old notes.jsonl)')
+    if not C.OLD_REPO.is_dir():
+        skip('G2 old note grid', f'{C.OLD_REPO} is not on disk')
+        return
     path = C.OLD_REPO / 'pansori' / 'data' / 'full' / 'notes.jsonl'
     if not path.exists():
         gate('old notes.jsonl exists', False, str(path))
@@ -124,6 +141,9 @@ def g3_rung_semantics(fair):
     the new `3_pitch` rung."""
     print('\nG3 rung semantics (did the old 5_pred_own use GT durations?)')
     d = C.OLD_LADDER[C.OLD_PRIMARY]
+    if not d.is_dir():
+        skip('G3 old rung semantics', f'{d} is not on disk')
+        return
     worst, worst_item = 0, None
     for item in fair:
         a = d / f'{item}__1_orig.wav'
@@ -144,6 +164,10 @@ def g3_rung_semantics(fair):
 
 def g4_exclusion(excluded):
     print('\nG4 training data excluded')
+    if excluded is None:
+        skip('G4 exclusion count', 'the excluded list is read off the old ladder; '
+             'collect.py still asserts every measured item is held out')
+        return
     ok = True
     for item in excluded:
         try:
@@ -153,6 +177,30 @@ def g4_exclusion(excluded):
             pass
     gate(f'all {len(excluded)} raise', ok and len(excluded) == 5,
          f'{len(excluded)} excluded: {", ".join(excluded)}')
+
+
+# ---------------------------------------------------------------- G5
+
+def g5_system_note_grid(fair, system):
+    """The measured system's labels carry data/pansori's note grid.
+
+    The staircase every sigimsae number is measured against is built from
+    data/pansori (items.DATA). A system trained on other labels can share it
+    only if those labels put the same notes at the same times.
+    """
+    labels = C.SYSTEMS[system]['labels']
+    print(f'\nG5 note-grid identity ({system}: {labels} vs data/pansori)')
+    ref, sys_rows = I.corpus_rows('data/pansori'), I.corpus_rows(labels)
+    bad = []
+    for item in fair:
+        if item not in sys_rows:
+            bad.append(f'{item}(not in {labels})')
+            continue
+        why = N.grid_mismatch(ref[item], sys_rows[item])
+        if why:
+            bad.append(f'{item}({why})')
+    gate(f'{len(fair) - len(bad)}/{len(fair)} items share the note grid', not bad,
+         'all agree to < 1 ms' if not bad else ', '.join(bad[:4]))
 
 
 # ---------------------------------------------------------------- null controls
@@ -215,14 +263,27 @@ def reference_preview(item):
 
 
 def main():
-    fair, excluded = I.paired_items()
+    import argparse
+    p = argparse.ArgumentParser(description='gates before any number is claimed')
+    p.add_argument('--items', default='fair',
+                   help='fair (reads the old ladder) | rows:RESULTS.jsonl')
+    p.add_argument('--system', default='v1', choices=sorted(C.SYSTEMS))
+    args = p.parse_args()
+
+    if args.items == 'fair':
+        fair, excluded = I.paired_items()
+    else:
+        from pansori.compare.render_new import resolve_items
+        fair, excluded = resolve_items(args.items), None
     item = fair[0]
-    print(f'smoke target: {item} ({I.speaker_of(item)}), {len(fair)} fair pairs')
+    print(f'smoke target: {item} ({I.speaker_of(item)}), {len(fair)} fair pairs, '
+          f'system {args.system}')
 
     g1_sr_invariance(item)
     g2_note_grid(fair)
     g3_rung_semantics(fair)
     g4_exclusion(excluded)
+    g5_system_note_grid(fair, args.system)
     null_controls(item)
     reference_preview(item)
 
@@ -230,6 +291,9 @@ def main():
     if FAILED:
         print(f'{len(FAILED)} failures: {", ".join(FAILED)}')
         sys.exit(1)
+    if SKIPPED:
+        print(f'no failures; {len(SKIPPED)} skipped: {", ".join(SKIPPED)}')
+        return
     print('all gates passed.')
 
 

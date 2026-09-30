@@ -17,6 +17,20 @@ silently stretched to fit.
 
 Usage (dsp env, from the repo root):
   PYTHONPATH=. python pansori/compare/collect.py
+
+  # a second system, with the old side's rows reused (its renders are gone)
+  PYTHONPATH=. python pansori/compare/collect.py \
+      --items rows:pansori/compare/out/results.jsonl \
+      --new-dir pansori/compare/out/new_hyb2 \
+      --old-rows pansori/compare/out/results.jsonl \
+      --out pansori/compare/out/results_hyb2.jsonl
+
+--old-rows takes the old model's rows (and the CREPE reference-swap rows) from an
+earlier results file instead of measuring the old ladder, which is no longer on
+disk. That is only sound if the ruler has not moved since those rows were
+written, so the reference's own rows are recomputed and must match the stored
+ones exactly; any drift in the reference, the note grid or the metric code
+shows up there and stops the run.
 """
 
 import argparse
@@ -37,6 +51,37 @@ from pansori.compare import spectral as SP  # noqa: E402
 
 RESULTS = C.OUT / 'results.jsonl'
 MAX_FRAME_GAP = 3
+REUSABLE = ('CREPE_vs_RMVPE',)   # plus every OLD_* system
+
+
+def _key(r):
+    return (r['system'], r['item'], r['rung'], r['seed'], r['metric'])
+
+
+def reusable_rows(rows):
+    """The rows that depend only on the old renders and the old CREPE contours."""
+    return [r for r in rows if r['system'].startswith('OLD_') or r['system'] in REUSABLE]
+
+
+def assert_same_reference(computed, stored):
+    """Recomputed GT rows must equal the stored GT rows for the same items.
+
+    GT's within-note statistics run through the reference extractor, the note
+    staircase and the sigimsae code -- the whole ruler. If they reproduce, the
+    stored old-side rows were measured with the ruler in use now.
+    """
+    items = {r['item'] for r in computed}
+    want = {_key(r): r['value'] for r in stored if r['system'] == 'GT' and r['item'] in items}
+    got = {_key(r): r['value'] for r in computed if r['system'] == 'GT'}
+    missing, extra = sorted(set(want) - set(got)), sorted(set(got) - set(want))
+    if missing or extra:
+        raise AssertionError(f'reference rows differ in shape: missing {missing[:3]}, '
+                             f'extra {extra[:3]}')
+    moved = [(k, want[k], got[k]) for k in want
+             if not np.isclose(want[k], got[k], rtol=1e-9, atol=1e-9)]
+    if moved:
+        raise AssertionError(f'{len(moved)} reference rows moved, e.g. {moved[:3]}; '
+                             f'the stored old-side rows cannot be reused')
 
 
 class Row(dict):
@@ -91,9 +136,12 @@ def rows_for(system, item, rung, seed, gen_path, ref_f0, ref_v, ref_path,
     return out
 
 
-def collect(items, seeds, old_runs=('aux', 'ds3'), only_new=False, spectral=True):
+def collect(items, seeds, old_runs=('aux', 'ds3'), only_new=False, spectral=True,
+            new_dir=None, reuse=None):
     ref_rows, out = [], []
-    new_dir = C.OUT / 'new'
+    new_dir = Path(new_dir) if new_dir else C.OUT / 'new'
+    if reuse is not None:
+        old_runs = ()
 
     for item in items:
         I.assert_held_out(item)
@@ -116,7 +164,7 @@ def collect(items, seeds, old_runs=('aux', 'ds3'), only_new=False, spectral=True
 
         # reference-swap diagnostic: what changes if the old CREPE contour is
         # used as the reference instead
-        crepe = None if only_new else F.crepe_contour(item, len(ref_f0))
+        crepe = None if (only_new or reuse is not None) else F.crepe_contour(item, len(ref_f0))
         if crepe is not None:
             f0_c, v_c = crepe
             for k, v in P.evaluate(f0_c, v_c, ref_f0, ref_v).items():
@@ -159,6 +207,12 @@ def collect(items, seeds, old_runs=('aux', 'ds3'), only_new=False, spectral=True
 
         print(f'  {item} ({I.speaker_of(item)}) done', flush=True)
 
+    if reuse is not None:
+        assert_same_reference(ref_rows, reuse)
+        wanted = set(items)
+        kept = [r for r in reusable_rows(reuse) if r['item'] in wanted]
+        print(f'  reference reproduces the stored rows; reusing {len(kept)} old-side rows')
+        ref_rows += kept
     return ref_rows + out
 
 
@@ -170,6 +224,10 @@ def main():
     p.add_argument('--only-new', action='store_true',
                    help='the new model\'s 3_pitch only (for the hold-out extension)')
     p.add_argument('--no-spectral', action='store_true')
+    p.add_argument('--new-dir', default=str(C.OUT / 'new'),
+                   help='where the new system\'s renders are (render_new.py --system)')
+    p.add_argument('--old-rows',
+                   help='reuse the old side\'s rows from this results file')
     args = p.parse_args()
 
     from pansori.compare.render_new import resolve_items
@@ -177,8 +235,12 @@ def main():
     seeds = list(C.SEEDS[:args.seeds])
     print(f'{len(items)} items x {len(seeds)} seeds')
 
+    reuse = None
+    if args.old_rows:
+        with open(args.old_rows, encoding='utf-8') as f:
+            reuse = [json.loads(line) for line in f if line.strip()]
     rows = collect(items, seeds, only_new=args.only_new,
-                   spectral=not args.no_spectral)
+                   spectral=not args.no_spectral, new_dir=args.new_dir, reuse=reuse)
     # sorted so a re-run is byte-identical -- determinism is a check, not a nicety
     rows.sort(key=lambda r: (r['system'], r['item'], r['rung'], r['seed'], r['metric']))
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)

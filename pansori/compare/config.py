@@ -42,6 +42,22 @@ CKPT_ACOUSTIC = 28000
 CKPT_DUR = 16000
 CKPT_PITCH = 32000
 
+# The frozen systems the new side can be. v1 is the one every number in
+# out/summary.json was measured on. hyb2 is what the composition demo serves
+# (PansoriGenerator-prototype configs/web_demo.yaml): SOFA alignment + hybrid
+# lyrics, per-head steps chosen on its own validation curves. Its note grid is
+# identical to data/pansori's on the 19 fair items (smoke.py G5), which is what
+# lets one staircase measure it. `tag` suffixes the render directories, so a
+# second system never writes into v1's out/new or out/ds.
+SYSTEMS = {
+    'v1': dict(ac_exp='pansori_ac_v1', var_exp='pansori_var_v1',
+               ac=CKPT_ACOUSTIC, dur=CKPT_DUR, pitch=CKPT_PITCH,
+               labels='data/pansori', tag=''),
+    'hyb2': dict(ac_exp='pansori_ac_hyb2', var_exp='pansori_var_hyb2',
+                 ac=32000, dur=28000, pitch=36000,
+                 labels='data/pansori_hyb2', tag='_hyb2'),
+}
+
 SEEDS = (1, 2, 3, 4, 5)  # never -1; the sampler is stochastic and this is the floor
 
 OLD_LADDER = {

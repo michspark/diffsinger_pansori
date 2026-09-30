@@ -44,14 +44,36 @@ def note_to_midi(token):
     return (int(token[i:]) + 1) * 12 + _STEP[name] + acc
 
 
-def note_grid(item):
-    """(onsets[N+1] seconds, midi[N]) for an item, from its transcriptions.csv row."""
-    row = I.row_of(item)
+def grid_from_row(row, name='row'):
+    """(onsets[N+1] seconds, midi[N]) from one transcriptions.csv row."""
     midi = np.array([note_to_midi(t) for t in row['note_seq'].split()], dtype=np.int64)
     dur = np.array([float(x) for x in row['note_dur'].split()], dtype=np.float64)
     if len(midi) != len(dur):
-        raise ValueError(f'{item}: {len(midi)} notes but {len(dur)} durations')
+        raise ValueError(f'{name}: {len(midi)} notes but {len(dur)} durations')
     return np.concatenate([[0.0], np.cumsum(dur)]), midi
+
+
+def note_grid(item):
+    """(onsets[N+1] seconds, midi[N]) for an item, from its transcriptions.csv row."""
+    return grid_from_row(I.row_of(item), item)
+
+
+def grid_mismatch(row_a, row_b, tol_ms=1.0):
+    """None if two label rows carry the same notes at the same times, else why not.
+
+    Rests count as notes here: a rest that moves is a note boundary that moves.
+    """
+    on_a, m_a = grid_from_row(row_a, 'a')
+    on_b, m_b = grid_from_row(row_b, 'b')
+    if len(m_a) != len(m_b):
+        return f'{len(m_a)} != {len(m_b)} notes'
+    if (m_a != m_b).any():
+        i = int(np.flatnonzero(m_a != m_b)[0])
+        return f'MIDI {m_a[i]} != {m_b[i]} at note {i}'
+    worst = float(np.max(np.abs(on_a - on_b))) * 1000.0
+    if worst >= tol_ms:
+        return f'onset differs by {worst:.3f} ms'
+    return None
 
 
 def frame_notes(item, n_frames, timestep=C.TIMESTEP):

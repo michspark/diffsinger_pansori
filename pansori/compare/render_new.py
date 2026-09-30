@@ -27,6 +27,14 @@ Rungs produced:
 
 Usage (dsp env, from the repo root):
   PYTHONPATH=. python pansori/compare/render_new.py --items fair --seeds 5
+
+  # the demo's checkpoints, on the items the old model was measured on (its
+  # ladder directory is no longer on disk; its rows survive in results.jsonl)
+  PYTHONPATH=. python pansori/compare/render_new.py --system hyb2 \
+      --items rows:pansori/compare/out/results.jsonl --seeds 5
+
+--system picks a frozen entry of config.SYSTEMS. Each system renders into its
+own out/new{tag} and out/ds{tag}, so v1's artifacts are never overwritten.
 """
 
 import argparse
@@ -42,20 +50,39 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from pansori.compare import config as C  # noqa: E402
 from pansori.compare import items as I  # noqa: E402
 
-OUT_WAV = C.OUT / 'new'
-OUT_DS = C.OUT / 'ds'
+def out_dirs(system):
+    """(wav dir, .ds dir) for a system. v1 keeps the original out/new and out/ds."""
+    tag = C.SYSTEMS[system]['tag']
+    return C.OUT / f'new{tag}', C.OUT / f'ds{tag}'
+
+
+def rows_items(path, system=None):
+    """Items a results file holds rows for, for `system` (default: the old primary).
+
+    The old ladder directory is what `fair` reads, and it is gone; the old model's
+    measured rows are not. The fair set is exactly the items those rows cover.
+    """
+    system = system or f'OLD_{C.OLD_PRIMARY}'
+    items = set()
+    with open(path, encoding='utf-8') as f:
+        for line in f:
+            if line.strip():
+                r = json.loads(line)
+                if r['system'] == system:
+                    items.add(r['item'])
+    if not items:
+        raise ValueError(f'{path}: no rows for {system}')
+    return sorted(items)
 
 
 def resolve_items(spec):
-    fair, excluded = I.paired_items()
-    if spec == 'fair':
-        return fair
-    if spec == 'excluded':
-        return excluded
-    if spec == 'paired':
-        return fair + excluded
+    if spec.startswith('rows:'):
+        return rows_items(spec.split(':', 1)[1])
     if spec.startswith('sample:'):
         return I.holdout_sample(int(spec.split(':', 1)[1]))
+    if spec in ('fair', 'excluded', 'paired'):
+        fair, excluded = I.paired_items()
+        return {'fair': fair, 'excluded': excluded, 'paired': fair + excluded}[spec]
     return [s for s in spec.split(',') if s]
 
 
@@ -79,10 +106,11 @@ def restore_best():
             dest.write_bytes(saved.read_bytes())
 
 
-def assert_ckpts():
-    for exp, step in (('pansori_ac_v1', C.CKPT_ACOUSTIC),
-                      ('pansori_var_v1', C.CKPT_DUR),
-                      ('pansori_var_v1', C.CKPT_PITCH)):
+def assert_ckpts(system):
+    s = C.SYSTEMS[system]
+    for exp, step in ((s['ac_exp'], s['ac']),
+                      (s['var_exp'], s['dur']),
+                      (s['var_exp'], s['pitch'])):
         p = C.REPO / 'checkpoints' / exp / f'model_ckpt_steps_{step}.ckpt'
         if not p.exists():
             raise FileNotFoundError(f'required checkpoint missing: {p}')
@@ -90,8 +118,10 @@ def assert_ckpts():
 
 # ---------------------------------------------------------------- prep
 
-def mode_prep(items):
-    """Seed-independent .ds inputs, built straight from transcriptions.csv."""
+def mode_prep(items, system):
+    """Seed-independent .ds inputs, built straight from the system's own
+    transcriptions.csv -- the labels that system was trained on."""
+    _, OUT_DS = out_dirs(system)
     OUT_DS.mkdir(parents=True, exist_ok=True)
     sys.path.insert(0, str(C.REPO / 'pansori'))
     import make_ds
@@ -108,7 +138,7 @@ def mode_prep(items):
             if out.exists():
                 continue
             a = A()
-            a.item, a.data, a.spk, a.out = item, 'data/pansori', None, str(out)
+            a.item, a.data, a.spk, a.out = item, C.SYSTEMS[system]['labels'], None, str(out)
             a.with_dur, a.with_f0 = with_dur, with_f0
             try:
                 make_ds.cmd_from_label(a)
@@ -138,12 +168,14 @@ def _set_hparams(exp):
     set_hparams(print_hparams=False)
 
 
-def mode_variance(items, seeds):
-    _set_hparams('pansori_var_v1')
+def mode_variance(items, seeds, system):
+    s = C.SYSTEMS[system]
+    _, OUT_DS = out_dirs(system)
+    _set_hparams(s['var_exp'])
     from inference.ds_variance import DiffSingerVarianceInfer
 
-    dur = DiffSingerVarianceInfer(ckpt_steps=C.CKPT_DUR, predictions={'dur'})
-    pitch = DiffSingerVarianceInfer(ckpt_steps=C.CKPT_PITCH, predictions={'pitch'})
+    dur = DiffSingerVarianceInfer(ckpt_steps=s['dur'], predictions={'dur'})
+    pitch = DiffSingerVarianceInfer(ckpt_steps=s['pitch'], predictions={'pitch'})
 
     def run(infer, src, title, seed):
         out = OUT_DS / f'{title}.ds'
@@ -173,8 +205,10 @@ def mode_variance(items, seeds):
 
 # ---------------------------------------------------------------- acoustic
 
-def mode_acoustic(items, seeds):
-    _set_hparams('pansori_ac_v1')
+def mode_acoustic(items, seeds, system):
+    s = C.SYSTEMS[system]
+    OUT_WAV, OUT_DS = out_dirs(system)
+    _set_hparams(s['ac_exp'])
     import librosa
     import numpy as np
     import soundfile as sf
@@ -184,7 +218,7 @@ def mode_acoustic(items, seeds):
     from inference.ds_acoustic import DiffSingerAcousticInfer
 
     OUT_WAV.mkdir(parents=True, exist_ok=True)
-    infer = DiffSingerAcousticInfer(ckpt_steps=C.CKPT_ACOUSTIC)
+    infer = DiffSingerAcousticInfer(ckpt_steps=s['ac'])
     sr = hparams['audio_sample_rate']
 
     def render(src, title, seed):
@@ -237,7 +271,9 @@ def mode_acoustic(items, seeds):
 def main():
     p = argparse.ArgumentParser(description='render the new model\'s ladder')
     p.add_argument('--items', default='fair',
-                   help='fair | excluded | paired | sample:N | a comma-separated list')
+                   help='fair | excluded | paired | sample:N | rows:RESULTS.jsonl | '
+                        'a comma-separated list')
+    p.add_argument('--system', default='v1', choices=sorted(C.SYSTEMS))
     p.add_argument('--seeds', type=int, default=len(C.SEEDS))
     p.add_argument('--mode', default='driver',
                    choices=['driver', 'prep', 'variance', 'acoustic'])
@@ -248,25 +284,27 @@ def main():
 
     if args.mode == 'driver':
         restore_best()
-        assert_ckpts()
-        print(f'{len(items)} items x {len(seeds)} seeds '
-              f'(acoustic {C.CKPT_ACOUSTIC} · dur {C.CKPT_DUR} · pitch {C.CKPT_PITCH})')
+        assert_ckpts(args.system)
+        s = C.SYSTEMS[args.system]
+        print(f'{args.system}: {len(items)} items x {len(seeds)} seeds '
+              f'({s["ac_exp"]} {s["ac"]} · {s["var_exp"]} dur {s["dur"]} / pitch {s["pitch"]}'
+              f' · labels {s["labels"]})')
         env = {**os.environ, 'PYTHONPATH': str(C.REPO), 'PYTHONNOUSERSITE': '1'}
         for mode in ('prep', 'variance', 'acoustic'):
             print(f'\n== {mode} ==')
             r = subprocess.run(
-                [sys.executable, __file__, '--mode', mode,
+                [sys.executable, __file__, '--mode', mode, '--system', args.system,
                  '--items', ','.join(items), '--seeds', str(len(seeds))],
                 cwd=C.REPO, env=env,
             )
             if r.returncode:
                 sys.exit(f'{mode} failed (exit {r.returncode})')
-        print(f'\ndone — {OUT_WAV}')
+        print(f'\ndone — {out_dirs(args.system)[0]}')
         return
 
-    {'prep': lambda: mode_prep(items),
-     'variance': lambda: mode_variance(items, seeds),
-     'acoustic': lambda: mode_acoustic(items, seeds)}[args.mode]()
+    {'prep': lambda: mode_prep(items, args.system),
+     'variance': lambda: mode_variance(items, seeds, args.system),
+     'acoustic': lambda: mode_acoustic(items, seeds, args.system)}[args.mode]()
 
 
 if __name__ == '__main__':
