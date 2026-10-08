@@ -42,8 +42,11 @@ design choice rests on a corpus measurement, and so does every refusal: no scale
 snapping, no rhythmic grid, no snapping of lyrics to the published libretto. The
 underlying SVS model reproduces how much the voice moves inside a note, 0.29 to 0.95 of
 the singer's movement against a prior pansori model, but not reliably where it moves.
-That is why placement is left to retrieval and to the user. Evaluation with
-practitioners is the next step.
+That is why placement is left to retrieval and to the user. On 125 passages from held-out
+pieces, the tool's unedited output lies at a kernel audio distance of 15.4 from the
+recordings, against 43.3 for a general song model given the same lyrics and 0.27 between
+halves of the recordings themselves: closer to pansori, not yet indistinguishable from
+it. Evaluation with practitioners is the next step.
 \end{abstract}
 \begin{keywords}
 pansori; human-AI co-creation; interactive music systems; singing voice synthesis;
@@ -78,7 +81,9 @@ contribute:
   \item a plan-then-render composition tool for pansori that works without a melody model;
   \item the measurement behind each design decision, including what the tool declines to do;
   \item an account of what the synthesis engine does and does not learn, which fixes the
-    division of labour between the human and the model.
+    division of labour between the human and the model;
+  \item a set-level measurement of how close the tool's unedited output sounds to held-out
+    pansori recordings.
 \end{itemize}
 
 %==============================================================================
@@ -95,9 +100,11 @@ music as a fine pitch contour rather than as coarse note symbols, for the same r
 ornaments matter here \citep{shikarpur2024gamadhani}. On the interaction side, Cococo
 found that a generative model overwhelms novices when it produces too much at once, and
 answered with steering tools that restrict generation to parts of a piece and offer
-alternatives to choose from \citep{louie2020cococo}. Our tool takes the same stance. The
-synthesis stack is reused: DiffSinger \citep{liu2022diffsinger} in the openvpi fork
-\citep{openvpi} with rectified flow \citep{liu2023flow}, HT-Demucs
+alternatives to choose from \citep{louie2020cococo}. Our tool takes the same stance.
+General song models such as ACE-Step \citep{gong2026acestep} render a full song from lyrics
+and a style caption with no pansori training data, and we use one to calibrate how
+pansori-like our output sounds. The synthesis stack is reused: DiffSinger
+\citep{liu2022diffsinger} in the openvpi fork \citep{openvpi} with rectified flow \citep{liu2023flow}, HT-Demucs
 \citep{rouard2023htdemucs}, Whisper \citep{radford2023whisper}, the SOFA aligner
 \citep{sofa}, ROSVOT note transcription \citep{li2024rosvot}, RMVPE pitch
 \citep{wei2023rmvpe} and an NSF-HiFiGAN vocoder \citep{openvpivocoders}.
@@ -171,11 +178,10 @@ from the skeleton: mean interval, longest note and notes per syllable, with thre
 the tertiles of the \emph{gyemyeonjo} and \emph{ujo} skeletons. The chosen skeleton is
 transposed by one integer offset so that its median sits at the singer's centre.
 
-\textbf{Mode is a sound key.} Rotated onto a tonic estimated per piece and mode, the
-pitch-class profiles of
-\emph{ujo} and \emph{gyemyeonjo} spans are separated by a linear probe at 72.3\% balanced
-accuracy with whole singers held out. Without the tonic rotation the probe reaches 63.9\%,
-and on shuffled labels 51.4\%. The mode is therefore in the notes, though not all of it.
+\textbf{Mode is a sound key.} Rotated onto a per-piece tonic, \emph{ujo} and
+\emph{gyemyeonjo} pitch-class profiles are separated by a linear probe at 72.3\% balanced
+accuracy with singers held out (51.4\% on shuffled labels): the mode is in the notes,
+though not all of it.
 
 \textbf{\emph{Butimsae} is edited, not invented.} Each skeleton arrives with the binding
 the dynamic program found in the recording, and the user rewrites it. Dragging a chip
@@ -193,6 +199,53 @@ takes 11.8\,s on one RTX 4090 (0.9\,s for the score, 3.5\,s for durations, 3.5\,
 pitch, 3.9\,s for acoustics). Nearly all of it is process start-up and checkpoint
 loading: in a persistent process, the same checkpoints render a held-out utterance in
 about 0.06\,s.
+
+%==============================================================================
+\section{Does the Output Sound Like Pansori?}\label{sec:kad}
+%==============================================================================
+\begin{table}[t]
+\centering
+\small
+\caption{Kernel audio distance ($\times 100$) to 125 held-out recordings; lower is closer.
+Generated sets mix 3 seeds, and brackets are 95\% bootstrap intervals. The first row is
+the distance between two singer-stratified halves of the recordings (mean over 200 splits,
+95th percentile in parentheses).}
+\label{tab:kad}
+\begin{tabular}{lcc}
+\toprule
+ & CLAP & MERT \\
+\midrule
+Recordings, half vs.\ half & 0.27 (0.41) & 0.018 (0.055) \\
+This tool, unedited & 15.4 $[13.8, 17.1]$ & 1.96 $[1.75, 2.23]$ \\
+General song model & 43.3 $[41.4, 45.4]$ & 3.37 $[3.09, 3.67]$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+We measure the tool with nobody in the loop. Five pieces, one per singer, are held out of
+training and of the skeleton index. For each of their 125 passages, the transcribed lyrics
+and the section's mode go through retrieval, the first skeleton of every chunk is rendered
+unedited, and the passage is sung by a different held-out singer of the same gender, so no
+output imitates the voice it is compared with. The result is a lower bound for the tool.
+The reference is the first 30\,s of each recording, its vocals separated as in training.
+Sets are compared by the kernel audio distance \citep[KAD;][]{chung2025kad}, an unbiased
+maximum mean discrepancy that, unlike FAD, assumes no Gaussian shape, on LAION-CLAP music
+embeddings \citep{wu2023clap}, with MERT \citep{li2024mert} as a check. The kernel width
+is fixed once from the recordings. Two anchors give the scale (Table~\ref{tab:kad}): halves
+of the recordings against each other, and ACE-Step~1.5 given the same lyrics and a caption
+naming pansori, the singer's gender and a \emph{buk} drum, with its vocals separated the
+same way.
+
+Over 2,000 paired bootstraps of passages, the tool's distance is 27.9 below the general
+model's (95\% CI $[-30.2, -25.6]$), and MERT agrees in sign ($-1.41$, $[-1.79, -1.00]$).
+The output is much closer to these recordings than a general model's reading of the same
+text, and still more than fifty times further from them than they are from themselves.
+The comparison is not neutral. Our model was trained on other pieces by the same singers,
+so it knows the texture of these records, and its checkpoints were selected on the held-out
+pieces' validation loss. The three sets reach the waveform by different paths (separation,
+vocoder, separation of a mix), and our renders are shorter (median 22.4\,s against
+29.5\,s). KAD does not check whether a passage's melody or lyrics are right, only whether
+the outputs, as a set, sound like the recordings, and the result holds for five pieces.
 
 %==============================================================================
 \section{What the Tool Declines to Do}
@@ -215,27 +268,24 @@ depth knob would control a quantity the singing does not have, so the ornament i
 to the sampler and exposed only as \emph{Redraw}.
 
 \textbf{No libretto snapping.} Snapping transcripts to the published libretto seems an
-obvious improvement, and choosing the right libretto was reliable. Yet on 182 clips it
-raised the share of phones at the aligner's floor from 34.03\% to 38.54\%. A model trained
-on the snapped text lost voiced/unvoiced agreement on the utterances whose lyrics had
-changed, 21 items to 6 (sign test $p{=}0.006$), while unchanged controls split 10 to 12.
-The canonical text was further from what was sung. Borrowing only its spelling while
-keeping the sung syllable count, the hybrid text of Section~\ref{sec:engine}, removed the harm without
-adding a gain.
+obvious improvement, but the canonical text is further from what was sung. A model trained
+on it lost voiced/unvoiced agreement on the utterances whose lyrics had changed, 21 items
+to 6 (sign test $p{=}0.006$), while unchanged controls split 10 to 12. Borrowing only its
+spelling while keeping the sung syllable count, the hybrid text of
+Section~\ref{sec:engine}, removed the harm without adding a gain.
 
 %==============================================================================
 \section{Limitations and Next Steps}
 %==============================================================================
-Nobody has used the tool yet except its authors, and its value as a co-creation tool is
-unmeasured. The first measurement we will make is objective: hold the seed, move one
-syllable boundary, and compare the change in f0 and spectrum inside and outside the
-edited syllables with the change a new seed causes. A formative study with pansori
-practitioners follows. The melody is retrieved, not composed, so the fit between the
-stress of the lyrics and the melody is left to chance. Every chunk is transposed to the
-same centre, so the register at the level of the phrase is flat. The next component is a
-melody model conditioned on mode and trained on the skeleton index; its tokenizer (83
-tokens) is built and round-trips to a renderable score, and its generators are not yet
-trained. \emph{Jangdan} is not modelled; a beat annotation tool has been built to make it
+Nobody but its authors has used the tool, and Section~\ref{sec:kad} measures its output,
+not its value for co-creation. The next measurement is objective: hold the seed, move one
+syllable boundary, and compare the change in f0 and spectrum inside and outside the edited
+syllables with the change a new seed causes. A formative study with pansori practitioners
+follows. The melody is retrieved, not composed, so lyric stress meets the melody by chance,
+and every chunk is transposed to the same centre, so phrase-level register is flat. A
+mode-conditioned melody model trained on the skeleton index comes next; its 83-token
+tokenizer round-trips to a renderable score, and its generators are not yet trained.
+\emph{Jangdan} is not modelled; a beat annotation tool has been built to make it
 measurable. Code, configurations and the tool will be released upon publication.
 
 %\acks{...}
