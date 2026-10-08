@@ -31,26 +31,21 @@ Without a Melody Model}
 \maketitle
 
 \begin{abstract}
-Pansori, the Korean tradition of solo narrative singing, survives as recordings: there
-are no machine-readable scores, no validated scale per mode, and almost no rhythm
-annotation. A singing-voice synthesis (SVS) model trained on those recordings can sing,
-but it has nothing to sing from. We present a composition tool that needs no melody
-model. It retrieves note skeletons from 14,244 corpus phrases indexed by mode, lets the
-user rewrite how syllables attach to notes, and renders the edited plan under a seed the
-user controls, so that an edit and a new ornamentation draw are separate actions. Every
-design choice rests on a corpus measurement, and so does every refusal: no scale
-snapping, no rhythmic grid, no snapping of lyrics to the published libretto. The
-underlying SVS model reproduces how much the voice moves inside a note, 0.29 to 0.95 of
-the singer's movement against a prior pansori model, but not reliably where it moves.
-That is why placement is left to retrieval and to the user. On 125 passages from held-out
-pieces, the tool's unedited output lies at a kernel audio distance of 15.4 from the
-recordings, against 43.3 for a general song model given the same lyrics and 0.27 between
-halves of the recordings themselves: closer to pansori, not yet indistinguishable from
-it. Evaluation with practitioners is the next step.
+Pansori, the Korean tradition of solo narrative singing, survives only as recordings, with
+no scores and no aligned lyrics. We describe how 394 commercial recordings became a
+singing-voice synthesis (SVS) model and a composition tool, and the measurement behind each
+step. A speech aligner hears 52.2\% of corpus time as silence where the singer holds a
+note even at 6\,s; a fine-tuned singing aligner cuts the share of phones at the 30\,ms floor from
+26.4\% to 2.7\%. Snapping transcripts to the published libretto made a trained model worse;
+borrowing only its spelling, at the sung syllable count, did not. The model reproduces how
+much the voice moves inside a note but not where, so the tool retrieves note skeletons from
+14,244 corpus phrases and lets the user rebind the syllables. On 125 held-out passages, its
+unedited output lies at a kernel audio distance of 15.4 from the recordings, against 43.3
+for a general song model and 0.27 between halves of the recordings.
 \end{abstract}
 \begin{keywords}
-pansori; human-AI co-creation; interactive music systems; singing voice synthesis;
-low-resource music
+pansori; singing voice synthesis; low-resource music; forced alignment;
+human-AI co-creation
 \end{keywords}
 
 %==============================================================================
@@ -62,28 +57,21 @@ bends, shakes and slides that travel a semitone or more around the nominal note.
 Melodies are organized by mode (\emph{akjo}: \emph{gyemyeonjo}, \emph{ujo},
 \emph{pyeongjo}) and by rhythmic cycle (\emph{jangdan}). Composing a new passage, called
 \emph{jakchang}, means fitting a text to a mode and deciding \emph{butimsae}, the
-placement of syllables against the melody and the rhythmic cycle. Our tool edits the
-first half of it: which notes each syllable takes.
+placement of syllables against the melody and the rhythmic cycle.
 
-An SVS model can now be trained on pansori recordings, but it turns a score into a voice,
-and pansori has no scores. The usual way to obtain one is a lyrics-to-melody model, and
-the usual lyrics-to-melody model counts time in beats, treats a syllable held over
-several notes as the exception, and stays inside a scale. None of these fits this corpus. We therefore build the tool the
-other way round: the melody is retrieved from real phrases, a person edits how the
-lyrics bind to it, and the SVS model supplies the ornament.
-
-Building it forced measurements about pansori itself, and several of them are refusals.
-No mode has a scale definition we could validate. The ornaments look like off-scale
-notes in every mode. The vibrato is not periodic, and the few verified beat cycles are
-irregular. A mode, however, can be read off the note skeleton well above chance. We
-contribute:
+An SVS model needs recordings with time-aligned phonemes and notes, and pansori has
+neither. Every label comes from a tool built for other material (separator, speech
+recognizer, note transcriber, aligner), each fails on pansori in its own way, and most of
+the work lies in measuring where. Even then there are no scores to sing from, and
+lyrics-to-melody models count beats and stay inside a scale. So the tool retrieves
+melodies from real phrases, a person edits how the lyrics bind to them, and the model
+supplies the ornament. We contribute:
 \begin{itemize}
-  \item a plan-then-render composition tool for pansori that works without a melody model;
-  \item the measurement behind each design decision, including what the tool declines to do;
-  \item an account of what the synthesis engine does and does not learn, which fixes the
-    division of labour between the human and the model;
+  \item a pipeline from recordings to a pansori SVS corpus, with the measurement behind
+    each decision: utterance length, aligner and lyric source;
+  \item a plan-then-render composition tool that needs no melody model;
   \item a set-level measurement of how close the tool's unedited output sounds to held-out
-    pansori recordings.
+    recordings.
 \end{itemize}
 
 %==============================================================================
@@ -92,64 +80,82 @@ contribute:
 Lyrics-to-melody generation has moved from sequence-to-sequence pre-training with
 syllable--note alignment \citep{sheng2021songmass} to template-based two-stage systems
 that pass through rhythm, chord and cadence \citep{ju2022telemelody}, and to decoding
-constrained by lyric--melody relationships such as tone and rhythm \citep{zhang2022relyme}.
-All three measure duration in beats, and treat a syllable spread over several notes as
-the exception. In our corpus there is almost no beat annotation, and 42.2\% of syllables
-carry more than one note. Among non-Western traditions, GaMaDHaNi models Hindustani vocal
-music as a fine pitch contour rather than as coarse note symbols, for the same reason
-ornaments matter here \citep{shikarpur2024gamadhani}. On the interaction side, Cococo
-found that a generative model overwhelms novices when it produces too much at once, and
-answered with steering tools that restrict generation to parts of a piece and offer
-alternatives to choose from \citep{louie2020cococo}. Our tool takes the same stance.
-General song models such as ACE-Step \citep{gong2026acestep} render a full song from lyrics
-and a style caption with no pansori training data, and we use one to calibrate how
-pansori-like our output sounds. The synthesis stack is reused: DiffSinger
-\citep{liu2022diffsinger} in the openvpi fork \citep{openvpi} with rectified flow \citep{liu2023flow}, HT-Demucs
-\citep{rouard2023htdemucs}, Whisper \citep{radford2023whisper}, the SOFA aligner
-\citep{sofa}, ROSVOT note transcription \citep{li2024rosvot}, RMVPE pitch
-\citep{wei2023rmvpe} and an NSF-HiFiGAN vocoder \citep{openvpivocoders}.
+constrained by lyric--melody relationships \citep{zhang2022relyme}. All three count
+duration in beats and treat a syllable over several notes as the exception; here 42.2\% of
+syllables carry more than one note, and GaMaDHaNi models Hindustani singing as a pitch
+contour for that reason \citep{shikarpur2024gamadhani}. Cococo
+restricted generation to parts of a piece so as not to overwhelm novices
+\citep{louie2020cococo}; our tool takes the same stance. General song models such as
+ACE-Step \citep{gong2026acestep} sing lyrics in a style named by a caption; we use one to
+calibrate our measurement.
 
 %==============================================================================
-\section{The Synthesis Engine}\label{sec:engine}
+\section{From Recordings to a Singing Model}\label{sec:pipeline}
 %==============================================================================
-The corpus is 394 commercial recordings with vocals separated by HT-Demucs. Section
-labels mark each span's mode. There is no lyric text, so Whisper transcribes it, and
-ROSVOT transcribes the notes. After cutting at 6\,s and alignment, 26,955 utterances
-(28.93\,h) from 23 singers remain, with validation held out by piece. A speech aligner
-\citep{mcauliffe2017mfa} leaves 26.4\% of phones at 30\,ms or less, which marks
-boundaries it declined to place, and labels 52.2\% of corpus time as silence while a note
-covers it: a sustained tone, not a rest. We absorb such spans into the preceding phone and
-align with a fine-tuned SOFA instead, which leaves 2.7\% of phones at 30\,ms or less. A
-variance model (25.1\,M parameters) predicts phone durations and f0 from phonemes and
-notes, and an acoustic model (69.1\,M) predicts the mel spectrogram. Both are trained from
-scratch with rectified flow, and each prediction head is taken from its own best
-checkpoint.
+\textbf{Corpus.} The source is 394 commercial recordings with vocals separated by HT-Demucs
+\citep{rouard2023htdemucs}; section labels mark each sung span's mode, and spoken
+(\emph{aniri}) spans are excluded. Whisper large-v3 \citep{radford2023whisper} transcribes
+the lyrics, with repeated syllables collapsed because a held tone sounds to it like one
+syllable sung many times. ROSVOT \citep{li2024rosvot} transcribes the notes.
 
-The tool serves the checkpoints trained on \emph{hybrid} lyrics, which keep Whisper's
-syllable count and borrow the libretto's spelling. Against a sibling trained on Whisper's
-text, each with its own fine-tuned aligner, none of nine sign tests reached $p{<}0.05$ (60 held-out pairs $\times$ 3
-seeds). We keep the hybrid text because it is the canonical spelling a future melody
-model will be trained on.
+\textbf{Utterances of at most 6\,s.} The Korean model of MFA \citep{mcauliffe2017mfa} was
+trained on speech and gives up on long held tones: on a small sample, utterances over 6\,s
+averaged 4.06\,s of aligned silence and those under 6\,s had no silence of 1\,s or more.
+We cut at pauses of 0.4\,s or more (p90 of all pauses is 0.66\,s; shorter ones lie mostly
+inside \emph{sigimsae}), and cut a pauseless melisma at the widest gap between its
+notes, never inside a held tone: 31,529 utterances (33.48\,h) of 2 to 6\,s.
 
-\textbf{What the engine learns.} We compare it with a prior FastSpeech2-style pansori
-model on 19 held-out utterances, predicting f0 from the score with ground-truth
-durations. Each value of the new model is a median over 5 seeds. A result counts only if
-it exceeds twice the seed-to-seed IQR, survives Holm correction, and exceeds the gap
-between vocoder resynthesis and the recording. The ratio of synthesized to recorded
-within-note f0 variation rises from 0.29 to 0.95 (median paired difference 0.51, 95\% CI
-$[0.35, 0.68]$, Holm $p{=}0.0003$). Correlation with the recorded within-note contour is
-0.04 for the prior model and 0.16 for ours, which clears none of the three conditions
-(Holm $p{=}0.24$). Pitch accuracy is unchanged (RPA-50 0.29 for both). The engine moves
-as much as a pansori singer, then, but not reliably where the singer moves. The tool's
-design follows from that: the note skeleton and the syllable binding come from real
-phrases and from the user, and the model supplies the movement on top.
+\textbf{Why SOFA.} Even at 6\,s, MFA leaves 26.4\% of phones at 30\,ms or less, boundaries
+it declined to place, and labels 52.2\% of corpus time as silence while a note covers it: a
+sustained tone, not a rest. We absorb such silence into the preceding phone, and replace
+the aligner with SOFA \citep{sofa}, which is built for singing. It has no Korean checkpoint,
+so we fine-tune its multilingual singing checkpoint with a new head for Korean phonemes, on
+labels bootstrapped from MFA. Given every MFA timing, SOFA learns the floor too, so timings
+are kept only for utterances with at most 15\% of phones at the floor (4,501); the other
+22,454 contribute their phoneme sequence alone. A second round, bootstrapped from the first
+SOFA's alignment, trusts 11,498. The final corpus (26,955 utterances, 28.93\,h, 23 singers)
+has 2.7\% of phones at 30\,ms or less, and its median phone grows from 80 to 157\,ms.
+
+\textbf{Lyrics against the libretto.} Whisper mishears archaic Sino-Korean, and every piece
+has a published libretto (\emph{changbon}). Matched without the piece's name, the chosen
+libretto agreed with it for all 295 recordings past a confidence gate, and 11,174 of 31,529 segments
+were rewritten. The rewrites were mostly right, yet a model trained on them lost
+voiced/unvoiced agreement where the lyrics had changed, 21 items to 6 (sign test
+$p{=}0.006$; unchanged controls 10 to 12). Where the match was weak, the libretto span ran
+to twice the sung syllable count at p90, and such a label is wrong however it is spelled.
+The \emph{hybrid} text keeps Whisper's syllables one for one and borrows libretto
+syllables only over equal-length stretches pinned by exact matches (22.2\% of syllables in
+matched segments). Against Whisper's text, each with its own aligner, none of nine sign
+tests reached $p{<}0.05$ (60 held-out pairs $\times$ 3 seeds); we keep the canonical
+spelling.
+
+\textbf{Training.} Our earlier model, a FastSpeech2-style cascade at 24\,kHz, copied a vowel
+once per note it spanned. In the openvpi fork \citep{openvpi} of DiffSinger
+\citep{liu2022diffsinger}, notes keep their own time axis, so \emph{sigimsae} is just
+several notes over one syllable, and a dictionary of all 11,172 Hangul syllables lets the
+model sing unseen text. Public checkpoints use a Mandarin phoneme set, so a variance model
+(25.1\,M parameters; durations and f0) and an acoustic model (69.1\,M; mel) are trained
+from scratch with rectified flow \citep{liu2023flow}, with f0 extracted by RMVPE
+\citep{wei2023rmvpe} over 55--750\,Hz (the default 65\,Hz floor silences the male low
+register) and an NSF-HiFiGAN vocoder \citep{openvpivocoders}. One piece from each of five
+singers is held out. Each model runs 40,000 steps on one RTX 4090 (0.9\,h and 0.4\,h), and
+each head is taken from its own best validation step (acoustic 32k, duration 28k, pitch
+36k); in an earlier run, taking pitch from the total-loss optimum cost 25\% more f0 error.
+
+\textbf{What the engine learns.} On 19 held-out utterances, predicting f0 from the score
+with true durations (median of 5 seeds), the ratio of synthesized to recorded within-note
+f0 variation rises from the earlier model's 0.29 to 0.95 (95\% CI of the paired difference
+$[0.35, 0.68]$, Holm $p{=}0.0003$), but correlation with the recorded contour, 0.04
+against 0.16, is not significant (Holm $p{=}0.24$). The engine moves as much as a singer
+but not where the singer moves, so the skeleton and binding come from real phrases and the
+user.
 
 %==============================================================================
 \section{The Composition Tool}
 %==============================================================================
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.62\linewidth]{figs/demo.png}
+\includegraphics[width=0.38\linewidth]{figs/demo.png}
 \caption{The tool (UI in Korean). \ding{172}~lyrics; \ding{173}~mode; \ding{174}~three
 retrieved skeletons with measured shape labels; \ding{175}~\emph{butimsae} editor, where
 syllable chips are dragged across notes and ``--'' marks a held syllable;
@@ -157,48 +163,21 @@ syllable chips are dragged across notes and ``--'' marks a held syllable;
 \label{fig:demo}
 \end{figure}
 
-The tool (Fig.~\ref{fig:demo}) has six steps: lyrics, mode, skeleton, \emph{butimsae},
-singer, render. The server never sings straight from the lyrics. It first returns an
-editable \emph{plan}: the mode, and for each chunk of lyrics a skeleton id, the syllables,
-and a list of notes that each carry a MIDI pitch, a duration in seconds and the index of
-the syllable they belong to. It renders only the plan the user sends back, so a person
-stands between retrieval and synthesis.
+The tool (Fig.~\ref{fig:demo}) never sings straight from the lyrics: it returns an editable
+\emph{plan} of notes, each with a pitch, a duration in seconds and its syllable, and renders
+only the plan the user sends back.
 
-\textbf{Skeletons are retrieved, not generated.} In the corpus, ROSVOT notes and aligned
-syllables are two timelines that have never met. A monotonic dynamic program binds them,
-giving each syllable a contiguous run of notes and maximizing their overlap; a greedy
-assignment starves short syllables. Utterances in which a syllable receives a note it does
-not overlap are discarded. The phrases that survive are indexed by mode: 10,309
-\emph{gyemyeonjo}, 3,081 \emph{ujo} and 854 \emph{pyeongjo} skeletons from 384 tracks,
-with a median of 6 syllables. The user's lyrics are split at word boundaries into chunks
-of 2 to 12 syllables. For each chunk, three candidates are drawn from the skeletons of the
-nearest syllable count, at random but preferring different shape labels. The labels
-(\emph{smooth}, \emph{leapy}, \emph{long sustain}, \emph{dense sigimsae}) are measured
-from the skeleton: mean interval, longest note and notes per syllable, with thresholds at
-the tertiles of the \emph{gyemyeonjo} and \emph{ujo} skeletons. The chosen skeleton is
-transposed by one integer offset so that its median sits at the singer's centre.
+\textbf{Skeletons are retrieved.} A monotonic dynamic program binds each aligned syllable
+to a contiguous run of notes, and the phrases are indexed by mode: 10,309
+\emph{gyemyeonjo}, 3,081 \emph{ujo} and 854 \emph{pyeongjo} skeletons. Each 2--12 syllable
+chunk of the user's lyrics is offered three skeletons of the nearest syllable count with
+different measured shapes, transposed to the singer's centre and never quantized to a scale.
+The mode is in these notes: a linear probe separates \emph{ujo} from \emph{gyemyeonjo}
+pitch-class profiles at 72.3\% balanced accuracy, singers held out (51.4\% shuffled).
 
-\textbf{Mode is a sound key.} Rotated onto a per-piece tonic, \emph{ujo} and
-\emph{gyemyeonjo} pitch-class profiles are separated by a linear probe at 72.3\% balanced
-accuracy with singers held out (51.4\% on shuffled labels): the mode is in the notes,
-though not all of it.
-
-\textbf{\emph{Butimsae} is edited, not invented.} Each skeleton arrives with the binding
-the dynamic program found in the recording, and the user rewrites it. Dragging a chip
-moves a syllable boundary, so a note passes from one syllable to its neighbour and the
-note grid itself stays fixed. A handle lengthens or shortens a note in seconds. The server
-rejects a syllable left without a note, a syllable order that runs backwards, and a rest
-inside a syllable.
-
-\textbf{Seeds make edits audible.} The sampler is stochastic, so the two buttons divide
-the work. \emph{Render} keeps the previous seed, so a difference between two renders
-comes from the edit and not from a new draw; the same plan with the same seed gives a
-byte-identical file. \emph{Redraw sigimsae} changes only the seed, and so draws new
-ornamentation over the same notes. A 4.8\,s line
-takes 11.8\,s on one RTX 4090 (0.9\,s for the score, 3.5\,s for durations, 3.5\,s for
-pitch, 3.9\,s for acoustics). Nearly all of it is process start-up and checkpoint
-loading: in a persistent process, the same checkpoints render a held-out utterance in
-about 0.06\,s.
+\textbf{\emph{Butimsae} is edited.} Dragging a syllable chip moves a syllable boundary
+while the notes stay fixed. \emph{Render} keeps the seed, so two renders differ only by the
+edit; \emph{Redraw} changes only the seed, drawing new ornamentation over the same notes.
 
 %==============================================================================
 \section{Does the Output Sound Like Pansori?}\label{sec:kad}
@@ -222,71 +201,25 @@ General song model & 43.3 $[41.4, 45.4]$ & 3.37 $[3.09, 3.67]$ \\
 \end{tabular}
 \end{table}
 
-We measure the tool with nobody in the loop. Five pieces, one per singer, are held out of
-training and of the skeleton index. For each of their 125 passages, the transcribed lyrics
-and the section's mode go through retrieval, the first skeleton of every chunk is rendered
-unedited, and the passage is sung by a different held-out singer of the same gender, so no
-output imitates the voice it is compared with. The result is a lower bound for the tool.
-The reference is the first 30\,s of each recording, its vocals separated as in training.
-Sets are compared by the kernel audio distance \citep[KAD;][]{chung2025kad}, an unbiased
-maximum mean discrepancy that, unlike FAD, assumes no Gaussian shape, on LAION-CLAP music
-embeddings \citep{wu2023clap}, with MERT \citep{li2024mert} as a check. The kernel width
-is fixed once from the recordings. Two anchors give the scale (Table~\ref{tab:kad}): halves
-of the recordings against each other, and ACE-Step~1.5 given the same lyrics and a caption
-naming pansori, the singer's gender and a \emph{buk} drum, with its vocals separated the
-same way.
+We measure the tool with nobody in the loop. For each of 125 passages from the held-out
+pieces, also removed from the index, the lyrics and mode go through retrieval, the first
+skeleton of every chunk is rendered unedited, and a different held-out singer of the same
+gender sings, so no output imitates the voice it is compared with. The reference is the
+first 30\,s of each recorded passage. Sets are compared by the kernel audio distance
+\citep[KAD;][]{chung2025kad}, an unbiased MMD with no Gaussian assumption, on LAION-CLAP
+\citep{wu2023clap} embeddings with MERT \citep{li2024mert} as a check, its kernel width
+fixed from the recordings. Two anchors give the scale (Table~\ref{tab:kad}): halves of the
+recordings, and ACE-Step~1.5 given the same lyrics and a pansori caption, its vocals
+separated the same way.
 
 Over 2,000 paired bootstraps of passages, the tool's distance is 27.9 below the general
 model's (95\% CI $[-30.2, -25.6]$), and MERT agrees in sign ($-1.41$, $[-1.79, -1.00]$).
-The output is much closer to these recordings than a general model's reading of the same
-text, and still more than fifty times further from them than they are from themselves.
-The comparison is not neutral. Our model was trained on other pieces by the same singers,
-so it knows the texture of these records, and its checkpoints were selected on the held-out
-pieces' validation loss. The three sets reach the waveform by different paths (separation,
-vocoder, separation of a mix), and our renders are shorter (median 22.4\,s against
-29.5\,s). KAD does not check whether a passage's melody or lyrics are right, only whether
-the outputs, as a set, sound like the recordings, and the result holds for five pieces.
-
-%==============================================================================
-\section{What the Tool Declines to Do}
-%==============================================================================
-\textbf{No scale snapping.} No mode has a scale definition we could validate. ROSVOT
-also transcribes the shaking tone (\emph{tteoneunmok}) as chains of semitone neighbours,
-and it does so at the same rate everywhere: one-semitone steps make up 30.1--30.5\% of
-steps in the skeletons of every mode. What looks like an off-scale note is mostly
-ornament, and quantizing pitch would erase what makes the output sound like pansori.
-Skeletons are transposed, never quantized.
-
-\textbf{No rhythmic grid.} The whole corpus has 47\,s of hand-corrected beats, and even
-those cycles run 9, 4, 4 and 11 beats. Any grid would be invented rather than measured,
-so durations are edited in seconds.
-
-\textbf{No vibrato controls.} A sinusoidal vibrato model fits the residual of an
-unrelated note as well as that of the note it was fitted to (median $R^2$ 0.829 against
-0.782, 746 notes), and only 3.9\% of notes contain a clean periodic component. A rate or
-depth knob would control a quantity the singing does not have, so the ornament is left
-to the sampler and exposed only as \emph{Redraw}.
-
-\textbf{No libretto snapping.} Snapping transcripts to the published libretto seems an
-obvious improvement, but the canonical text is further from what was sung. A model trained
-on it lost voiced/unvoiced agreement on the utterances whose lyrics had changed, 21 items
-to 6 (sign test $p{=}0.006$), while unchanged controls split 10 to 12. Borrowing only its
-spelling while keeping the sung syllable count, the hybrid text of
-Section~\ref{sec:engine}, removed the harm without adding a gain.
-
-%==============================================================================
-\section{Limitations and Next Steps}
-%==============================================================================
-Nobody but its authors has used the tool, and Section~\ref{sec:kad} measures its output,
-not its value for co-creation. The next measurement is objective: hold the seed, move one
-syllable boundary, and compare the change in f0 and spectrum inside and outside the edited
-syllables with the change a new seed causes. A formative study with pansori practitioners
-follows. The melody is retrieved, not composed, so lyric stress meets the melody by chance,
-and every chunk is transposed to the same centre, so phrase-level register is flat. A
-mode-conditioned melody model trained on the skeleton index comes next; its 83-token
-tokenizer round-trips to a renderable score, and its generators are not yet trained.
-\emph{Jangdan} is not modelled; a beat annotation tool has been built to make it
-measurable. Code, configurations and the tool will be released upon publication.
+The output is much closer to the recordings than a general model's, and still more than
+fifty times further than they are from themselves. The comparison is not neutral: our model
+knows these singers from other pieces, its checkpoints were selected on these pieces, the
+signal paths differ, and our renders are shorter (median 22.4\,s against 29.5\,s). KAD
+ignores whether melody and lyrics are right. No practitioner has used the tool yet; that
+study is next, and code will be released upon publication.
 
 %\acks{...}
 
