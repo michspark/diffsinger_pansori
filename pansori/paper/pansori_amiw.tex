@@ -96,7 +96,7 @@ model (bottom right); online, the tool's plan (bottom left) drives it.}
 \label{fig:system}
 \end{figure}
 
-\textbf{The singing model} is the openvpi fork \citep{openvpi} of DiffSinger
+\textbf{Singing model.} We use the openvpi fork \citep{openvpi} of DiffSinger
 \citep{liu2022diffsinger}. A \emph{variance} model (25.1\,M parameters) predicts the phone
 durations and f0 from phonemes and notes, an \emph{acoustic} model (69.1\,M) a mel
 spectrogram from phonemes, durations, f0 and singer, and a pretrained NSF-HiFiGAN
@@ -113,9 +113,11 @@ Training thus needs four labels per utterance (Fig.~\ref{fig:system}, top row): 
 phone boundaries, notes and f0. Pansori has none; each tool that supplies one was built
 for other material.
 
-\textbf{Short utterances, for alignment.} Vocals are separated from 394 commercial
-recordings by HT-Demucs \citep{rouard2023htdemucs}, spoken (\emph{aniri}) spans are
-excluded, and section labels give each sung span's mode. The Korean model of MFA
+\textbf{Corpus and segmentation.} We build on the corpus of our previous work
+\citep{park2026frame}, whose frame-level annotations mark each section of a recording with
+its mode or as spoken narration (\emph{aniri}). Vocals are separated by HT-Demucs
+\citep{rouard2023htdemucs}, spans annotated as \emph{aniri} are excluded, and each sung span
+keeps its mode. Utterances must then be short, because the Korean model of MFA
 \citep{mcauliffe2017mfa}, trained on speech, gives up on long held tones: on a small
 sample, utterances over 6\,s averaged 4.06\,s of aligned silence and those under 6\,s had
 no silence of 1\,s or more. We cut at pauses of 0.4\,s or more (p90 of all pauses is
@@ -125,7 +127,7 @@ to 6\,s. Notes come from ROSVOT \citep{li2024rosvot}, and f0 from RMVPE
 \citep{wei2023rmvpe} over 55--750\,Hz (the default 65\,Hz floor mutes low male
 voices).
 
-\textbf{Phone boundaries, from a singing aligner.} Both models learn from these boundaries:
+\textbf{Alignment.} Both models learn from phone boundaries:
 the duration head their lengths, the acoustic model what each phone sounds like. Even at
 6\,s, MFA leaves 26.4\% of phones at 30\,ms or less, boundaries it declined to place, and
 labels 52.2\% of corpus time as silence while a note covers it: a held tone, not a rest. We
@@ -137,7 +139,7 @@ bootstrapped from the first, trusts 11,498. The final corpus (26,955 utterances,
 23 singers) has 2.7\% of phones at 30\,ms or less, and its median phone grows from 80 to
 157\,ms.
 
-\textbf{Phonemes: Whisper's syllables, the libretto's spelling.} Whisper large-v3
+\textbf{Lyrics.} Whisper large-v3
 \citep{radford2023whisper} transcribes the lyrics, hearing a held tone as one syllable
 repeated, so repeats are collapsed. It mishears archaic Sino-Korean,
 and every piece has a published libretto (\emph{changbon}): matched without the piece's
@@ -168,7 +170,7 @@ syllable chips are dragged across notes and ``--'' marks a held syllable;
 \end{minipage}
 \end{figure}
 
-\textbf{Why a plan.} On 19 held-out utterances, predicting f0 from the score with true
+On 19 held-out utterances, predicting f0 from the score with true
 durations (median of 5 seeds), the ratio of synthesized to recorded within-note f0
 variation rises from the earlier model's 0.29 to 0.95 (95\% CI of the paired difference
 $[0.35, 0.68]$, Holm $p{=}0.0003$), but correlation with the recorded contour, 0.04
@@ -178,7 +180,7 @@ the lyrics: it returns an editable \emph{plan} of notes (pitch, duration in seco
 syllable), taken from real phrases and bound by the user, and renders only the plan sent
 back.
 
-\textbf{Skeletons are retrieved.} A monotonic dynamic program binds each aligned syllable
+\textbf{Retrieval.} A monotonic dynamic program binds each aligned syllable
 to a contiguous run of notes, and the phrases are indexed by mode: 10,309
 \emph{gyemyeonjo}, 3,081 \emph{ujo} and 854 \emph{pyeongjo} skeletons. Each 2--12 syllable
 chunk of lyrics gets three skeletons of the nearest syllable count with
@@ -186,12 +188,12 @@ different measured shapes, transposed to the singer's centre and never quantized
 The notes carry the mode: a linear probe separates \emph{ujo} from \emph{gyemyeonjo}
 pitch-class profiles at 72.3\% balanced accuracy, singers held out (51.4\% shuffled).
 
-\textbf{\emph{Butimsae} is edited.} Dragging a syllable chip moves a syllable boundary
+\textbf{Editing.} Dragging a syllable chip moves a syllable boundary
 while the notes stay fixed. \emph{Render} keeps the seed, so two renders differ only by the
 edit; \emph{Redraw} changes only the seed, drawing new ornamentation over the same notes.
 
 %==============================================================================
-\section{Does the Output Sound Like Pansori?}\label{sec:kad}
+\section{Evaluation}\label{sec:kad}
 %==============================================================================
 \begin{table}[t]
 \centering
