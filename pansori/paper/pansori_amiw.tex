@@ -35,7 +35,7 @@ Pansori, the Korean tradition of solo narrative singing, survives only as record
 no scores and no aligned lyrics. We describe how 394 commercial recordings became a
 singing-voice synthesis (SVS) model and a composition tool, and the measurement behind each
 step. A speech aligner hears 52.2\% of corpus time as silence where the singer holds a
-note even at 6\,s; a fine-tuned singing aligner cuts the share of phones at the 30\,ms floor from
+note; a fine-tuned singing aligner cuts the share of phones at the 30\,ms floor from
 26.4\% to 2.7\%. Snapping transcripts to the published libretto made a trained model worse;
 borrowing only its spelling, at the sung syllable count, did not. The model reproduces how
 much the voice moves inside a note but not where, so the tool retrieves note skeletons from
@@ -102,15 +102,21 @@ model (bottom right); online, the tool's plan (bottom left) drives it.}
 \textbf{Corpus.} We build on the corpus of \citet{park2026frame}, whose frame-level annotations mark each section of a recording with its mode or as spoken narration (\emph{aniri}). Vocals are separated by HT-Demucs \citep{rouard2023htdemucs}, spans annotated as \emph{aniri} are excluded, and each sung span
 keeps its mode. An SVS model learns from four labels per utterance (Fig.~\ref{fig:system}, top row): phonemes, phone boundaries, notes and f0, none of which pansori has.
 
-\textbf{Segmentation.} Utterances must then be short, because the Korean acoustic model of MFA \citep{mcauliffe2017mfa}, trained on speech, gives up on long held tones. Only 3.3\,h of the corpus's 37.5\,h of sung sections lie in spans under 21\,s, so the sections cannot be used whole. In a probe of 10 utterances, those over 6\,s averaged 4.06\,s of aligned silence and those under 6\,s had
-no silence of 1\,s or more, which sets the 6\,s cap. We cut at pauses of 0.4\,s or more (p90 of all pauses is
+\textbf{Segmentation.} Only 3.3\,h of the corpus's 37.5\,h of sung sections lie in spans
+under 21\,s, so the sections must be cut. How short matters little to the Korean acoustic
+model of MFA \citep{mcauliffe2017mfa}: rejoining 2,800 cut utterances into clips of 6 to
+20\,s and aligning them again, with the same audio and words, adds 1.9 points of raw phones
+at its 30\,ms floor (95\% CI $[1.6, 2.2]$) and 0.4 points of note-covered silence
+($[0.1, 0.7]$), and MFA fails on 4.8\% of them against 2.8\% of short utterances. The 6\,s
+cap is a choice, not a threshold. We cut at pauses of 0.4\,s or more (p90 of all pauses is
 0.66\,s; shorter ones lie mostly inside \emph{sigimsae}), and a pauseless melisma at the
 widest gap between its notes, never inside a held tone: 31,529 utterances (33.48\,h) of 2
 to 6\,s. Notes come from ROSVOT \citep{li2024rosvot}, and f0 from RMVPE
 \citep{wei2023rmvpe} over 55--750\,Hz, since the 65\,Hz default floor of DiffSinger mutes low male voices.
 
-\textbf{Alignment.} Phone boundaries decide what the model hears for each phone and for how long. Even at 6\,s, MFA leaves 26.4\% of phones at 30\,ms or less, boundaries it declined to place, and
-labels 52.2\% of corpus time as silence while a note covers it: a held tone, not a rest. We absorb such silence into the preceding phone and fine-tune SOFA \citep{sofa}, a singing
+\textbf{Alignment.} Phone boundaries decide what the model hears for each phone and for how long. In the corpus labels built from MFA, 26.4\% of phones last 30\,ms or less, boundaries it
+declined to place, and 52.2\% of corpus time is labelled silence while a note covers it:
+a held tone, not a rest, and as common in long clips as in short ones. We absorb such silence into the preceding phone and fine-tune SOFA \citep{sofa}, a singing
 aligner with no Korean checkpoint, from its multilingual one with a new phoneme head, on MFA labels only from utterances with at most 15\% of phones at the floor (4,501 of 26,955), lest
 it learn the floor too. A second round, bootstrapped from the first, trusts 11,498. The final corpus (26,955 utterances, 28.93\,h,
 23 singers) has 2.7\% of phones at 30\,ms or less, and its median phone grows from 80 to
