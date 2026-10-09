@@ -93,7 +93,7 @@ sing lyrics in a style named by a caption; we use it, zero-shot and fine-tuned o
 %==============================================================================
 \begin{figure}[t]
 \centering
-\includegraphics[width=\linewidth]{figs/pipeline.pdf}
+\includegraphics[width=\linewidth]{pipeline.pdf}
 \caption{The system. Offline (top), recordings become four labels that train the singing
 model (bottom right); online, the tool's plan (bottom left) drives it.}
 \label{fig:system}
@@ -102,34 +102,31 @@ model (bottom right); online, the tool's plan (bottom left) drives it.}
 \textbf{Corpus.} We build on the corpus of \citet{park2026frame}, whose frame-level annotations mark each section of a recording with its mode or as spoken narration (\emph{aniri}). Vocals are separated by HT-Demucs \citep{rouard2023htdemucs}, spans annotated as \emph{aniri} are excluded, and each sung span
 keeps its mode. An SVS model learns from four labels per utterance (Fig.~\ref{fig:system}, top row): phonemes, phone boundaries, notes and f0, none of which pansori has.
 
-\textbf{Segmentation.} A sung section runs a median of 27\,s, and a tenth of them run past
-132\,s (2,557 sections, 37.5\,h), so they cannot be used whole. We cap utterances at 6\,s for
-the aligner (see Alignment), and below the cap let the music set their length: we cut at
-pauses of 0.4\,s or more, which separate phrases (p90 of all pauses is 0.66\,s, and shorter
-ones lie mostly inside \emph{sigimsae}), and a pauseless melisma at the widest gap between
+\textbf{Segmentation.} A sung section runs a median of 27\,s, and a tenth run past 132\,s,
+too long to use whole. We cap utterances at 6\,s for the aligner and, below the cap, cut
+where the music does: at pauses of 0.4\,s or more, which separate phrases (shorter ones lie
+mostly inside \emph{sigimsae}), and within a pauseless melisma at the widest gap between
 its notes, never inside a held tone. This yields 31,529 utterances (33.48\,h) of 2 to 6\,s.
-Notes come from ROSVOT \citep{li2024rosvot}, and f0
-from RMVPE \citep{wei2023rmvpe} over 55--750\,Hz, since the 65\,Hz default floor of
-DiffSinger mutes low male voices.
+Notes come from ROSVOT \citep{li2024rosvot}, and f0 from RMVPE \citep{wei2023rmvpe} over
+55--750\,Hz, since DiffSinger's 65\,Hz floor mutes low male voices.
 
 \textbf{Lyrics.} Whisper large-v3 \citep{radford2023whisper} transcribes each utterance,
 hearing a held tone as one syllable repeated, so repeats are collapsed. It mishears archaic
-Sino-Korean, and every piece has a published libretto (\emph{changbon}), but replacing the
-transcript with the matched libretto span made a trained model worse: where the match was
-weak, the span ran to twice the syllables that were sung. The \emph{hybrid} text therefore
-keeps Whisper's syllables one for one and borrows the libretto's spelling only over
-equal-length stretches pinned by exact matches. It takes the canonical spelling at no
-measurable cost to the trained model (Appendix~\ref{apd:lyrics}).
+Korean, and every piece has a published libretto
+(\emph{changbon}),\footnote{From Korean Wikisource, \url{https://ko.wikisource.org/}.} but
+the libretto cannot simply replace the transcript: every singer, and every school, sings
+its own version of the piece, so a matched libretto span often carries syllables that were
+never sung (Appendix~\ref{apd:lyrics}). The \emph{hybrid} text therefore keeps Whisper's
+syllables one for one and borrows the libretto's spelling only over equal-length stretches
+pinned by exact matches. It takes the canonical spelling at no measurable cost to the
+trained model, and gives the corpus lyrics in the libretto's wording, which a future
+lyrics-to-note model (Section~\ref{sec:conclusion}) would be trained on.
 
 \textbf{Alignment.} Phone boundaries decide what the model hears for each phone and for how
-long. In the corpus labels built from the Korean acoustic model of MFA
-\citep{mcauliffe2017mfa} on Whisper's text, 26.4\% of phones last 30\,ms or less, boundaries
-it declined to place, and 52.2\% of corpus time is labelled silence while a note covers it:
-a held tone, not a rest. Length is not the cause. Rejoining 2,800 utterances into clips of
-6 to 20\,s and aligning them again, with the same audio and words, raises MFA's raw phones at
-the floor by only 1.9 points (95\% CI $[1.6, 2.2]$), note-covered silence by 0.4
-($[0.1, 0.7]$), and failures from 2.8\% to 4.8\%. Longer clips are slightly worse, which
-sets the 6\,s cap, but no length fixes a speech model. We absorb such silence into the preceding phone and fine-tune SOFA \citep{sofa}, a singing
+long. In the corpus labels built from MFA on Whisper's text, 26.4\% of phones last 30\,ms or
+less, boundaries it declined to place, and 52.2\% of corpus time is labeled silence while a
+note covers it: a held tone, not a rest, and as common in long clips as in short ones. We
+absorb such silence into the preceding phone and fine-tune SOFA \citep{sofa}, a singing
 aligner with no Korean checkpoint, from its multilingual one with a new phoneme head, in two
 rounds. The first learns from MFA's labels on Whisper's text, trusting boundaries only in
 utterances with at most 15\% of phones at the floor (4,501 of 26,955), lest it learn the
@@ -153,19 +150,6 @@ all 11,172 Hangul syllables, with one piece from each of five singers held out. 
 %==============================================================================
 \section{The Composition Tool}\label{sec:tool}
 %==============================================================================
-\begin{figure}[t]
-\centering
-\begin{minipage}[c]{0.31\linewidth}
-\includegraphics[width=\linewidth]{figs/demo.png}
-\end{minipage}\hfill
-\begin{minipage}[c]{0.65\linewidth}
-\caption{The tool (UI in Korean). \ding{172}~lyrics; \ding{173}~mode; \ding{174}~three
-retrieved skeletons with measured shape labels; \ding{175}~\emph{butimsae} editor, where
-syllable chips are dragged across notes and ``--'' marks a held syllable;
-\ding{176}~singer; \ding{177}~render, or redraw ornaments.}
-\label{fig:demo}
-\end{minipage}
-\end{figure}
 
 On 19 held-out utterances, predicting f0 from the score with true
 durations (median of 5 seeds), the ratio of synthesized to recorded within-note f0
@@ -295,5 +279,7 @@ matched utterances (22.2\%) and never changes a syllable count. Each text then g
 aligner (Section~\ref{sec:pipeline}), and models trained on the two are compared on held-out
 utterances split by whether the text changed: none of nine sign tests reached $p{<}0.05$
 (60 held-out pairs $\times$ 3 seeds), so we keep the canonical spelling.
+
+% 여기에 figure 하나 넣어야 할듯 하고 
 
 \end{document}
