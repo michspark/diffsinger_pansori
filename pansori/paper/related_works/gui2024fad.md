@@ -3,10 +3,10 @@ title: "Adapting Frechet Audio Distance for Generative Music Evaluation"
 authors: "Azalea Gui; Hannes Gamper; Sebastian Braun; Dimitra Emmanouilidou"
 venue: "IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)"
 year: 2024
-bib_key: null
+bib_key: "gui2024fad"
 source_url: "https://arxiv.org/pdf/2311.01616"
 version: "arXiv v2 (published at ICASSP 2024)"
-cited_in_paper: false
+cited_in_paper: true
 relevance: "Documents sample-size, embedding, and reference-set biases in FAD, directly relevant to the paper’s set-level audio evaluation."
 ---
 

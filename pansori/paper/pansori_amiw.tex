@@ -86,7 +86,7 @@ Synthesis of ornamented traditional singing is rare. A Peking-opera model trains
 than as notes \citep{shikarpur2024gamadhani}. Korean SVS
 \citep{lee2019adversarially,lee2021nsinger} trains on scored studio corpora
 \citep{choi2020childrens}. General song models such as ACE-Step \citep{gong2026acestep}
-sing lyrics in a style named by a caption; we use one to calibrate our measurement.
+sing lyrics in a style named by a caption; we use it, zero-shot and fine-tuned on pansori \citep{cho2025pansori}, to calibrate our measurement.
 
 %==============================================================================
 \section{From Recordings to a Singing Model}\label{sec:pipeline}
@@ -190,34 +190,65 @@ recordings (mean of 200 splits; 95th percentile).}
 \label{tab:kad}
 \begin{tabular}{lcc}
 \toprule
- & CLAP & MERT \\
+ & CLAP & MERT layer 4 \\
 \midrule
-Recordings, half vs.\ half & 0.27 (0.41) & 0.018 (0.055) \\
-This tool, unedited & 15.4 $[13.8, 17.1]$ & 1.96 $[1.75, 2.23]$ \\
-General song model & 43.3 $[41.4, 45.4]$ & 3.37 $[3.09, 3.67]$ \\
+Recordings, half vs.\ half & 0.27 (0.41) & 0.034 (0.082) \\
+This tool, unedited & 15.4 $[13.8, 17.1]$ & 2.76 $[2.48, 3.11]$ \\
+ACE-Step 1.5, zero-shot & 43.3 $[41.4, 45.4]$ & 5.15 $[4.82, 5.47]$ \\
+ACE-Step, pansori LoRA & 46.9 $[44.7, 49.0]$ & 3.36 $[3.16, 3.57]$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-We measure the tool with nobody in the loop. For each of 125 passages from the held-out
-pieces, also removed from the index, the lyrics and mode go through retrieval, the first
-skeleton of every chunk is rendered unedited, and a different held-out singer of the same
-gender sings, so no output imitates the voice it is compared with. The reference is the
-first 30\,s of each recorded passage. Sets are compared by the kernel audio distance
-\citep[KAD;][]{chung2025kad}, an unbiased MMD with no Gaussian assumption, on LAION-CLAP
-\citep{wu2023clap} embeddings with MERT \citep{li2024mert} as a check, its kernel width
-fixed from the recordings. Two anchors give the scale (Table~\ref{tab:kad}): halves of the
-recordings, and ACE-Step~1.5 given the same lyrics and a pansori caption, its vocals
-separated alike.
+We ask how close the tool's output sounds to recorded pansori. For each of 125 passages
+from the five held-out pieces, whose phrases were also removed from the retrieval index,
+the tool renders the first retrieved skeleton of every chunk, unedited, in the voice of
+another held-out singer of the same gender. The reference is the first 30\,s of each
+recorded passage.
 
-Over 2,000 paired bootstraps of passages, the tool's distance is 27.9 below the general
-model's (95\% CI $[-30.2, -25.6]$), and MERT agrees in sign ($-1.41$, $[-1.79, -1.00]$).
-The output is much closer to the recordings than a general model's, and still more than
-fifty times further than they are from themselves. The comparison is not neutral: our model
-knows these singers from other pieces, its checkpoints were selected on these pieces, the
-signal paths differ, and our renders are shorter (median 22.4\,s against 29.5\,s). KAD
-ignores whether melody and lyrics are right. No practitioner has used the tool yet; that
-study is next, and code will be released upon publication.
+A distance between sets has no unit, so we read it against anchors (Table~\ref{tab:kad}).
+The distance is the kernel audio distance \citep[KAD;][]{chung2025kad}, an unbiased MMD,
+on LAION-CLAP \citep{wu2023clap} embeddings, which tracked listening tests best for
+generated music \citep{gui2024fad}; layer 4 of MERT \citep{li2024mert}, the best of its
+layers there, is a check. The kernel width is fixed from the recordings. The lowest anchor
+is the distance between two halves of the recordings. The others are what a song model
+makes of the same lyrics: ACE-Step~1.5 \citep{gong2026acestep} with a pansori caption, and
+ACE-Step \citep{gong2025acestep} with the pansori LoRA of \citet{cho2025pansori} at its best
+reported setting. Their output carries accompaniment, so their vocals are separated as the
+recordings' were.
+
+Both embeddings place the tool's output closer to the recordings than either song model,
+including the one fine-tuned on pansori: by 27.9 and 31.5 on CLAP (95\% CIs over 2,000
+paired bootstraps of passages, $[-30.2, -25.6]$ and $[-34.0, -28.8]$), with the same sign on
+MERT. This agrees with our own informal listening. It is a relative position, not an
+absolute level: the output is still more than fifty times further from the recordings than
+they are from themselves. Nor is the contest even: our model knows these singers from other
+pieces and its checkpoints were selected on these pieces, the LoRA was trained on another
+singer, the signal paths differ, and our renders are shorter (median 22.4\,s against
+29.5\,s and 29.6\,s). On the song models themselves the embeddings disagree: CLAP puts the
+LoRA 3.6 further from the recordings than zero-shot ($[+1.3, +5.7]$), MERT 1.79 closer
+($[-2.17, -1.42]$). KAD ignores whether melody and lyrics are right.
+
+%==============================================================================
+\section{Conclusion and Future Work}\label{sec:conclusion}
+%==============================================================================
+We turned 394 commercial recordings into a pansori SVS corpus and model, and built a tool
+that composes with it by retrieving note skeletons from real phrases instead of generating
+a melody. On held-out passages, its unedited output is closer to the recordings than a
+general song model's, zero-shot or fine-tuned on pansori. The corpus and the retrieval
+therefore carry part of the genre's character: the mode is in the notes, and the voice
+ornaments as much as a singer does.
+
+They do not carry all of it, and the output remains far from the recordings. Two gaps
+stand out. First, the melody is borrowed: each chunk takes a real phrase chosen by
+syllable count and mode alone. General lyrics-to-melody models do not fit a genre where
+42.2\% of syllables carry several notes, but the 14,244 skeletons, aligned to syllables and
+labelled by mode, are training data for a pansori lyrics-to-note model that could replace
+retrieval. Second, the model ornaments as much as a singer but not where
+(Section~\ref{sec:tool}). Conditioning the voice on where \emph{sigimsae} fall, for
+instance on contour tokens learned from pansori f0 \citep{ju2026contour}, is the next step.
+No practitioner has used the tool yet; that study comes next, and code will
+be released upon publication.
 
 %\acks{...}
 
