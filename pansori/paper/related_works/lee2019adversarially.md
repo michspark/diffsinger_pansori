@@ -3,7 +3,7 @@ title: "Adversarially Trained End-to-End Korean Singing Voice Synthesis System"
 authors: "Juheon Lee; Hyeong-Seok Choi; Chang-Bin Jeon; Junghyun Koo; Kyogu Lee"
 venue: "Proc. Interspeech"
 year: 2019
-bib_key: null
+bib_key: lee2019adversarially
 source_url: "https://www.isca-archive.org/interspeech_2019/lee19c_interspeech.pdf"
 version: "published"
 cited_in_paper: false

@@ -43,6 +43,7 @@ much the voice moves inside a note but not where, so the tool retrieves note ske
 unedited output lies at a kernel audio distance of 15.4 from the recordings, against 43.3
 for a general song model and 0.27 between halves of the recordings.
 \end{abstract}
+
 \begin{keywords}
 pansori; singing voice synthesis; low-resource music; forced alignment;
 human-AI co-creation
@@ -51,13 +52,13 @@ human-AI co-creation
 %==============================================================================
 \section{Introduction}
 %==============================================================================
-In \emph{pansori}, one singer and one drummer perform a story that can run for hours.
-The voice is deliberately rough, and its long sustained tones carry \emph{sigimsae}:
-bends, shakes and slides that travel a semitone or more around the nominal note.
-Melodies are organized by mode (\emph{akjo}: \emph{gyemyeonjo}, \emph{ujo},
-\emph{pyeongjo}) and by rhythmic cycle (\emph{jangdan}). Composing a new passage, called
-\emph{jakchang}, means fitting a text to a mode and deciding \emph{butimsae}, the
-placement of syllables against the melody and the rhythmic cycle.
+In \emph{pansori}, one singer and one drummer perform a story that can run for hours. It
+has passed down orally since the late 17th century, without notation
+\citep{park2024towards}. The voice is deliberately rough, and its long sustained tones carry
+\emph{sigimsae}, microtonal ornaments: a wide shake on one degree, a bend or downward slide
+on another. A mode (\emph{jo}; \emph{gyemyeonjo} and \emph{ujo} are the principal two) is
+defined by its pitch set, its \emph{sigimsae} and the vocal timbre together
+\citep{park2026frame}.
 
 An SVS model needs recordings with time-aligned phonemes and notes, and pansori has
 neither. Every label comes from a tool built for other material (separator, speech
@@ -73,13 +74,19 @@ of how close the tool's unedited output sounds to held-out recordings.
 %==============================================================================
 \section{Related Work}
 %==============================================================================
+
+Pansori has been studied from recordings rather than scores: f0 against a staff
+transcription shows what notation drops \citep{park2024towards}; frame-level mode labels
+show that \emph{jo} is pitch set, \emph{sigimsae} and timbre together
+\citep{park2026frame}. Synthesis of such singing is rare: a Peking-opera
+model lets duration and pitch depart from the score \citep{wu2020peking}, and GaMaDHaNi
+generates Hindustani vocals as a pitch contour \citep{shikarpur2024gamadhani}.
+
 Lyrics-to-melody models pre-train with syllable--note alignment
 \citep{sheng2021songmass}, pass through a rhythm, chord and cadence template
 \citep{ju2022telemelody}, or constrain decoding by lyric--melody relationships
-\citep{zhang2022relyme}. All three count
-duration in beats and treat a syllable over several notes as the exception; here 42.2\% of
-syllables carry more than one note, and GaMaDHaNi models Hindustani singing as a pitch
-contour for that reason \citep{shikarpur2024gamadhani}. Cococo
+\citep{zhang2022relyme}. All three count duration in beats and treat a syllable over
+several notes as the exception; here 42.2\% of syllables carry more than one note. Cococo
 restricted generation to parts of a piece so as not to overwhelm novices
 \citep{louie2020cococo}; our tool takes the same stance. General song models such as
 ACE-Step \citep{gong2026acestep} sing lyrics in a style named by a caption; we use one to
@@ -96,40 +103,25 @@ model (bottom right); online, the tool's plan (bottom left) drives it.}
 \label{fig:system}
 \end{figure}
 
-\textbf{Singing model.} We use the openvpi fork \citep{openvpi} of DiffSinger
-\citep{liu2022diffsinger}. A \emph{variance} model (25.1\,M parameters) predicts the phone
-durations and f0 from phonemes and notes, an \emph{acoustic} model (69.1\,M) a mel
-spectrogram from phonemes, durations, f0 and singer, and a pretrained NSF-HiFiGAN
-\citep{openvpivocoders} the waveform. Notes keep their own time axis, so \emph{sigimsae} is
-several notes over one syllable; our earlier FastSpeech2-style model at 24\,kHz copied a
-vowel once per note it spanned. Public checkpoints use a Mandarin phoneme set, so both
-models are trained from scratch, with rectified flow \citep{liu2023flow}, on a dictionary of
-all 11,172 Hangul syllables, with one piece from each of five singers held out. Each runs
-40,000 steps on one RTX 4090 (0.9\,h and 0.4\,h), and each head is taken from its own best
-validation step (acoustic 32k, duration 28k, pitch 36k); in an earlier run, taking pitch
-from the total-loss optimum cost 25\% more f0 error.
-
-Training thus needs four labels per utterance (Fig.~\ref{fig:system}, top row): phonemes,
-phone boundaries, notes and f0. Pansori has none; each tool that supplies one was built
-for other material.
-
-\textbf{Corpus and segmentation.} We build on the corpus of
+\textbf{Corpus.} We build on the corpus of
 \citet{park2026frame}, whose frame-level annotations mark each section of a recording with
 its mode or as spoken narration (\emph{aniri}). Vocals are separated by HT-Demucs
 \citep{rouard2023htdemucs}, spans annotated as \emph{aniri} are excluded, and each sung span
-keeps its mode. Utterances must then be short, because the Korean model of MFA
+keeps its mode. An SVS model learns from four labels per utterance
+(Fig.~\ref{fig:system}, top row): phonemes, phone boundaries, notes and f0, none of which
+pansori has.
+
+\textbf{Segmentation.} Utterances must then be short, because the Korean model of MFA
 \citep{mcauliffe2017mfa}, trained on speech, gives up on long held tones: on a small
 sample, utterances over 6\,s averaged 4.06\,s of aligned silence and those under 6\,s had
 no silence of 1\,s or more. We cut at pauses of 0.4\,s or more (p90 of all pauses is
 0.66\,s; shorter ones lie mostly inside \emph{sigimsae}), and a pauseless melisma at the
 widest gap between its notes, never inside a held tone: 31,529 utterances (33.48\,h) of 2
 to 6\,s. Notes come from ROSVOT \citep{li2024rosvot}, and f0 from RMVPE
-\citep{wei2023rmvpe} over 55--750\,Hz (the default 65\,Hz floor mutes low male
-voices).
+\citep{wei2023rmvpe} over 55--750\,Hz, since its default 65\,Hz floor mutes low male voices.
 
-\textbf{Alignment.} Both models learn from phone boundaries:
-the duration head their lengths, the acoustic model what each phone sounds like. Even at
-6\,s, MFA leaves 26.4\% of phones at 30\,ms or less, boundaries it declined to place, and
+\textbf{Alignment.} Phone boundaries decide what the model hears for each phone and for
+how long. Even at 6\,s, MFA leaves 26.4\% of phones at 30\,ms or less, boundaries it declined to place, and
 labels 52.2\% of corpus time as silence while a note covers it: a held tone, not a rest. We
 absorb such silence into the preceding phone and fine-tune SOFA \citep{sofa}, a singing
 aligner with no Korean checkpoint, from its multilingual one with a new phoneme head, on MFA
@@ -152,6 +144,18 @@ borrows the libretto's only over equal-length stretches pinned by exact matches 
 syllables in matched segments). Against Whisper's text, each with its own aligner, none of
 nine sign tests reached $p{<}0.05$ (60 held-out pairs $\times$ 3 seeds), so we keep the
 canonical spelling.
+
+\textbf{Singing model.} These labels train the openvpi fork \citep{openvpi} of DiffSinger
+\citep{liu2022diffsinger}. A \emph{variance} model (25.1\,M parameters) predicts the phone
+durations and f0 from phonemes and notes, an \emph{acoustic} model (69.1\,M) a mel
+spectrogram from phonemes, durations, f0 and singer, and a pretrained NSF-HiFiGAN
+\citep{openvpivocoders} the waveform. Notes keep their own time axis, so \emph{sigimsae} is
+several notes over one syllable, where our earlier FastSpeech2-style model copied a vowel
+once per note. Public checkpoints use a Mandarin phoneme set, so both
+models are trained from scratch, with rectified flow \citep{liu2023flow}, on a dictionary of
+all 11,172 Hangul syllables, with one piece from each of five singers held out. Each runs
+40,000 steps on one RTX 4090, and each head is taken from its own best validation step
+(acoustic 32k, duration 28k, pitch 36k).
 
 %==============================================================================
 \section{The Composition Tool}\label{sec:tool}

@@ -3,10 +3,10 @@ title: "Peking Opera Synthesis via Duration Informed Attention Network"
 authors: "Yusong Wu; Shengchen Li; Chengzhu Yu; Heng Lu; Chao Weng; Liqiang Zhang; Dong Yu"
 venue: "Proc. Interspeech"
 year: 2020
-bib_key: null
+bib_key: wu2020peking
 source_url: "https://www.isca-archive.org/interspeech_2020/wu20d_interspeech.pdf"
 version: "published"
-cited_in_paper: false
+cited_in_paper: true
 relevance: "Closest traditional-vocal SVS analogue: long syllables, expressive pitch deviation, and score/performance mismatch."
 ---
 ## Why it matters

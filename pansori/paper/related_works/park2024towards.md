@@ -3,10 +3,10 @@ title: "Towards Computational Analysis of Pansori Singing"
 authors: "Sangheon Park; Danbinaerin Han; Dasaem Jeong"
 venue: "25th International Society for Music Information Retrieval Conference (ISMIR), Late-Breaking Demo"
 year: 2024
-bib_key: null
+bib_key: park2024towards
 source_url: "https://arxiv.org/pdf/2410.12956"
 version: "arXiv v1 (ISMIR 2024 Late-Breaking Demo)"
-cited_in_paper: false
+cited_in_paper: true
 relevance: "Direct pansori MIR precedent analyzing pitch, rhythm, modes, and transcription/audio mismatch."
 ---
 ## Why it matters

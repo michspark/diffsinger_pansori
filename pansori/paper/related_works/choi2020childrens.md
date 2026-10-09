@@ -3,7 +3,7 @@ title: "Children's Song Dataset for Singing Voice Research"
 authors: "Soonbeom Choi; Wonil Kim; Saebyul Park; Sangeon Yong; Juhan Nam"
 venue: "21st International Society for Music Information Retrieval Conference (ISMIR), Late-Breaking/Demo"
 year: 2020
-bib_key: null
+bib_key: choi2020childrens
 source_url: "https://archives.ismir.net/ismir2020/latebreaking/000018.pdf"
 version: "published"
 cited_in_paper: false

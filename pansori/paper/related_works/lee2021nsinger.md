@@ -3,7 +3,7 @@ title: "N-Singer: A Non-Autoregressive Korean Singing Voice Synthesis System for
 authors: "Gyeong-Hoon Lee; Tae-Woo Kim; Hanbin Bae; Min-Ji Lee; Young-Ik Kim; Hoon-Young Cho"
 venue: "Proc. Interspeech"
 year: 2021
-bib_key: null
+bib_key: lee2021nsinger
 source_url: "https://www.isca-archive.org/interspeech_2021/lee21b_interspeech.pdf"
 version: "published"
 cited_in_paper: false
