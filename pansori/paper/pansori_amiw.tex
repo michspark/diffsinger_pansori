@@ -102,36 +102,40 @@ model (bottom right); online, the tool's plan (bottom left) drives it.}
 \textbf{Corpus.} We build on the corpus of \citet{park2026frame}, whose frame-level annotations mark each section of a recording with its mode or as spoken narration (\emph{aniri}). Vocals are separated by HT-Demucs \citep{rouard2023htdemucs}, spans annotated as \emph{aniri} are excluded, and each sung span
 keeps its mode. An SVS model learns from four labels per utterance (Fig.~\ref{fig:system}, top row): phonemes, phone boundaries, notes and f0, none of which pansori has.
 
-\textbf{Segmentation.} Only 3.3\,h of the corpus's 37.5\,h of sung sections lie in spans
-under 21\,s, so the sections must be cut. How short matters little to the Korean acoustic
-model of MFA \citep{mcauliffe2017mfa}: rejoining 2,800 cut utterances into clips of 6 to
-20\,s and aligning them again, with the same audio and words, adds 1.9 points of raw phones
-at its 30\,ms floor (95\% CI $[1.6, 2.2]$) and 0.4 points of note-covered silence
-($[0.1, 0.7]$), and MFA fails on 4.8\% of them against 2.8\% of short utterances. The 6\,s
-cap is a choice, not a threshold. We cut at pauses of 0.4\,s or more (p90 of all pauses is
-0.66\,s; shorter ones lie mostly inside \emph{sigimsae}), and a pauseless melisma at the
-widest gap between its notes, never inside a held tone: 31,529 utterances (33.48\,h) of 2
-to 6\,s. Notes come from ROSVOT \citep{li2024rosvot}, and f0 from RMVPE
-\citep{wei2023rmvpe} over 55--750\,Hz, since the 65\,Hz default floor of DiffSinger mutes low male voices.
+\textbf{Segmentation.} A sung section runs a median of 27\,s, and a tenth of them run past
+132\,s (2,557 sections, 37.5\,h), so the sections cannot be used whole. How short matters
+little to the Korean acoustic model of MFA \citep{mcauliffe2017mfa}: rejoining 2,800 cut
+utterances into clips of 6 to 20\,s and aligning them again, with the same audio and words,
+adds 1.9 points of raw phones at its 30\,ms floor (95\% CI $[1.6, 2.2]$) and 0.4 points of
+note-covered silence ($[0.1, 0.7]$), and MFA fails on 4.8\% of them against 2.8\% of short
+utterances. The 6\,s cap is a choice, not a threshold. We cut at pauses of 0.4\,s or more
+(p90 of all pauses is 0.66\,s; shorter ones lie mostly inside \emph{sigimsae}), and a
+pauseless melisma at the widest gap between its notes, never inside a held tone: 31,529
+utterances (33.48\,h) of 2 to 6\,s. Notes come from ROSVOT \citep{li2024rosvot}, and f0
+from RMVPE \citep{wei2023rmvpe} over 55--750\,Hz, since the 65\,Hz default floor of
+DiffSinger mutes low male voices.
 
-\textbf{Alignment.} Phone boundaries decide what the model hears for each phone and for how long. In the corpus labels built from MFA, 26.4\% of phones last 30\,ms or less, boundaries it
-declined to place, and 52.2\% of corpus time is labelled silence while a note covers it:
-a held tone, not a rest, and as common in long clips as in short ones. We absorb such silence into the preceding phone and fine-tune SOFA \citep{sofa}, a singing
-aligner with no Korean checkpoint, from its multilingual one with a new phoneme head, on MFA labels only from utterances with at most 15\% of phones at the floor (4,501 of 26,955), lest
-it learn the floor too. A second round, bootstrapped from the first, trusts 11,498. The final corpus (26,955 utterances, 28.93\,h,
+\textbf{Lyrics.} Whisper large-v3 \citep{radford2023whisper} transcribes each utterance,
+hearing a held tone as one syllable repeated, so repeats are collapsed. It mishears archaic
+Sino-Korean, and every piece has a published libretto (\emph{changbon}), but replacing the
+transcript with the matched libretto span made a trained model worse: where the match was
+weak, the span ran to twice the syllables that were sung. The \emph{hybrid} text therefore
+keeps Whisper's syllables one for one and borrows the libretto's spelling only over
+equal-length stretches pinned by exact matches. It takes the canonical spelling at no
+measurable cost to the trained model (Appendix~\ref{apd:lyrics}).
+
+\textbf{Alignment.} Phone boundaries decide what the model hears for each phone and for how
+long. In the corpus labels built from MFA on Whisper's text, 26.4\% of phones last 30\,ms or
+less, boundaries it declined to place, and 52.2\% of corpus time is labelled silence while a
+note covers it: a held tone, not a rest, and as common in long clips as in short ones. We
+absorb such silence into the preceding phone and fine-tune SOFA \citep{sofa}, a singing
+aligner with no Korean checkpoint, from its multilingual one with a new phoneme head, in two
+rounds. The first learns from MFA's labels on Whisper's text, trusting boundaries only in
+utterances with at most 15\% of phones at the floor (4,501 of 26,955), lest it learn the
+floor too. The second learns from the first round's alignment of the hybrid text, trusting
+11,494. Aligned by the second round, the final corpus (26,955 utterances, 28.93\,h,
 23 singers) has 2.7\% of phones at 30\,ms or less, and its median phone grows from 80 to
 157\,ms.
-
-\textbf{Lyrics.} Whisper large-v3 \citep{radford2023whisper} transcribes the lyrics, hearing a held tone as one syllable repeated, so repeats are collapsed. It mishears archaic Sino-Korean,
-and every piece has a published libretto (\emph{changbon}): matched without the piece's name, the libretto agreed with it for all 295 recordings past a confidence gate and
-rewrote 11,174 of 31,529 segments. A model trained on the rewrites lost voiced/unvoiced
-agreement where the lyrics changed, 21 items to 6 (sign test $p{=}0.006$; unchanged
-controls 10 to 12): where the match was weak, the libretto span ran to twice the sung
-syllable count at p90. The \emph{hybrid} text keeps Whisper's syllables one for one and
-borrows the libretto's only over equal-length stretches pinned by exact matches (22.2\% of
-syllables in matched segments). Against Whisper's text, each with its own aligner, none of
-nine sign tests reached $p{<}0.05$ (60 held-out pairs $\times$ 3 seeds), so we keep the
-canonical spelling.
 
 \textbf{Singing model.} These labels train the openvpi fork \citep{openvpi} of DiffSinger
 \citep{liu2022diffsinger}. A \emph{variance} model (25.1\,M parameters) predicts the phone
@@ -259,5 +263,36 @@ be released upon publication.
 %\acks{...}
 
 \bibliography{acml26}
+
+\appendix
+
+\section{Matching Transcripts to the Libretto}\label{apd:lyrics}
+
+\textbf{Finding the piece.} The transcripts of one recording, joined in time order, are
+scored against every libretto by the density of shared jamo 5-grams in a window twice the
+transcript's length. The best libretto must beat the mean of the other works' by a factor
+of 1.5, since chance agreement grows with the length of the transcript. 295 recordings pass,
+and for all 295 the chosen libretto is the piece named in the filename, which the matching
+never reads.
+
+\textbf{Replacing whole spans.} Within an anchored recording, one monotone diff over the
+song carries each utterance to a libretto span, accepted at a jamo similarity of 0.45 or
+more and at most 8 syllables per second. This rewrote 11,174 of 31,529 utterances. Over
+those, the span has a median 1.00 times Whisper's syllable count but 2.00 times at p90 where
+the similarity is below 0.55, so the label asks the aligner for syllables that were never
+sung. A model trained on these labels, against one trained on Whisper's with the aligner
+held fixed, lost voiced/unvoiced agreement on held-out utterances whose lyrics changed,
+21 items to 6 (sign test $p{=}0.006$), and not on unchanged controls (10 to 12).
+
+\textbf{The hybrid text.} Whisper's syllables are aligned semi-globally to the libretto
+around the accepted span: the cost of a pair is the jamo dissimilarity of its syllables, a
+Whisper syllable left unpaired costs 1.1, and a skipped interior libretto syllable 0.6, so
+equal-length stretches pair one to one. A stretch that differs is rewritten only if it pairs
+one to one, is at most 5 syllables long, and is pinned by exact matches on both sides, or by
+two on its inner side at an utterance edge. This rewrites 20,374 of the 91,955 syllables in
+matched utterances (22.2\%) and never changes a syllable count. Each text then gets its own
+aligner (Section~\ref{sec:pipeline}), and models trained on the two are compared on held-out
+utterances split by whether the text changed: none of nine sign tests reached $p{<}0.05$
+(60 held-out pairs $\times$ 3 seeds), so we keep the canonical spelling.
 
 \end{document}
