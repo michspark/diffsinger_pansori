@@ -6,7 +6,7 @@ year: 2019
 bib_key: lee2019adversarially
 source_url: "https://www.isca-archive.org/interspeech_2019/lee19c_interspeech.pdf"
 version: "published"
-cited_in_paper: false
+cited_in_paper: true
 relevance: "Korean end-to-end SVS precedent for phonetic enhancement, pitch conditioning, and adversarial acoustic modeling."
 ---
 ## Why it matters

@@ -6,7 +6,7 @@ year: 2020
 bib_key: "louie2020cococo"
 source_url: "https://youralien.github.io/files/cococo_chi2020_copy.pdf"
 version: "published author copy"
-cited_in_paper: true
+cited_in_paper: false
 ---
 
 # Novice-AI Music Co-Creation via AI-Steering Tools for Deep Generative Models

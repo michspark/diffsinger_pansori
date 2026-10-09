@@ -4,7 +4,7 @@ authors: "Seonguk Ju, Seola Cho, Sooin Chung, Danbinaerin Han, Dasaem Jeong"
 year: 2026
 venue: "ISMIR 2026"
 bib_key: ju2026contour
-cited_in_paper: false
+cited_in_paper: true
 source_url: "https://arxiv.org/abs/2608.10979"
 pdf_url: "https://arxiv.org/pdf/2608.10979.pdf"
 code_url: "https://github.com/MALerLab/pitch-contour-tokenizer"

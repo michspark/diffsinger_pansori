@@ -63,8 +63,9 @@ defined by its pitch set, its \emph{sigimsae} and the vocal timbre together
 An SVS model needs recordings with time-aligned phonemes and notes, and pansori has
 neither. Every label comes from a tool built for other material (separator, speech
 recognizer, note transcriber, aligner), and most of the work lies in measuring where each
-fails. Nor are there scores to sing from, and lyrics-to-melody models count beats and stay
-inside a scale. So the tool retrieves
+fails. Nor are there scores to sing from, and lyrics-to-melody models
+\citep{sheng2021songmass,ju2022telemelody,zhang2022relyme} count beats and stay inside a
+scale, while 42.2\% of pansori syllables here carry more than one note. So the tool retrieves
 melodies from real phrases, a person edits how the lyrics bind to them, and the model
 supplies the ornament. We contribute a pipeline from recordings to a pansori SVS corpus,
 with the measurement behind each decision (utterance length, aligner and lyric source); a
@@ -74,23 +75,20 @@ of how close the tool's unedited output sounds to held-out recordings.
 %==============================================================================
 \section{Related Work}
 %==============================================================================
+Computational work on pansori is recent. Aligning f0 with a staff transcription showed
+what notation drops \citep{park2024towards}; frame-level mode labels over 46\,h showed that
+\emph{jo} is pitch set, \emph{sigimsae} and timbre together \citep{park2026frame}; and
+contour tokens learned from pansori f0 without labels separate the two modes
+\citep{ju2026contour}. All three analyse, and none synthesizes: there is no pansori SVS
+corpus or model.
 
-Pansori has been studied from recordings rather than scores: f0 against a staff
-transcription shows what notation drops \citep{park2024towards}; frame-level mode labels
-show that \emph{jo} is pitch set, \emph{sigimsae} and timbre together
-\citep{park2026frame}. Synthesis of such singing is rare: a Peking-opera
-model lets duration and pitch depart from the score \citep{wu2020peking}, and GaMaDHaNi
-generates Hindustani vocals as a pitch contour \citep{shikarpur2024gamadhani}.
-
-Lyrics-to-melody models pre-train with syllable--note alignment
-\citep{sheng2021songmass}, pass through a rhythm, chord and cadence template
-\citep{ju2022telemelody}, or constrain decoding by lyric--melody relationships
-\citep{zhang2022relyme}. All three count duration in beats and treat a syllable over
-several notes as the exception; here 42.2\% of syllables carry more than one note. Cococo
-restricted generation to parts of a piece so as not to overwhelm novices
-\citep{louie2020cococo}; our tool takes the same stance. General song models such as
-ACE-Step \citep{gong2026acestep} sing lyrics in a style named by a caption; we use one to
-calibrate our measurement.
+Synthesis of ornamented traditional singing is rare. A Peking-opera model trains on a
+pseudo-score transcribed from the singing, because the singer departs from the written one
+\citep{wu2020peking}, and GaMaDHaNi generates Hindustani vocals as a pitch contour rather
+than as notes \citep{shikarpur2024gamadhani}. Korean SVS
+\citep{lee2019adversarially,lee2021nsinger} trains on scored studio corpora
+\citep{choi2020childrens}. General song models such as ACE-Step \citep{gong2026acestep}
+sing lyrics in a style named by a caption; we use one to calibrate our measurement.
 
 %==============================================================================
 \section{From Recordings to a Singing Model}\label{sec:pipeline}
@@ -103,16 +101,11 @@ model (bottom right); online, the tool's plan (bottom left) drives it.}
 \label{fig:system}
 \end{figure}
 
-\textbf{Corpus.} We build on the corpus of
-\citet{park2026frame}, whose frame-level annotations mark each section of a recording with
-its mode or as spoken narration (\emph{aniri}). Vocals are separated by HT-Demucs
-\citep{rouard2023htdemucs}, spans annotated as \emph{aniri} are excluded, and each sung span
-keeps its mode. An SVS model learns from four labels per utterance
-(Fig.~\ref{fig:system}, top row): phonemes, phone boundaries, notes and f0, none of which
-pansori has.
+\textbf{Corpus.} We build on the corpus of \citet{park2026frame}, whose frame-level annotations mark each section of a recording with
+its mode or as spoken narration (\emph{aniri}). Vocals are separated by HT-Demucs \citep{rouard2023htdemucs}, spans annotated as \emph{aniri} are excluded, and each sung span
+keeps its mode. An SVS model learns from four labels per utterance (Fig.~\ref{fig:system}, top row): phonemes, phone boundaries, notes and f0, none of which pansori has.
 
-\textbf{Segmentation.} Utterances must then be short, because the Korean model of MFA
-\citep{mcauliffe2017mfa}, trained on speech, gives up on long held tones: on a small
+\textbf{Segmentation.} Utterances must then be short, because the Korean model of MFA \citep{mcauliffe2017mfa}, trained on speech, gives up on long held tones: on a small
 sample, utterances over 6\,s averaged 4.06\,s of aligned silence and those under 6\,s had
 no silence of 1\,s or more. We cut at pauses of 0.4\,s or more (p90 of all pauses is
 0.66\,s; shorter ones lie mostly inside \emph{sigimsae}), and a pauseless melisma at the
@@ -120,14 +113,10 @@ widest gap between its notes, never inside a held tone: 31,529 utterances (33.48
 to 6\,s. Notes come from ROSVOT \citep{li2024rosvot}, and f0 from RMVPE
 \citep{wei2023rmvpe} over 55--750\,Hz, since its default 65\,Hz floor mutes low male voices.
 
-\textbf{Alignment.} Phone boundaries decide what the model hears for each phone and for
-how long. Even at 6\,s, MFA leaves 26.4\% of phones at 30\,ms or less, boundaries it declined to place, and
-labels 52.2\% of corpus time as silence while a note covers it: a held tone, not a rest. We
-absorb such silence into the preceding phone and fine-tune SOFA \citep{sofa}, a singing
-aligner with no Korean checkpoint, from its multilingual one with a new phoneme head, on MFA
-labels only from utterances with at most 15\% of phones at the floor (4,501 of 26,955), lest
-it learn the floor too. A second round,
-bootstrapped from the first, trusts 11,498. The final corpus (26,955 utterances, 28.93\,h,
+\textbf{Alignment.} Phone boundaries decide what the model hears for each phone and for how long. Even at 6\,s, MFA leaves 26.4\% of phones at 30\,ms or less, boundaries it declined to place, and
+labels 52.2\% of corpus time as silence while a note covers it: a held tone, not a rest. We absorb such silence into the preceding phone and fine-tune SOFA \citep{sofa}, a singing
+aligner with no Korean checkpoint, from its multilingual one with a new phoneme head, on MFA labels only from utterances with at most 15\% of phones at the floor (4,501 of 26,955), lest
+it learn the floor too. A second round, bootstrapped from the first, trusts 11,498. The final corpus (26,955 utterances, 28.93\,h,
 23 singers) has 2.7\% of phones at 30\,ms or less, and its median phone grows from 80 to
 157\,ms.
 

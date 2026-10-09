@@ -6,7 +6,7 @@ year: 2020
 bib_key: choi2020childrens
 source_url: "https://archives.ismir.net/ismir2020/latebreaking/000018.pdf"
 version: "published"
-cited_in_paper: false
+cited_in_paper: true
 relevance: "The public Korean/English CSD establishes the small, aligned Korean singing-corpus baseline that motivates data and annotation discussion."
 ---
 ## Why it matters

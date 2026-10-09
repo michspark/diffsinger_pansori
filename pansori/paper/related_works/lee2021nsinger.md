@@ -6,7 +6,7 @@ year: 2021
 bib_key: lee2021nsinger
 source_url: "https://www.isca-archive.org/interspeech_2021/lee21b_interspeech.pdf"
 version: "published"
-cited_in_paper: false
+cited_in_paper: true
 relevance: "Korean parallel SVS with explicit linguistic/musical separation and voicing-aware discriminators."
 ---
 ## Why it matters
