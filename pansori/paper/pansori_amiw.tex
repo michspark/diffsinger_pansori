@@ -52,9 +52,7 @@ human-AI co-creation
 %==============================================================================
 \section{Introduction}
 %==============================================================================
-In \emph{pansori}, one singer and one drummer perform a story that can run for hours. It has passed down orally since the alte 17th century without offical score. 
-
-
+In \emph{pansori}, one singer and one drummer perform a story that can run for hours. It
 has passed down orally since the late 17th century, without notation
 \citep{park2024towards}. The voice is deliberately rough, and its long sustained tones carry
 \emph{sigimsae}, microtonal ornaments: a wide shake on one degree, a bend or downward slide
@@ -150,28 +148,28 @@ all 11,172 Hangul syllables, with one piece from each of five singers held out. 
 %==============================================================================
 \section{The Composition Tool}\label{sec:tool}
 %==============================================================================
+The tool is built for a person who reads no score, and leaves every musical decision to
+them. From lyrics, a mode and a singer it returns an editable \emph{plan} of notes (pitch,
+duration in seconds, syllable) taken from real phrases, and renders only the plan sent
+back. The plan is the score DiffSinger reads, so what the user sees is what the model sings.
 
-On 19 held-out utterances, predicting f0 from the score with true
-durations (median of 5 seeds), the ratio of synthesized to recorded within-note f0
-variation rises from the earlier model's 0.29 to 0.95 (95\% CI of the paired difference
-$[0.35, 0.68]$, Holm $p{=}0.0003$), but correlation with the recorded contour, 0.04
-against 0.16, is not significant (Holm $p{=}0.24$). The model moves as much as a singer
-but not where the singer moves. So the tool (Fig.~\ref{fig:demo}) never sings straight from
-the lyrics: it returns an editable \emph{plan} of notes (pitch, duration in seconds,
-syllable), taken from real phrases and bound by the user, and renders only the plan sent
-back.
+\textbf{Retrieval.} A monotonic dynamic program binds each aligned syllable to a run of
+notes, and the phrases are indexed by mode: 10,309 \emph{gyemyeonjo}, 3,081 \emph{ujo}
+and 854 \emph{pyeongjo} skeletons. Each 2--12 syllable chunk of lyrics gets three
+skeletons of the nearest syllable count with different measured shapes, transposed by
+whole semitones and never quantized to a scale, so the mode's intervals survive: a linear
+probe separates \emph{ujo} from \emph{gyemyeonjo} pitch-class profiles at 72.3\% balanced
+accuracy, singers held out (51.4\% shuffled).
 
-\textbf{Retrieval.} A monotonic dynamic program binds each aligned syllable
-to a contiguous run of notes, and the phrases are indexed by mode: 10,309
-\emph{gyemyeonjo}, 3,081 \emph{ujo} and 854 \emph{pyeongjo} skeletons. Each 2--12 syllable
-chunk of lyrics gets three skeletons of the nearest syllable count with
-different measured shapes, transposed to the singer's centre and never quantized to a scale.
-The notes carry the mode: a linear probe separates \emph{ujo} from \emph{gyemyeonjo}
-pitch-class profiles at 72.3\% balanced accuracy, singers held out (51.4\% shuffled).
-
-\textbf{Editing.} Dragging a syllable chip moves a syllable boundary
-while the notes stay fixed. \emph{Render} keeps the seed, so two renders differ only by the
-edit; \emph{Redraw} changes only the seed, drawing new ornamentation over the same notes.
+\textbf{Editing.} Where each syllable falls against the notes (\emph{butimsae}) is the
+singer's art in pansori, and here the user's. DiffSinger keeps notes on their own time
+axis, so a syllable may span any run of notes: dragging a syllable chip across a note
+makes it the previous syllable's melisma, and a handle stretches a note between 0.05 and
+5\,s, while the notes never move. \emph{Render} keeps the sampler's seed, so two renders
+differ only by the edit; \emph{Redraw} changes only the seed, singing the same plan with
+new ornamentation. The model supplies the ornament and only that: it moves within a note
+as much as the recordings do but not where (Appendix~\ref{apd:sigimsae}), which is why
+the plan, not a melody model, carries the music.
 
 %==============================================================================
 \section{Evaluation}\label{sec:kad}
@@ -240,7 +238,7 @@ syllable count and mode alone. General lyrics-to-melody models do not fit a genr
 42.2\% of syllables carry several notes, but the 14,244 skeletons, aligned to syllables and
 labelled by mode, are training data for a pansori lyrics-to-note model that could replace
 retrieval. Second, the model ornaments as much as a singer but not where
-(Section~\ref{sec:tool}). Conditioning the voice on where \emph{sigimsae} fall, for
+(Appendix~\ref{apd:sigimsae}). Conditioning the voice on where \emph{sigimsae} fall, for
 instance on contour tokens learned from pansori f0 \citep{ju2026contour}, is the next step.
 No practitioner has used the tool yet; that study comes next, and code will
 be released upon publication.
@@ -279,6 +277,18 @@ matched utterances (22.2\%) and never changes a syllable count. Each text then g
 aligner (Section~\ref{sec:pipeline}), and models trained on the two are compared on held-out
 utterances split by whether the text changed: none of nine sign tests reached $p{<}0.05$
 (60 held-out pairs $\times$ 3 seeds), so we keep the canonical spelling.
+
+\section{How Much the Voice Moves}\label{apd:sigimsae}
+
+On 19 held-out utterances, predicting f0 from the score with true durations, we compare
+the model of Section~\ref{sec:pipeline} (SOFA labels, hybrid text, median of 5 seeds)
+with our earlier FastSpeech2-style DiffSinger, trained on MFA labels and Whisper's text
+and rendered once, being a deterministic regressor. The ratio of synthesized to recorded
+within-note f0 variation rises from 0.29 to 0.95 (95\% CI of the paired difference
+$[0.35, 0.68]$, Holm $p{=}0.0003$), but correlation with the recorded contour, 0.04
+against 0.16, is not significant (Holm $p{=}0.24$). The model moves as much as a singer
+but not where the singer moves. Architecture and labels change together between the two
+models, so the gain is not attributed to either alone.
 
 % 여기에 figure 하나 넣어야 할듯 하고 
 
