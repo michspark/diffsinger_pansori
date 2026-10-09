@@ -148,13 +148,11 @@ all 11,172 Hangul syllables, with one piece from each of five singers held out. 
 %==============================================================================
 \section{The Composition Tool}\label{sec:tool}
 %==============================================================================
-The tool is built for a person who reads no score, and leaves every musical decision to
-them. From lyrics, a mode and a singer it returns an editable \emph{plan} of notes (pitch,
+The tool is built for a person who reads no score, and leaves every musical decision to them. From lyrics, a mode and a singer it returns an editable \emph{plan} of notes (pitch,
 duration in seconds, syllable) taken from real phrases, and renders only the plan sent
 back. The plan is the score DiffSinger reads, so what the user sees is what the model sings.
 
-\textbf{Retrieval.} A monotonic dynamic program binds each aligned syllable to a run of
-notes, and the phrases are indexed by mode: 10,309 \emph{gyemyeonjo}, 3,081 \emph{ujo}
+\textbf{Retrieval.} A monotonic dynamic program binds each aligned syllable to a run of notes, and the phrases are indexed by mode: 10,309 \emph{gyemyeonjo}, 3,081 \emph{ujo}
 and 854 \emph{pyeongjo} skeletons. Each 2--12 syllable chunk of lyrics gets three
 skeletons of the nearest syllable count with different measured shapes, transposed by
 whole semitones and never quantized to a scale, so the mode's intervals survive: a linear
