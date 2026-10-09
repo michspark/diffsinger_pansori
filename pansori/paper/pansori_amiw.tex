@@ -103,16 +103,12 @@ model (bottom right); online, the tool's plan (bottom left) drives it.}
 keeps its mode. An SVS model learns from four labels per utterance (Fig.~\ref{fig:system}, top row): phonemes, phone boundaries, notes and f0, none of which pansori has.
 
 \textbf{Segmentation.} A sung section runs a median of 27\,s, and a tenth of them run past
-132\,s (2,557 sections, 37.5\,h), so they cannot be used whole. Longer clips do not help the
-aligner, the Korean acoustic model of MFA \citep{mcauliffe2017mfa}. Rejoining 2,800 cut
-utterances into clips of 6 to 20\,s and aligning them again, with the same audio and words,
-raises the raw phones at MFA's 30\,ms floor by 1.9 points (95\% CI $[1.6, 2.2]$),
-note-covered silence by 0.4 points ($[0.1, 0.7]$), and failures from 2.8\% to 4.8\%. Every
-measure worsens or holds, so we cap utterances at 6\,s. Below the cap, length is set by the
-music: we cut at pauses of 0.4\,s or more, which separate phrases (p90 of all pauses is
-0.66\,s, and shorter ones lie mostly inside \emph{sigimsae}), and a pauseless melisma at the
-widest gap between its notes, never inside a held tone. This yields 31,529 utterances
-(33.48\,h) of 2 to 6\,s. Notes come from ROSVOT \citep{li2024rosvot}, and f0
+132\,s (2,557 sections, 37.5\,h), so they cannot be used whole. We cap utterances at 6\,s for
+the aligner (see Alignment), and below the cap let the music set their length: we cut at
+pauses of 0.4\,s or more, which separate phrases (p90 of all pauses is 0.66\,s, and shorter
+ones lie mostly inside \emph{sigimsae}), and a pauseless melisma at the widest gap between
+its notes, never inside a held tone. This yields 31,529 utterances (33.48\,h) of 2 to 6\,s.
+Notes come from ROSVOT \citep{li2024rosvot}, and f0
 from RMVPE \citep{wei2023rmvpe} over 55--750\,Hz, since the 65\,Hz default floor of
 DiffSinger mutes low male voices.
 
@@ -126,10 +122,14 @@ equal-length stretches pinned by exact matches. It takes the canonical spelling 
 measurable cost to the trained model (Appendix~\ref{apd:lyrics}).
 
 \textbf{Alignment.} Phone boundaries decide what the model hears for each phone and for how
-long. In the corpus labels built from MFA on Whisper's text, 26.4\% of phones last 30\,ms or
-less, boundaries it declined to place, and 52.2\% of corpus time is labelled silence while a
-note covers it: a held tone, not a rest, and as common in long clips as in short ones. We
-absorb such silence into the preceding phone and fine-tune SOFA \citep{sofa}, a singing
+long. In the corpus labels built from the Korean acoustic model of MFA
+\citep{mcauliffe2017mfa} on Whisper's text, 26.4\% of phones last 30\,ms or less, boundaries
+it declined to place, and 52.2\% of corpus time is labelled silence while a note covers it:
+a held tone, not a rest. Length is not the cause. Rejoining 2,800 utterances into clips of
+6 to 20\,s and aligning them again, with the same audio and words, raises MFA's raw phones at
+the floor by only 1.9 points (95\% CI $[1.6, 2.2]$), note-covered silence by 0.4
+($[0.1, 0.7]$), and failures from 2.8\% to 4.8\%. Longer clips are slightly worse, which
+sets the 6\,s cap, but no length fixes a speech model. We absorb such silence into the preceding phone and fine-tune SOFA \citep{sofa}, a singing
 aligner with no Korean checkpoint, from its multilingual one with a new phoneme head, in two
 rounds. The first learns from MFA's labels on Whisper's text, trusting boundaries only in
 utterances with at most 15\% of phones at the floor (4,501 of 26,955), lest it learn the
