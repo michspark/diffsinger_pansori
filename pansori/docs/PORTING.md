@@ -154,8 +154,9 @@ Facts that could not have been known at porting time and only came out in actual
 The conclusions in `SEGMENTATION_VERDICT.md` and `alignment/FIELD_CHECK.md` are about
 pansori and about this data, so they remain valid no matter what the architecture changes to.
 
-- **Utterances must be 6 seconds or less.** korean_mfa was trained on speech and alignment
-  collapses past 6 s.
+- **Utterances are 6 seconds or less.** Chosen from a ten-clip pilot where korean_mfa seemed
+  to collapse past 6 s; the corpus later showed only a slow decline
+  (`SEGMENTATION_VERDICT.md` §6). Every label downstream is built on the cap.
 - **Re-segmentation is mandatory.** Of the 37.5 h of labelled sung sections, only 3.3 h are
   under 21 s.
 - **Join on the 8-digit uuid prefix.** The path strings in `labels_2.json` mix NFC and NFD.

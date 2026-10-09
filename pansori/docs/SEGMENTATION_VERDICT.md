@@ -1,5 +1,10 @@
 # Verdict on plan A — can korean_mfa forced alignment give us pansori `ph_durs`?
 
+> **Superseded in part by §6 (2026-10-09).** On the corpus, MFA does not collapse past
+> 6 s: aligning the same audio as one 6–20 s clip instead of its 2–6 s parts adds +1.9
+> points of floor phones and +0.4 points of voiced silence. The 6 s cap stands, but not
+> for the reason §2 gives.
+
 **Verdict: 🔶 plan A holds, conditionally** — the phoneme table is fine. Alignment quality
 **depends strongly on utterance length**, and **it holds when cut to 6 seconds or less and
 collapses above that**.
@@ -212,3 +217,73 @@ compatible with the OpenVPI family.
 
 **Next action: open `alignment_review.html` in a browser and check that the five items under
 6 s actually sound right.** If they do, proceed with recommendation 1 (re-splitting).
+
+
+---
+
+## 6. Measured on the corpus (2026-10-09): no cliff at 6 s
+
+§3 asked for the 6 s boundary to be re-checked on more than ten clips. The pilot's clips
+and alignments no longer exist, and 01_segment.py must not be re-run, so the long clips are
+rebuilt from the current corpus: 2–4 consecutive utterances of one song, same mode, joined
+wherever the segmenter had cut them only for length (every gap ≥ 0 s and < 0.4 s, the
+pause threshold). Each merged span is re-cut from the source audio and aligned once by MFA
+with korean_mfa and the parts' own Whisper text joined, so the comparison is paired: same
+audio, same words, same aligner, only the length differs.
+
+Sample: 400 spans per 2 s bucket from 6 to 20 s (2,800 spans, 379 recordings, no utterance
+in two spans, songs drawn round-robin), from 28,427 candidates. Script:
+`pansori/experiments/long_utterance_mfa.py`; numbers: `pansori/paper/numbers/long_utterance_mfa.json`.
+
+**Metrics.** *Floor* = non-silence phones ≤ 0.031 s, % of phones (the §2 metric, from MFA's
+own TextGrid). *Voiced silence* = % of ROSVOT-note-covered time MFA labels silence — the
+quantity 06_merge absorbs. §2's "silence ≥ 1 s" is not used: it grows with clip length by
+construction. On the corpus's own 2–6 s utterances it is already present in 42–75% of
+clips, which contradicts §2's "not a single instance" under 6 s:
+
+| Length | n | Floor % | Voiced silence % | Has silence ≥ 1 s % |
+|---|---:|---:|---:|---:|
+| 2-3 s | 5,466 | 35.2 | 50.2 | 42.5 |
+| 3-4 s | 10,224 | 36.6 | 51.9 | 58.1 |
+| 4-5 s | 6,594 | 37.0 | 53.1 | 68.5 |
+| 5-6 s | 4,671 | 36.5 | 53.3 | 75.0 |
+
+**Paired result** (merged minus its own parts, mean difference with 95% bootstrap CI over
+spans; MFA failures = spans with no TextGrid, every part of which did align):
+
+| Length | n | Floor % parts → merged | Δ floor | Voiced sil. % parts → merged | Δ voiced sil. | MFA failed |
+|---|---:|---:|---:|---:|---:|---:|
+| 6-8 s | 391 | 35.1 → 36.4 | +1.3 [+0.3, +2.3] | 50.7 → 50.3 | -0.4 [-1.3, +0.5] | 9/400 |
+| 8-10 s | 381 | 37.0 → 38.7 | +1.8 [+0.8, +2.7] | 52.8 → 53.3 | +0.5 [-0.5, +1.4] | 19/400 |
+| 10-12 s | 379 | 34.3 → 36.1 | +1.8 [+0.8, +2.7] | 49.3 → 49.3 | -0.0 [-0.9, +0.9] | 21/400 |
+| 12-14 s | 382 | 34.8 → 36.3 | +1.5 [+0.7, +2.4] | 51.1 → 51.1 | +0.0 [-0.9, +1.0] | 18/400 |
+| 14-16 s | 374 | 33.3 → 35.1 | +1.9 [+1.1, +2.6] | 49.7 → 50.3 | +0.7 [-0.2, +1.5] | 26/400 |
+| 16-18 s | 377 | 34.1 → 36.7 | +2.6 [+1.8, +3.3] | 49.7 → 50.4 | +0.7 [-0.1, +1.6] | 23/400 |
+| 18-20 s | 383 | 31.0 → 33.6 | +2.6 [+1.9, +3.3] | 47.8 → 49.1 | +1.3 [+0.6, +2.0] | 17/400 |
+| **all** | 2667 | 34.2 → 36.1 | **+1.9** [+1.6, +2.2] | 50.2 → 50.6 | **+0.4** [+0.1, +0.7] | 133/2800 |
+
+For reference, MFA failed on 2.8% of the corpus's alignable 2–6 s utterances (765 of 27,720).
+
+**Reading.**
+- Floor phones rise by 1–3 points with length and keep rising (+1.3 at 6–8 s, +2.6 at
+  16–20 s). Real, small, and gradual: no step at 6 s.
+- Voiced silence does not move: +0.4 points over all spans, inside ±1 point in every bucket
+  up to 18 s. MFA mislabels about half of sung time as silence at every length; that is
+  why 06_merge absorbs it and why SOFA replaced MFA, not a long-clip effect.
+- MFA's outright failure rate rises from 2.8% (2–6 s) to 2.3–6.5% (6–20 s).
+- "Swallowed spans" (§2's `01ed19bb_0006`) are not a length effect. A merged clip's longest
+  silence exceeds the parts' (on one timeline, gaps counted) by ≥ 1 s in 7–19% of spans;
+  the parts' exceeds the merged clip's by ≥ 1 s in 12–20%. It is noise in both directions.
+- Zero-gap joins (a held tone cut mid-note, 979 spans) and pause joins (1,688) agree:
+  Δ floor +2.1 and +1.8.
+
+**Why the pilot differed** (not measured): the pilot's long clips came from a 15 s-cap
+segmentation and were transcribed by Whisper as long clips, so missing lyrics would have
+been aligned as silence, the confound §3 already named. Here the long clips carry the
+short clips' transcriptions.
+
+**Consequence.** The 6 s cap is not justified by MFA. It stays because (a) it is what every
+downstream label was built on, (b) MFA's failures and floor phones do rise slowly with
+length, and (c) Whisper and ROSVOT are not tested here. Text citing "MFA collapses past
+6 s" (PIPELINE.md, the paper's Segmentation paragraph) should say instead what this section
+measured.

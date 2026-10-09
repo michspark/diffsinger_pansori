@@ -95,13 +95,15 @@ Cuts each piece into **2–6 second utterances**. `item_name` has the form
 strings in `labels_2.json` mix NFC and NFD, so the join is on the uuid rather than the
 filename).
 
-**Why 6 seconds.** korean_mfa was trained on speech, so its self-loop penalty accumulates
-over long sustained tones. Past 6 seconds the alignment collapses — phonemes pile onto the
-0.03 s floor value and the remainder is swallowed whole as silence. Measured on a sample of
-10: under 6 seconds there is **not a single** silence of 1 second or more; over 6 seconds an
-average of **4.06 s** was registered as silence. The sample is small, so this is a strong
-hypothesis rather than a settled threshold — but re-segmentation itself is not optional: of
-the 37.5 hours of labelled sung sections, only 3.3 hours are under 21 seconds.
+**Why 6 seconds.** Chosen from a pilot of ten clips, where MFA appeared to collapse past
+6 s (phones piling onto the 0.03 s floor, long stretches written off as silence). Measured
+on the corpus since (`SEGMENTATION_VERDICT.md` §6), there is no cliff: aligning the same
+audio as one 6–20 s clip instead of its 2–6 s parts adds +1.9 points of floor phones
+(rising from +1.3 at 6–8 s to +2.6 at 16–20 s) and +0.4 points of voiced silence, and MFA's
+failure rate goes from 2.8% to 2.3–6.5%. The cap stays because every label downstream was
+built on it and MFA degrades slowly, not because it falls apart. Re-segmentation itself was
+never optional: of the 37.5 hours of labelled sung sections, only 3.3 hours are under 21
+seconds.
 
 **Where it cuts** (`segment_span`):
 
@@ -769,7 +771,7 @@ python pansori/examples/build_report.py
 - `requirements.txt` has no `torchaudio` (RMVPE uses it)
 
 **Data**
-- Utterances must be **6 seconds or less** — past that, MFA alignment collapses
+- Utterances are **6 seconds or less**; MFA degrades slowly with length, with no cliff at 6 s (`SEGMENTATION_VERDICT.md` §6)
 - The path strings in `labels_2.json` mix NFC and NFD → **join on the 8-digit uuid prefix**
 - Silence covered by a note is not a rest but a **sustained tone** (52.2% of corpus time)
 

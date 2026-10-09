@@ -33,10 +33,10 @@ from pansori_lib import TARGET_SAMPLE_RATE, extract_uuid
 EXCLUDED_LABELS = {"아니리", "창조"}
 
 # Utterance length bounds in seconds.
-# The 6s cap comes from the MFA alignment check (pansori/docs/SEGMENTATION_VERDICT.md):
-# korean_mfa's speech-trained self-loop penalty accumulates on long sustained
-# notes, and above ~6s the aligner collapses (phones pinned to the 0.03s floor,
-# the rest swallowed as silence). Utterances at/under 6s aligned cleanly.
+# The 6s cap came from a ten-clip MFA pilot (pansori/docs/SEGMENTATION_VERDICT.md §2)
+# that showed korean_mfa collapsing on longer clips. Measured on the corpus later
+# (§6), the decline is slow and has no step at 6s; the cap stays because every
+# downstream label is built on it.
 MIN_UTTERANCE_SEC: float = 2.0
 MAX_UTTERANCE_SEC: float = 6.0
 
