@@ -1,18 +1,17 @@
-// System figure for the AMIW paper (Fig. 1): one slide sized to the figure.
+// Pipeline figure for the AMIW paper (Fig. 1): one slide sized to the figure.
 //
 //   NODE_PATH=<dir with pptxgenjs> node pansori/paper/figs/pipeline_fig.js
 //   soffice --headless --convert-to pdf --outdir pansori/paper/figs pansori/paper/figs/pipeline.pptx
 //
-// Top row (offline): how the recordings became the four labels DiffSinger trains on. Bottom
-// row (online): the tool's plan, then the two models and the vocoder that render it. What
-// was tried and dropped at each step is argued in Section 3, not drawn. Every number is the
-// one the paper's text cites; change them there first.
+// One box per paragraph of Section 3, titled as the paragraph is: Corpus, Segmentation, Lyrics,
+// Alignment, Singing model. The text path (top) and the pitch path (bottom) both start from the
+// segmented utterances and meet at the singing model; each box ends with the label it hands
+// on. Corpus sizes and step counts stay in the text: the figure shows the order of the steps.
 const path = require('path');
 const pptxgen = require('pptxgenjs');
 
-const W = 8.0, H = 1.86;
-const INK = '1F2D3A', KEEP = '2F5D62', KEEP_FILL = 'E6EFF0', TOOL = '6B4E16', TOOL_FILL = 'F6EEDD',
-  MUTED = '5A6670';
+const W = 8.0, H = 1.66;
+const INK = '1F2D3A', KEEP = '2F5D62', KEEP_FILL = 'E6EFF0', MUTED = '5A6670';
 const FONT = 'Arial';
 
 const pres = new pptxgen();
@@ -21,31 +20,22 @@ pres.layout = 'FIG';
 const slide = pres.addSlide();
 slide.background = { color: 'FFFFFF' };
 
-const MARGIN = 0.1, GAP = 0.2, N = 6;
-const BOX_W = (W - 2 * MARGIN - (N - 1) * GAP) / N;
+const MARGIN = 0.05, GAP = 0.18, BOX_W = 1.1, ROW_H = 0.72;
+const A_Y = 0.05, B_Y = A_Y + ROW_H + 0.12;
 const colX = i => MARGIN + i * (BOX_W + GAP);
 const midX = i => colX(i) + BOX_W / 2;
-const ROW_H = 0.62, A_Y = 0.05, B_Y = 0.97, NOTE_Y = B_Y + ROW_H + 0.04;
-const BUS_Y = A_Y + ROW_H + 0.15;
-const NB = ' ';   // keeps a number on the same line as its unit
+const NB = ' ';   // keeps a number on the same line as its unit
 
-const STYLE = {
-  data:  { line: KEEP, fill: KEEP_FILL },
-  model: { line: INK, fill: 'FFFFFF' },
-  tool:  { line: TOOL, fill: TOOL_FILL },
-};
-
-function box(i, y, title, body, kind, w = BOX_W) {
-  const s = STYLE[kind];
+function box(x, y, w, title, body, out) {
   slide.addText([
     { text: title, options: { bold: true, fontSize: 10, color: INK, breakLine: true } },
-    { text: body, options: { fontSize: 8.5, color: INK } },
+    { text: body, options: { fontSize: 8.5, color: INK, breakLine: true } },
+    { text: `→ ${out}`, options: { fontSize: 8.5, italic: true, color: KEEP } },
   ], {
     shape: pres.shapes.ROUNDED_RECTANGLE, rectRadius: 0.06,
-    x: colX(i), y, w, h: ROW_H,
-    fill: { color: s.fill }, line: { color: s.line, width: kind === 'model' ? 1.5 : 1 },
+    x, y, w, h: ROW_H,
+    fill: { color: KEEP_FILL }, line: { color: KEEP, width: 1 },
     fontFace: FONT, valign: 'top', align: 'left', margin: 4, paraSpaceAfter: 1,
-    objectName: `${kind}-${i}`,
   });
 }
 
@@ -56,44 +46,48 @@ function line(x1, y1, x2, y2, color, head) {
     line: { color, width: 1.25, endArrowType: head ? 'triangle' : undefined },
   });
 }
-const right = (i, y, color) => line(colX(i) + BOX_W, y + ROW_H / 2, colX(i + 1), y + ROW_H / 2, color, true);
 
-function note(x, y, w, text, align) {
-  slide.addText(text, { x, y, w, h: 0.2, fontFace: FONT, fontSize: 9, italic: true, color: MUTED,
-    margin: 0, align, valign: 'middle', isTextBox: true });
-}
+// Data preparation: the first four paragraphs, plus the notes and f0 the Segmentation
+// paragraph takes from the cut utterances.
+box(colX(0), A_Y, BOX_W, 'Corpus', 'HT-Demucs vocals; no aniri', 'sung spans');
+box(colX(1), A_Y, BOX_W, 'Segmentation', `pauses, melisma gaps; ≤${NB}6${NB}s`, 'utterances');
+box(colX(2), A_Y, BOX_W, 'Lyrics', 'Whisper + changbon', 'phonemes');
+box(colX(3), A_Y, BOX_W, 'Alignment', 'SOFA, fine-tuned from MFA labels', 'boundaries');
+box(colX(2), B_Y, 2 * BOX_W + GAP, 'Notes and f0', 'ROSVOT notes, RMVPE f0', 'notes, f0');
 
-// A. Offline: recordings to the four labels.
-box(0, A_Y, 'Recordings', '394; HT-Demucs vocals', 'data');
-box(1, A_Y, `Cut to ≤${NB}6${NB}s`, `31,529 utterances`, 'data');
-box(2, A_Y, 'Phonemes', 'Whisper + changbon spelling', 'data');
-box(3, A_Y, 'Phone timing', 'SOFA, fine-tuned from MFA labels', 'data');
-box(4, A_Y, 'Notes', 'ROSVOT', 'data');
-box(5, A_Y, 'f0', `RMVPE, 55${NB}Hz floor`, 'data');
-right(0, A_Y, KEEP);
-right(1, A_Y, KEEP);
+const midA = A_Y + ROW_H / 2, midB = B_Y + ROW_H / 2;
+for (let i = 0; i < 3; i++) line(colX(i) + BOX_W, midA, colX(i + 1), midA, KEEP, true);
+line(midX(1), A_Y + ROW_H, midX(1), midB, KEEP, false);
+line(midX(1), midB, colX(2), midB, KEEP, true);
 
-// The four labels are one corpus, which trains the variance and acoustic models.
-for (let i = 2; i < N; i++) line(midX(i), A_Y + ROW_H, midX(i), BUS_Y, KEEP, false);
-line(midX(2), BUS_Y, midX(5), BUS_Y, KEEP, false);
-line(midX(3), BUS_Y, midX(3), B_Y, KEEP, true);
-line(midX(4), BUS_Y, midX(4), B_Y, KEEP, true);
-note(MARGIN, BUS_Y - 0.1, midX(2) - MARGIN - 0.08,
-  `corpus: 26,955 utt., 28.93${NB}h, 23 singers`, 'right');
+// Singing model: the four labels train the variance and acoustic models; the vocoder is
+// pretrained.
+const SX = colX(4), SW = W - MARGIN - SX, SY = A_Y, SH = B_Y + ROW_H - A_Y;
+slide.addText([
+  { text: 'Singing model', options: { bold: true, fontSize: 10, color: INK } },
+  { text: '  DiffSinger (openvpi)', options: { fontSize: 8.5, italic: true, color: MUTED } },
+], {
+  shape: pres.shapes.ROUNDED_RECTANGLE, rectRadius: 0.06,
+  x: SX, y: SY, w: SW, h: SH, fill: { color: 'FFFFFF' }, line: { color: INK, width: 1.5 },
+  fontFace: FONT, valign: 'top', align: 'left', margin: 4,
+});
+line(colX(3) + BOX_W, midA, SX, midA, KEEP, true);
+line(colX(3) + BOX_W, midB, SX, midB, KEEP, true);
 
-// B. Online: the tool's plan, rendered by DiffSinger.
-box(0, B_Y, 'Lyrics + mode', 'from the user', 'tool');
-box(1, B_Y, 'Retrieve skeletons', `14,244 phrases`, 'tool');
-box(2, B_Y, 'Plan', 'user binds syllables to notes', 'tool');
-box(3, B_Y, 'Variance', `durations, f0; 25.1${NB}M`, 'model');
-box(4, B_Y, 'Acoustic', `mel spectrogram; 69.1${NB}M`, 'model');
-box(5, B_Y, 'Vocoder', `NSF-HiFiGAN; 44.1${NB}kHz audio`, 'model');
-right(0, B_Y, TOOL);
-right(1, B_Y, TOOL);
-right(2, B_Y, TOOL);
-right(3, B_Y, INK);
-right(4, B_Y, INK);
-note(colX(0), NOTE_Y, 3 * BOX_W + 2 * GAP, 'the tool: no melody model, editable before rendering', 'center');
-note(colX(3), NOTE_Y, 3 * BOX_W + 2 * GAP, 'DiffSinger (openvpi), trained from scratch', 'center');
+const IN_PAD = 0.07, IN_GAP = 0.13, IN_H = 0.6;
+const IN_W = (SW - 2 * IN_PAD - 2 * IN_GAP) / 3, IN_Y = SY + (SH - IN_H) / 2 + 0.08;
+[['Variance', 'durations, f0'], ['Acoustic', 'mel spectrogram'], ['Vocoder', 'NSF-HiFiGAN']]
+  .forEach(([title, body], k) => {
+    const x = SX + IN_PAD + k * (IN_W + IN_GAP);
+    slide.addText([
+      { text: title, options: { bold: true, fontSize: 9, color: INK, breakLine: true } },
+      { text: body, options: { fontSize: 7.5, color: INK } },
+    ], {
+      shape: pres.shapes.ROUNDED_RECTANGLE, rectRadius: 0.05,
+      x, y: IN_Y, w: IN_W, h: IN_H, fill: { color: 'FFFFFF' }, line: { color: INK, width: 1 },
+      fontFace: FONT, valign: 'top', align: 'left', margin: 2, paraSpaceAfter: 1,
+    });
+    if (k < 2) line(x + IN_W, IN_Y + IN_H / 2, x + IN_W + IN_GAP, IN_Y + IN_H / 2, INK, true);
+  });
 
 pres.writeFile({ fileName: path.join(__dirname, 'pipeline.pptx') }).then(f => console.log('wrote', f));

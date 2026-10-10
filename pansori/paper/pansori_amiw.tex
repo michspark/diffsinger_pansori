@@ -92,13 +92,14 @@ sing lyrics in a style named by a caption; we use it, zero-shot and fine-tuned o
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{pipeline.pdf}
-\caption{The system. Offline (top), recordings become four labels that train the singing
-model (bottom right); online, the tool's plan (bottom left) drives it.}
+\caption{The pipeline, one box per paragraph of Section~\ref{sec:pipeline}. Each step
+hands on a label; phonemes, boundaries, notes and f0 train the singing model. In the tool
+(Section~\ref{sec:tool}), a plan of notes and syllables takes their place.}
 \label{fig:system}
 \end{figure}
 
 \textbf{Corpus.} We build on the corpus of \citet{park2026frame}, whose frame-level annotations mark each section of a recording with its mode or as spoken narration (\emph{aniri}). Vocals are separated by HT-Demucs \citep{rouard2023htdemucs}, spans annotated as \emph{aniri} are excluded, and each sung span
-keeps its mode. An SVS model learns from four labels per utterance (Fig.~\ref{fig:system}, top row): phonemes, phone boundaries, notes and f0, none of which pansori has.
+keeps its mode. An SVS model learns from four labels per utterance (Fig.~\ref{fig:system}): phonemes, phone boundaries, notes and f0, none of which pansori has.
 
 \textbf{Segmentation.} A sung section runs a median of 27\,s, and a tenth run past 132\,s,
 too long to use whole. We cap utterances at 6\,s for the aligner and, below the cap, cut
