@@ -30,19 +30,7 @@
 \maketitle
 
 \begin{abstract}
-We present a composition tool for pansori, the Korean tradition of solo narrative singing,
-which survives only as recordings, with no scores and no aligned lyrics. From lyrics, a mode
-and a singer, the tool returns an editable plan of notes retrieved from 14,244 corpus
-phrases, and a singing-voice synthesis (SVS) model trained on those recordings sings the
-plan with the genre's ornament. The corpus itself is the other contribution: 394 recordings
-became SVS training data through tools built for speech, with each step measured. A speech
-aligner hears a held tone as silence over 52.2\% of corpus time, and a fine-tuned singing
-aligner cuts the phones at its 30\,ms floor from 26.4\% to 2.7\%; snapping transcripts to the
-published libretto made a trained model worse, borrowing only its spelling did not. The
-model reproduces how much the voice moves inside a note but not where, so the plan, not a
-melody model, carries the music. On 125 held-out passages, the tool's unedited output lies at
-a kernel audio distance of 15.4 from the recordings, against 43.3 for a general song model
-and 0.27 between halves of the recordings.
+We present a composition tool for pansori, the Korean tradition of solo narrative singing, which survives only as recordings, with no scores and no aligned lyrics. From lyrics, a mode and a singer, the tool returns an editable plan of notes retrieved from 14,244 corpus phrases, and a singing-voice synthesis (SVS) model trained on those recordings sings the plan with the genre's ornament. We built a preprocessing pipeline that turns unaligned recordings into SVS training data, applied here to 394 recordings of an existing pansori corpus. It yields 28.9 hours of aligned singing from 23 singers. On 125 held-out passages, the tool's unedited output lies at a kernel audio distance of 15.4 from the recordings, against 43.3 for a general song model and 0.27 between halves of the recordings.
 \end{abstract}
 
 \begin{keywords}
@@ -53,12 +41,8 @@ human-AI co-creation
 %==============================================================================
 \section{Introduction}
 %==============================================================================
-In \emph{pansori}, one singer and one drummer perform a story that can run for hours. It
-has passed down orally since the late 17th century, without notation
-\citep{park2024towards}. The voice is deliberately rough, and its long sustained tones carry
-\emph{sigimsae}, microtonal ornaments: a wide shake on one degree, a bend or downward slide
-on another. A mode (\emph{jo}; \emph{gyemyeonjo} and \emph{ujo} are the principal two) is
-defined by its pitch set, its \emph{sigimsae} and the vocal timbre together
+In \emph{pansori}, one singer and one drummer perform a story that can run for hours. It has passed down orally since the late 17th century, without notation
+\citep{park2024towards}. The voice is deliberately rough, and its long sustained tones carry \emph{sigimsae}, microtonal ornaments: a wide shake on one degree, a bend or downward slide on another. A mode (\emph{jo}; \emph{gyemyeonjo} and \emph{ujo} are the principal two) is defined by its pitch set, its \emph{sigimsae} and the vocal timbre together
 \citep{park2026frame}.
 
 An SVS model needs recordings with time-aligned phonemes and notes, and pansori has
@@ -231,7 +215,7 @@ No practitioner has used the tool yet; that study, and a code release, come next
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.5\linewidth]{demo.png}
+\includegraphics[width=0.8\linewidth]{demo.png}
 \caption{The tool of Section~\ref{sec:tool} (UI in Korean), one panel per step. \ding{172}~lyrics; \ding{173}~mode; \ding{174}~three
 retrieved skeletons with measured shape labels; \ding{175}~\emph{butimsae} editor, where
 syllable chips are dragged across notes and ``--'' marks a held syllable;
@@ -240,31 +224,54 @@ syllable chips are dragged across notes and ``--'' marks a held syllable;
 \end{figure}
 
 \section{Matching Transcripts to the Libretto}\label{apd:lyrics}
+Whisper misspells what it mishears, most often archaic words and names. Each of the five
+pieces has a published libretto (\emph{changbon}) that spells them correctly, but the
+libretto is not what was sung: each singer and school performs its own version. This
+appendix describes how we take the libretto's spelling without its text.
+
+Texts are compared letter by letter. A Hangul syllable is a block of two or three letters
+(\emph{jamo}; \emph{han} = h+a+n), and a misheard syllable usually keeps most of them, so a
+letter-level comparison tolerates near-misses that a syllable-level one would count as total
+mismatches.
 
 \textbf{Finding the piece.} A recording's transcripts, joined in time order, are scored
-against every libretto by the density of shared jamo 5-grams; the best must beat the others'
-mean by 1.5$\times$. 295 recordings pass, and for all 295 the chosen libretto is the piece
-named in the filename, which the matching never reads.
+against every libretto by the density of shared five-letter sequences (jamo 5-grams).
+Chance agreement grows with the length of the transcript, so the best libretto must beat
+the mean of the others by a margin of 1.5$\times$ rather than clear a fixed density. The
+margin was set with the gate open, against the piece named in each filename, which the
+matching never reads: the choice was right for 75\% of recordings with a margin of
+1.2--1.5, 95\% at 1.5--1.8 and 100\% above 1.8. Of 394 recordings, 295 pass; 293 of them
+choose the piece in the filename (for 16 named only by scene, the piece the scene belongs
+to), and the two that do not, sides of a historical \emph{Simcheongga} set, take no span
+from the wrong libretto in the next step. Of the other 99, 7 have no sung section, and 92
+fall below the margin (1.08--1.49$\times$): 8 are \emph{danga} or other pieces outside the
+five, which have no libretto, and 84 are excerpts of the five whose transcript stands no
+clearer above one libretto than above the rest. All 99 keep Whisper's text.
 
-\textbf{Replacing whole spans.} Within an anchored recording, one monotone diff over the
-song carries each utterance to a libretto span, accepted at a jamo similarity of 0.45 or
-more and at most 8 syllables per second. This rewrote 11,174 of 31,529 utterances. Over
-those, the span has a median 1.00 times Whisper's syllable count but 2.00 times at p90 where
-the similarity is below 0.55, so the label asks the aligner for syllables that were never
-sung (Fig.~\ref{fig:lyrics}). A model trained on these labels, against one trained on Whisper's with the aligner
-held fixed, lost voiced/unvoiced agreement on held-out utterances whose lyrics changed,
-21 items to 6 (sign test $p{=}0.006$), and not on unchanged controls (10 to 12).
+\textbf{Taking whole spans.} Within each matched recording, a single in-order alignment of
+its transcripts to its libretto assigns each utterance a libretto span. A span is accepted
+if its letter-level similarity to the transcript is at least 0.45 and it implies at most
+8 syllables per second; the fastest utterance in the final corpus runs at 7.0, and a span
+far above that is a window that slipped and swallowed a paragraph. Taking the accepted span
+as the label (the \emph{snapped} text) rewrote 11,174 of 31,529 utterances. The span
+usually matches what was sung in length (a median of 1.00 times Whisper's syllable count),
+but where similarity is below 0.55 it runs to 2.00 times at the 90th percentile: the label
+then asks the aligner to place syllables that were never sung (Fig.~\ref{fig:lyrics}).
+A model trained on these labels, against one trained on Whisper's with the aligner held
+fixed, lost voiced/unvoiced agreement on held-out utterances whose lyrics changed, 21 to 6
+(sign test $p{=}0.006$), and not on unchanged controls (10 to 12).
 
-\textbf{The hybrid text.} Whisper's syllables are aligned semi-globally to the libretto
-around the accepted span (pair cost: jamo dissimilarity; unpaired Whisper syllable 1.1;
-skipped libretto syllable 0.6), so equal-length stretches pair one to one. A differing
-stretch is rewritten only if it pairs one to one, is at most 5 syllables long, and is pinned
-by exact matches on both sides (two on its inner side at an utterance edge). This rewrites 20,374 of the 91,955 syllables in
-matched utterances (22.2\%) and never changes a syllable count (Fig.~\ref{fig:lyrics}).
-Each text then gets its own
-aligner (Section~\ref{sec:pipeline}), and models trained on the two are compared on held-out
-utterances split by whether the text changed: none of nine sign tests reached $p{<}0.05$
-(60 held-out pairs $\times$ 3 seeds), so we keep the canonical spelling.
+\textbf{The hybrid text.} The hybrid text instead keeps Whisper's syllables and borrows
+only spelling. Whisper's syllables are aligned semi-globally to the libretto around the
+accepted span (pair cost: jamo dissimilarity; unpaired Whisper syllable 1.1; skipped
+libretto syllable 0.6), so equal-length stretches pair one to one. A differing stretch is
+rewritten only if it pairs one to one, is at most 5 syllables long, and is pinned by exact
+matches on both sides (two on its inner side at an utterance edge). This rewrites 20,374 of
+the 91,955 syllables in matched utterances (22.2\%) and never changes a syllable count
+(Fig.~\ref{fig:lyrics}). Whisper's text and the hybrid text each get their own SOFA
+fine-tune (Appendix~\ref{apd:sigimsae}), and models trained on the two are compared on
+held-out utterances split by whether the text changed: none of nine sign tests reached
+$p{<}0.05$ (60 held-out pairs $\times$ 3 seeds), so we keep the canonical spelling.
 
 \begin{figure}[h]
 \centering
@@ -300,19 +307,20 @@ Median phone (ms) & 80 & 151 & 157 \\
 
 \textbf{Alignment.} Table~\ref{tab:align} breaks down the aligner change of
 Section~\ref{sec:pipeline}. Most of MFA's short phones are its floor: 22.3\% of all phones
-sit exactly on 30\,ms, and onsets are hit hardest. SOFA round 1 learns
-from MFA's labels on Whisper's text, trusting only the 4,501 of 26,955 utterances with at
-most 15\% of phones at the floor, lest it learn the floor too; round 2 learns from round
-1's alignment of the hybrid text, trusting 11,494. Most of the gain comes in round 1,
-before the lyrics change; round 2 removes a further 0.5 points.
+sit exactly on 30\,ms, and onsets are hit hardest. SOFA round 1 learns from MFA's labels
+on Whisper's text, but only from the 4,501 of 26,955 utterances with at most 15\% of phones
+at the floor, lest it learn the floor too; the rest contribute their phoneme sequence
+without timings. Round 2 learns from round 1's alignment of the hybrid text, where the
+same rule trusts 11,494. Most of the gain comes in round 1, before the lyrics change; round
+2 removes a further 0.5 points.
 
-\textbf{How much the voice moves.} On 19 held-out utterances, predicting f0 from the score with true durations, we compare
-the model of Section~\ref{sec:pipeline} (SOFA labels, hybrid text, median of 5 seeds)
-with our earlier FastSpeech2-style DiffSinger, trained on MFA labels and Whisper's text
-and rendered once, being deterministic. The ratio of synthesized to recorded
-within-note f0 variation rises from 0.29 to 0.95 (95\% CI of the paired difference
-$[0.35, 0.68]$, Holm $p{=}0.0003$), but correlation with the recorded contour, 0.04
-against 0.16, is not significant (Holm $p{=}0.24$). Architecture and labels change
-together between the two models, so the gain is not attributed to either alone.
+\textbf{How much the voice moves.} On 19 held-out utterances, f0 is predicted from the
+score with true durations. We compare the model of Section~\ref{sec:pipeline} (SOFA
+labels, hybrid text, median of 5 seeds) with our earlier FastSpeech2-style DiffSinger,
+trained on MFA labels and Whisper's text and rendered once, being deterministic. The ratio
+of synthesized to recorded within-note f0 variation rises from 0.29 to 0.95 (95\% CI of
+the paired difference $[0.35, 0.68]$, Holm $p{=}0.0003$), but the correlation with the
+recorded contour, 0.16 for the new model against 0.04, is not significant (Holm $p{=}0.24$). Architecture and labels
+change together between the two models, so the gain is not attributed to either alone.
 
 \end{document}
