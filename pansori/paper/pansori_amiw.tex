@@ -30,16 +30,19 @@
 \maketitle
 
 \begin{abstract}
-Pansori, the Korean tradition of solo narrative singing, survives only as recordings, with
-no scores and no aligned lyrics. We describe how 394 recordings became a singing-voice
-synthesis (SVS) model and a composition tool, and the measurement behind each step. A speech aligner hears 52.2\% of corpus time as silence where the singer holds a
-note; a fine-tuned singing aligner cuts the share of phones at the 30\,ms floor from
-26.4\% to 2.7\%. Snapping transcripts to the published libretto made a trained model worse;
-borrowing only its spelling, at the sung syllable count, did not. The model reproduces how
-much the voice moves inside a note but not where, so the tool retrieves note skeletons from
-14,244 corpus phrases and lets the user rebind the syllables. On 125 held-out passages, its
-unedited output lies at a kernel audio distance of 15.4 from the recordings, against 43.3
-for a general song model and 0.27 between halves of the recordings.
+We present a composition tool for pansori, the Korean tradition of solo narrative singing,
+which survives only as recordings, with no scores and no aligned lyrics. From lyrics, a mode
+and a singer, the tool returns an editable plan of notes retrieved from 14,244 corpus
+phrases, and a singing-voice synthesis (SVS) model trained on those recordings sings the
+plan with the genre's ornament. The corpus itself is the other contribution: 394 recordings
+became SVS training data through tools built for speech, with each step measured. A speech
+aligner hears a held tone as silence over 52.2\% of corpus time, and a fine-tuned singing
+aligner cuts the phones at its 30\,ms floor from 26.4\% to 2.7\%; snapping transcripts to the
+published libretto made a trained model worse, borrowing only its spelling did not. The
+model reproduces how much the voice moves inside a note but not where, so the plan, not a
+melody model, carries the music. On 125 held-out passages, the tool's unedited output lies at
+a kernel audio distance of 15.4 from the recordings, against 43.3 for a general song model
+and 0.27 between halves of the recordings.
 \end{abstract}
 
 \begin{keywords}
