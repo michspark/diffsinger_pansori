@@ -97,7 +97,9 @@ singing model trains on: phonemes, phone boundaries, notes and f0. In the tool
 \label{fig:system}
 \end{figure}
 
-\textbf{Corpus.} We build on the corpus of \citet{park2026frame}, whose frame-level annotations mark each section of a recording with its mode or as spoken narration (\emph{aniri}). Vocals are separated by HT-Demucs \citep{rouard2023htdemucs}, spans annotated as \emph{aniri} are excluded, and each sung span
+\textbf{Corpus.} We build on the corpus of \citet{park2026frame},
+whose frame-level annotations mark each section of a recording with its mode or as spoken narration (\emph{aniri}).
+Vocals are separated by HT-Demucs \citep{rouard2023htdemucs}, spans annotated as \emph{aniri} are excluded, and each sung span
 keeps its mode. An SVS model learns from four labels per utterance (Fig.~\ref{fig:system}): phonemes, phone boundaries, notes and f0, none of which pansori has.
 
 \textbf{Segmentation.} A sung section runs a median of 27\,s, and a tenth run past 132\,s,
@@ -148,7 +150,8 @@ all 11,172 Hangul syllables, with one piece from each of five singers held out. 
 %==============================================================================
 \section{The Composition Tool}\label{sec:tool}
 %==============================================================================
-The tool lets a person who reads no score compose pansori on lyrics of their own. From
+The tool lets a person compose pansori on lyrics of their own
+(Appendix~\ref{apd:demo}). From
 the lyrics, a mode and a singer it returns an editable \emph{plan} of notes (pitch,
 duration in seconds, syllable) taken from real phrases, and renders only the plan sent
 back. The plan is the score DiffSinger reads, so what the user sees is what the model sings.
@@ -193,14 +196,11 @@ ACE-Step, pansori LoRA & 46.9 $[44.7, 49.0]$ & 3.36 $[3.16, 3.57]$ \\
 \end{tabular}
 \end{table}
 
-We ask how close the tool's output sounds to recorded pansori. For each of 125 passages
-from the five held-out pieces, whose phrases were also removed from the retrieval index,
-the tool renders the first retrieved skeleton of every chunk, unedited, in the voice of
-another held-out singer of the same gender. The reference is the first 30\,s of each
-recorded passage.
+We ask how close the tool's output sounds to recorded pansori. For each of 125 passages from the five held-out pieces,
+whose phrases were also removed from the retrieval index, the tool renders the first retrieved skeleton of every chunk,
+unedited, in the voice of another held-out singer of the same gender. The reference is the first 30\,s of each recorded passage.
 
-A distance between sets has no unit, so we read it against anchors (Table~\ref{tab:kad}).
-The distance is the kernel audio distance \citep[KAD;][]{chung2025kad}, an unbiased MMD,
+A distance between sets has no unit, so we read it against anchors (Table~\ref{tab:kad}). We used the kernel audio distance \citep[KAD;][]{chung2025kad}, an unbiased MMD,
 on LAION-CLAP \citep{wu2023clap} embeddings, which tracked listening tests best for
 generated music \citep{gui2024fad}; layer 4 of MERT \citep{li2024mert}, the best of its
 layers there, is a check. The kernel width is fixed from the recordings. The lowest anchor
@@ -213,7 +213,7 @@ recordings' were.
 Both embeddings place the tool's output closer to the recordings than either song model,
 including the one fine-tuned on pansori: by 27.9 and 31.5 on CLAP (95\% CIs over 2,000
 paired bootstraps of passages, $[-30.2, -25.6]$ and $[-34.0, -28.8]$), with the same sign on
-MERT. This agrees with our own informal listening. It is a relative position, not an
+MERT.  It is a relative position, not an
 absolute level: the output is still more than fifty times further from the recordings than
 they are from themselves. Nor is the contest even: our model knows these singers from other
 pieces and its checkpoints were selected on these pieces, the LoRA was trained on another
@@ -249,6 +249,22 @@ be released upon publication.
 \bibliography{acml26}
 
 \appendix
+\clearpage
+
+\section{The Tool's Interface}\label{apd:demo}
+
+Figure~\ref{fig:demo} shows the tool of Section~\ref{sec:tool}, one panel per step, in the
+order a user takes them.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\linewidth]{demo.png}
+\caption{The tool (UI in Korean). \ding{172}~lyrics; \ding{173}~mode; \ding{174}~three
+retrieved skeletons with measured shape labels; \ding{175}~\emph{butimsae} editor, where
+syllable chips are dragged across notes and ``--'' marks a held syllable;
+\ding{176}~singer; \ding{177}~render, or redraw ornaments.}
+\label{fig:demo}
+\end{figure}
 
 \section{Matching Transcripts to the Libretto}\label{apd:lyrics}
 
