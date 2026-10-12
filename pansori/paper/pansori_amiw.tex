@@ -15,8 +15,7 @@
 \jmlryear{2026}
 \jmlrworkshop{ACML 2026 Workshop: AMIW}
 
-\title[Composing Pansori Without a Melody Model]{Plan, Then Sing: Composing Pansori
-Without a Melody Model}
+\title[A Singing Voice Synthesis Composition Tool for Pansori]{A Singing Voice Synthesis Composition Tool for Pansori}
 
 \author{\Name{Anonymous Author} \Email{}\\ \addr Anonymous Institution}
 
@@ -87,13 +86,13 @@ than as notes \citep{shikarpur2024gamadhani}. Korean SVS
 sing lyrics in a style named by a caption; we use it, zero-shot and fine-tuned on pansori \citep{cho2025pansori}, to calibrate our measurement.
 
 %==============================================================================
-\section{From Recordings to a Singing Model}\label{sec:pipeline}
+\section{System Overview}\label{sec:pipeline}
 %==============================================================================
 \begin{figure}[t]
 \centering
-\includegraphics[width=\linewidth]{pipeline.pdf}
-\caption{The pipeline, one box per paragraph of Section~\ref{sec:pipeline}. Each step
-hands on a label; phonemes, boundaries, notes and f0 train the singing model. In the tool
+\includegraphics[width=\linewidth]{pipeline_v10_A_single_row.pdf}
+\caption{System overview. Preprocessing turns each recording into the four labels a
+singing model trains on: phonemes, phone boundaries, notes and f0. In the tool
 (Section~\ref{sec:tool}), a plan of notes and syllables takes their place.}
 \label{fig:system}
 \end{figure}
@@ -132,7 +131,7 @@ utterances with at most 15\% of phones at the floor (4,501 of 26,955), lest it l
 floor too. The second learns from the first round's alignment of the hybrid text, trusting
 11,494. Aligned by the second round, the final corpus (26,955 utterances, 28.93\,h,
 23 singers) has 2.7\% of phones at 30\,ms or less, and its median phone grows from 80 to
-157\,ms.
+157\,ms (Appendix~\ref{apd:sigimsae}).
 
 \textbf{Singing model.} These labels train the openvpi fork \citep{openvpi} of DiffSinger
 \citep{liu2022diffsinger}. A \emph{variance} model (25.1\,M parameters) predicts the phone
@@ -149,7 +148,8 @@ all 11,172 Hangul syllables, with one piece from each of five singers held out. 
 %==============================================================================
 \section{The Composition Tool}\label{sec:tool}
 %==============================================================================
-The tool is built for a person who reads no score, and leaves every musical decision to them. From lyrics, a mode and a singer it returns an editable \emph{plan} of notes (pitch,
+The tool lets a person who reads no score compose pansori on lyrics of their own. From
+the lyrics, a mode and a singer it returns an editable \emph{plan} of notes (pitch,
 duration in seconds, syllable) taken from real phrases, and renders only the plan sent
 back. The plan is the score DiffSinger reads, so what the user sees is what the model sings.
 
@@ -178,14 +178,15 @@ the plan, not a melody model, carries the music.
 \small
 \caption{Kernel audio distance ($\times 100$) to 125 held-out recordings, lower is closer;
 3 seeds per generated set, 95\% bootstrap intervals. Row 1: singer-stratified halves of the
-recordings (mean of 200 splits; 95th percentile).}
+recordings (mean of 200 splits; 95th percentile). Bold: closest generated set.}
 \label{tab:kad}
 \begin{tabular}{lcc}
 \toprule
  & CLAP & MERT layer 4 \\
 \midrule
-Recordings, half vs.\ half & 0.27 (0.41) & 0.034 (0.082) \\
-This tool, unedited & 15.4 $[13.8, 17.1]$ & 2.76 $[2.48, 3.11]$ \\
+\emph{Recordings, half vs.\ half} & \emph{0.27 (0.41)} & \emph{0.034 (0.082)} \\
+\midrule
+This tool, unedited & \textbf{15.4} $[13.8, 17.1]$ & \textbf{2.76} $[2.48, 3.11]$ \\
 ACE-Step 1.5, zero-shot & 43.3 $[41.4, 45.4]$ & 5.15 $[4.82, 5.47]$ \\
 ACE-Step, pansori LoRA & 46.9 $[44.7, 49.0]$ & 3.36 $[3.16, 3.57]$ \\
 \bottomrule
@@ -231,13 +232,14 @@ general song model's, zero-shot or fine-tuned on pansori. The corpus and the ret
 therefore carry part of the genre's character: the mode is in the notes, and the voice
 ornaments as much as a singer does.
 
-They do not carry all of it, and the output remains far from the recordings. Two gaps
-stand out. First, the melody is borrowed: each chunk takes a real phrase chosen by
+The tool is a first step toward a pansori generation model, and its output remains far
+from the recordings. Two of its parts stand in for models that do not yet exist. First,
+the melody is borrowed from the corpus: each chunk takes a real phrase chosen by
 syllable count and mode alone. General lyrics-to-melody models do not fit a genre where
 42.2\% of syllables carry several notes, but the 14,244 skeletons, aligned to syllables and
 labelled by mode, are training data for a pansori lyrics-to-note model that could replace
 retrieval. Second, the model ornaments as much as a singer but not where
-(Appendix~\ref{apd:sigimsae}). Conditioning the voice on where \emph{sigimsae} fall, for
+(Appendix~\ref{apd:sigimsae}); conditioning the voice on where \emph{sigimsae} fall, for
 instance on contour tokens learned from pansori f0 \citep{ju2026contour}, is the next step.
 No practitioner has used the tool yet; that study comes next, and code will
 be released upon publication.
@@ -262,7 +264,7 @@ song carries each utterance to a libretto span, accepted at a jamo similarity of
 more and at most 8 syllables per second. This rewrote 11,174 of 31,529 utterances. Over
 those, the span has a median 1.00 times Whisper's syllable count but 2.00 times at p90 where
 the similarity is below 0.55, so the label asks the aligner for syllables that were never
-sung. A model trained on these labels, against one trained on Whisper's with the aligner
+sung (Fig.~\ref{fig:lyrics}). A model trained on these labels, against one trained on Whisper's with the aligner
 held fixed, lost voiced/unvoiced agreement on held-out utterances whose lyrics changed,
 21 items to 6 (sign test $p{=}0.006$), and not on unchanged controls (10 to 12).
 
@@ -272,14 +274,51 @@ Whisper syllable left unpaired costs 1.1, and a skipped interior libretto syllab
 equal-length stretches pair one to one. A stretch that differs is rewritten only if it pairs
 one to one, is at most 5 syllables long, and is pinned by exact matches on both sides, or by
 two on its inner side at an utterance edge. This rewrites 20,374 of the 91,955 syllables in
-matched utterances (22.2\%) and never changes a syllable count. Each text then gets its own
+matched utterances (22.2\%) and never changes a syllable count (Fig.~\ref{fig:lyrics}).
+Each text then gets its own
 aligner (Section~\ref{sec:pipeline}), and models trained on the two are compared on held-out
 utterances split by whether the text changed: none of nine sign tests reached $p{<}0.05$
 (60 held-out pairs $\times$ 3 seeds), so we keep the canonical spelling.
 
-\section{How Much the Voice Moves}\label{apd:sigimsae}
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{lyrics_example.pdf}
+\caption{One utterance, three texts. Whisper hears seven syllables and mishears two
+(orange). The libretto span matched to it carries 22, fifteen of which the singer did not
+sing. The hybrid text keeps Whisper's seven and takes the libretto's spelling for the two:
+\emph{Sim-bongsa kkamjjak nolla}, ``Blind Sim, startled'' (\emph{Simcheongga}).}
+\label{fig:lyrics}
+\end{figure}
 
-On 19 held-out utterances, predicting f0 from the score with true durations, we compare
+\section{Alignment Labels and How Much the Voice Moves}\label{apd:sigimsae}
+
+\begin{table}[h]
+\centering
+\small
+\caption{Phone durations in the corpus labels (26,955 utterances, 28.93\,h), after silence
+covered by a note is absorbed. SOFA round 1 aligns Whisper's text, round 2 the hybrid text.}
+\label{tab:align}
+\begin{tabular}{lccc}
+\toprule
+ & MFA & SOFA, round 1 & SOFA, round 2 \\
+\midrule
+Phones $\le$30\,ms (\%) & 26.4 & 3.2 & 2.7 \\
+\quad exactly at MFA's 30\,ms floor & 22.3 & 0.0 & 0.0 \\
+\quad onsets & 34.8 & 4.6 & 3.5 \\
+\quad vowels & 25.8 & 2.5 & 2.0 \\
+\quad codas & 12.0 & 4.2 & 3.9 \\
+Median phone (ms) & 80 & 151 & 157 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Alignment.} Table~\ref{tab:align} breaks down the aligner change of
+Section~\ref{sec:pipeline}. Most of MFA's short phones are its floor: 22.3\% of all phones
+sit exactly on 30\,ms, and onsets are hit hardest. Most of the gain comes in the
+first SOFA round, before the lyrics change; the second round, on the hybrid text, removes
+a further 0.5 points.
+
+\textbf{How much the voice moves.} On 19 held-out utterances, predicting f0 from the score with true durations, we compare
 the model of Section~\ref{sec:pipeline} (SOFA labels, hybrid text, median of 5 seeds)
 with our earlier FastSpeech2-style DiffSinger, trained on MFA labels and Whisper's text
 and rendered once, being a deterministic regressor. The ratio of synthesized to recorded
@@ -288,7 +327,5 @@ $[0.35, 0.68]$, Holm $p{=}0.0003$), but correlation with the recorded contour, 0
 against 0.16, is not significant (Holm $p{=}0.24$). The model moves as much as a singer
 but not where the singer moves. Architecture and labels change together between the two
 models, so the gain is not attributed to either alone.
-
-% 여기에 figure 하나 넣어야 할듯 하고 
 
 \end{document}
