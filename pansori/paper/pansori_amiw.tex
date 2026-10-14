@@ -177,7 +177,7 @@ the plan, not a melody model, carries the music.
 \midrule
 \emph{Recordings, half vs.\ half} & \emph{0.27 (0.41)} & \emph{0.034 (0.082)} \\
 \midrule
-This tool, unedited & \textbf{15.4} $[13.8, 17.1]$ & \textbf{2.76} $[2.48, 3.11]$ \\
+This tool, unedited & \textbf{15.4} $[13.8, 17.2]$ & \textbf{2.73} $[2.47, 3.08]$ \\
 ACE-Step 1.5, zero-shot & 43.3 $[41.4, 45.4]$ & 5.15 $[4.82, 5.47]$ \\
 ACE-Step, pansori LoRA & 46.9 $[44.7, 49.0]$ & 3.36 $[3.16, 3.57]$ \\
 \bottomrule
@@ -196,10 +196,10 @@ recordings, and what a song model makes of the same lyrics: ACE-Step~1.5 \citep{
 ACE-Step \citep{gong2025acestep} with the pansori LoRA of \citet{cho2025pansori} at its best
 reported setting. Their vocals are separated from the accompaniment as the recordings' were.
 
-Both embeddings place the tool's output closer to the recordings than either song model, including the one fine-tuned on pansori: by 27.9 and 31.5 on CLAP (95\% CIs
-$[25.6, 30.2]$ and $[28.8, 34.0]$, 2,000 paired bootstraps), with the same sign on MERT;
+Both embeddings place the tool's output closer to the recordings than either song model, including the one fine-tuned on pansori: by 27.8 and 31.4 on CLAP (95\% CIs
+$[25.5, 30.2]$ and $[28.7, 33.9]$, 2,000 paired bootstraps), with the same sign on MERT;
 our informal listening agrees. The embeddings disagree only on how the song models order: CLAP puts the LoRA 3.6 further than zero-shot, MERT 1.79 closer
-(Table~\ref{tab:kad}). On MERT, the tool's margin over the LoRA (0.60) is the smaller one. Its renders are shorter (22.4\,s against 29.5--30.0\,s).
+(Table~\ref{tab:kad}). On MERT, the tool's margin over the LoRA (0.62) is the smaller one. Its renders are shorter (22.4\,s against 29.5--30.0\,s).
 
 %==============================================================================
 \section{Conclusion and Future Work}\label{sec:conclusion}
