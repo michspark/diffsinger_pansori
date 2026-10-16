@@ -297,3 +297,43 @@ reloads and uncorrelated between the two questions. The summary table is recompu
 `ab_out/scores.json` at build time, so the page cannot disagree with the data above.
 
 No listening judgement is recorded yet.
+
+### 7.8 The same pair retrained (2026-10-16)
+
+The step-selected checkpoints of §7.6 were pruned on 2026-10-15 (every
+`checkpoints/pansori_*` kept only `model_ckpt_steps_40000.ckpt`), so both arms were trained
+again as `pansori_{ac,var}_{sofar,hyb2r}`, from the same configs and binaries, two at a time on
+one RTX 4090, logged to wandb group `lyrics-ab-retrain-1016`. The configs match the originals
+except `binarization_args.shuffle` (binarize-only) and two keys written at their code defaults
+(`rope_theta: 10000`, `use_fused_kernels: false`).
+
+Acoustic validation minima: `sofar` 0.17414 @ 28k (was 0.18113 @ 28k), `hyb2r` 0.17776 @ 16k
+(was 0.17867 @ 32k). For `hyb2r`, 36k (0.17825) is the same within validation noise (§ Choosing a
+checkpoint: one notch is ±0.005). Variance heads: `hyb2r` dur 0.04717 @ 20k, pitch 0.00702 @ 32k;
+`sofar` dur 0.04674 @ 20k, pitch 0.00684 @ 40k. All of them are copied to `checkpoints/best/`.
+
+The A/B of §7.5 on the same 60 items (`--items-file` from `ab_out/items.json`), 3 seeds,
+`sofar` at 28k, `hybridr` at both of its tied steps. Outputs: `ab_out_retrain/` (16k) and
+`ab_out_retrain_h36k/` (36k); scores copied to `pansori/paper/numbers/lyrics_ab_retrain_hyb{16,36}k.json`.
+
+| group | metric | hybrid 16k: wins, p | hybrid 36k: wins, p |
+|---|---|---|---|
+| lyrics changed (30) | mel L1 | 8/30, **0.016** | 17/30, 0.585 |
+| | f0 RMSE ¢ | 13/30, 0.585 | 18/30, 0.362 |
+| | voiced agreement | 10/26, 0.327 | 17/27, 0.248 |
+| same lyrics, aligner only (30) | mel L1 | 16/30, 0.856 | 20/30, 0.099 |
+| | f0 RMSE ¢ | 12/30, 0.362 | 17/30, 0.585 |
+| | voiced agreement | 5/23, **0.011** | 10/25, 0.424 |
+| all (60) | mel L1 | 24/60, 0.155 | 37/60, 0.092 |
+| | f0 RMSE ¢ | 25/60, 0.245 | 35/60, 0.245 |
+| | voiced agreement | 15/49, **0.009** | 27/52, 0.890 |
+
+At 16k three of nine tests reach p < 0.05, all for Whisper; none survives Holm over the nine
+(9 × 0.009 > 0.05). At 36k none does, and the leaning is toward hybrid. One of the three at
+16k is in the control group, where the lyrics are identical, so it cannot be the lyrics. The
+honest reading: two checkpoints the validation loss cannot tell apart move this A/B more than
+the lyric source does. §7.6's conclusion stands as "no difference beyond checkpoint-to-checkpoint
+variation", not as "no difference".
+
+**The demo and the paper use 36k.** That choice was made after seeing this table, so it is a
+post-hoc choice between tied checkpoints, and the paper says so (Appendix B).

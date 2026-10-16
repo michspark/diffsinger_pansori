@@ -56,6 +56,12 @@ SYSTEMS = {
     'hyb2': dict(ac_exp='pansori_ac_hyb2', var_exp='pansori_var_hyb2',
                  ac=32000, dur=28000, pitch=36000,
                  labels='data/pansori_hyb2', tag='_hyb2'),
+    # hyb2 retrained on 2026-10-16 under the same config, after the steps above were
+    # pruned. Heads chosen per head (dur 0.04717@20k, pitch 0.00702@32k); acoustic 36k,
+    # tied with the 16k minimum (0.17825 vs 0.17776), see docs/LYRICS_AB.md §7.8.
+    'hyb2r': dict(ac_exp='pansori_ac_hyb2r', var_exp='pansori_var_hyb2r',
+                  ac=36000, dur=20000, pitch=32000,
+                  labels='data/pansori_hyb2', tag='_hyb2r'),
 }
 
 SEEDS = (1, 2, 3, 4, 5)  # never -1; the sampler is stochastic and this is the floor
