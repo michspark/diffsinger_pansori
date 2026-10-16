@@ -44,7 +44,9 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / 'pansori' / 'examples'))
 
-OUT_ROOT = REPO / 'pansori' / 'examples' / 'ab_out'
+# AB_OUT redirects a re-run of the same pair so the old renders are neither reused nor
+# overwritten: every prep and render step skips files that already exist.
+OUT_ROOT = Path(os.environ.get('AB_OUT', REPO / 'pansori' / 'examples' / 'ab_out'))
 
 # `lyrics` is the stage-03 file the arm's labels were made from. It is what separates
 # the treatment group from the control when the two arms do not share an aligner.
@@ -58,6 +60,12 @@ ARMS = {
                  lyrics='lyrics.jsonl'),
     'hybrid': dict(config='configs/exp/ac_hyb2.yaml', data='data/pansori_hyb2',
                    ac_exp='pansori_ac_hyb2', ckpt=None, lyrics='lyrics_hybrid.jsonl'),
+    # The same pair retrained on 2026-10-16, after the step-selected checkpoints of the
+    # runs above were pruned. Same configs and binaries; only the run differs.
+    'sofar': dict(config='configs/exp/ac_sofa.yaml', data='data/pansori_sofa',
+                  ac_exp='pansori_ac_sofar', ckpt=None, lyrics='lyrics.jsonl'),
+    'hybridr': dict(config='configs/exp/ac_hyb2.yaml', data='data/pansori_hyb2',
+                    ac_exp='pansori_ac_hyb2r', ckpt=None, lyrics='lyrics_hybrid.jsonl'),
 }
 
 # Which two arms are compared. --arms changes it; it is passed to child processes as-is.
@@ -81,10 +89,12 @@ PAIR = ['sofa', 'hybrid']
 GROUP_BY = {
     ('whisper', 'snapped'): 'ph_seq',
     ('sofa', 'hybrid'): 'text',
+    ('sofar', 'hybridr'): 'text',
 }
 GROUP_LABELS = {
     ('whisper', 'snapped'): ('lyrics changed', 'lyrics identical (control)'),
     ('sofa', 'hybrid'): ('lyrics changed', 'same lyrics, aligner only (control)'),
+    ('sofar', 'hybridr'): ('lyrics changed', 'same lyrics, aligner only (control)'),
 }
 DEFAULT_LABELS = ('high MFA floor rate', 'low MFA floor rate (control)')
 
