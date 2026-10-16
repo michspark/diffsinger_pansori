@@ -192,30 +192,29 @@ recorded, not yet in the same places
 \midrule
 \emph{Recordings, half vs.\ half} & \emph{0.27 (0.41)} & \emph{0.034 (0.082)} \\
 \midrule
-This tool, unedited & \textbf{15.4} $[13.8, 17.2]$ & \textbf{2.73} $[2.47, 3.08]$ \\
+This tool, unedited & \textbf{15.4} $[13.8, 17.1]$ & \textbf{2.76} $[2.48, 3.11]$ \\
 ACE-Step 1.5, zero-shot & 43.3 $[41.4, 45.4]$ & 5.15 $[4.82, 5.47]$ \\
 ACE-Step, pansori LoRA & 46.9 $[44.7, 49.0]$ & 3.36 $[3.16, 3.57]$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-For each of 125 passages from the five held-out recordings, their skeletons removed from
-the retrieval index, the tool takes the passage's hybrid text and majority
-mode and renders the first skeleton of every chunk, unedited, in the voice of another of
-the five singers of the same gender, so it cannot copy the original voice; the
+For each of 125 passages from the five held-out recordings, the tool takes the passage's
+hybrid text and majority mode and renders, unedited, the first skeleton of each chunk from
+an index without those recordings, \emph{pyeongjo} kept apart, in the voice of
+another held-out singer of the same gender, never the original voice; the
 reference is the passage's first 30\,s.
 
 We use the kernel audio distance \citep[KAD;][]{chung2025kad} on LAION-CLAP
 \citep{wu2023clap} embeddings (music checkpoint), as CLAP gave the Fr\'echet audio distance
 that best tracked listening tests on generated music \citep{gui2024fad},
-with layer 4 of MERT \citep{li2024mert}, which tracked musical quality in the same study,
-as a check. The anchors are two halves of the recordings, and what two song models make of the same lyrics: ACE-Step~1.5 \citep{gong2026acestep} with a pansori
+with MERT layer 4 \citep{li2024mert}, which tracked musical quality there, as a check. The anchors are two halves of the recordings and two song models given the same lyrics: ACE-Step~1.5 \citep{gong2026acestep} with a pansori
 caption, and ACE-Step \citep{gong2025acestep} with the pansori LoRA of
-\citet{cho2025pansori}, trained on 7 hours of one singer, at its best reported setting
-(weight 2, 23k steps); vocals are separated as for the recordings.
+\citet{cho2025pansori}, trained on 7\,h of one singer, at its best reported setting
+(weight 2, 23k steps). Both have their vocals separated as the recordings' were.
 
 Both embeddings place the tool's output closer to the recordings than either song model:
-by 27.8 and 31.4 on CLAP (95\% CIs $[25.5, 30.2]$ and $[28.7, 33.9]$, 2,000 paired
+by 27.9 and 31.5 on CLAP (95\% CIs $[25.6, 30.2]$ and $[28.8, 34.0]$, 2,000 paired
 bootstraps), with the same sign on MERT. The embeddings disagree only on how the song
 models order (Table~\ref{tab:kad}), which, as the two also differ in version, would not
 isolate fine-tuning anyway. Our model was trained on other recordings of the five evaluated singers, and
