@@ -40,7 +40,7 @@ cuts the share of phones of 30\,ms or less, most of them left at a speech aligne
 editable plan of notes from phrases retrieved among 14,244 in the corpus; the user moves
 syllables across notes, and an SVS model trained on the corpus sings the plan. On 125
 held-out passages, the tool's unedited output lies at a kernel audio distance
-($\times 100$) of 15.4 from the recordings, against 43.3 and 46.9 for two general song
+($\times 100$) of 14.1 from the recordings, against 43.3 and 46.9 for two general song
 models, used zero-shot and fine-tuned on pansori respectively; two halves of the
 recordings lie 0.27 apart.
 \end{abstract}
@@ -125,7 +125,7 @@ libretto (\emph{changbon}) that spells such words correctly, but each singer and
 (Appendix~\ref{apd:lyrics}). The \emph{hybrid} text therefore keeps Whisper's
 syllables one for one and borrows the libretto's spelling only over equal-length stretches
 pinned by exact matches. This keeps the canonical spelling, for a future lyrics-to-note
-model, at no measurable cost.
+model, at no cost beyond checkpoint variation (Appendix~\ref{apd:lyrics}).
 
 \textbf{Alignment.} The Montreal Forced Aligner (MFA; \citealp{mcauliffe2017mfa}) is a speech aligner,
 and it hears a held tone as silence: 52.2\% of corpus time is labeled silent while a note
@@ -139,15 +139,15 @@ floor, then on its own alignment of the hybrid text (Appendix~\ref{apd:sigimsae}
 final corpus (26,955 utterances, 28.93\,h), 2.7\% of phones are that short and
 the median phone grows from 80 to 157\,ms.
 
-\textbf{Singing model.} These labels train the openvpi fork \citep{openvpi} of DiffSinger
-\citep{liu2022diffsinger}. A \emph{variance} model (25.1\,M parameters) predicts the phone
+\textbf{Singing model.} The labels train the openvpi fork \citep{openvpi} of DiffSinger
+\citep{liu2022diffsinger}. A \emph{variance} model (25.1\,M parameters) predicts phone
 durations and f0 from phonemes and notes, an \emph{acoustic} model (69.1\,M) a mel
-spectrogram from those and the singer, and a pretrained NSF-HiFiGAN
+spectrogram from those plus the singer, and a pretrained NSF-HiFiGAN
 \citep{openvpivocoders} the waveform. Notes keep their own time axis, so a \emph{sigimsae}
-that moves between pitches becomes several notes over one syllable. Both models are trained from
-scratch, with rectified flow \citep{liu2023flow}, on a dictionary of all 11,172 Hangul
-syllables, with one recording from each of five singers held out, for 40,000 steps on one
-RTX 4090, each head at its best validation step.
+moving between pitches becomes several notes on one syllable. Both are trained from
+scratch with rectified flow \citep{liu2023flow}, on a dictionary of all 11,172 Hangul
+syllables, one recording of each of five singers held out, for 40,000 steps on an
+RTX 4090, each head at or tied with its validation minimum (Appendix~\ref{apd:lyrics}).
 
 %==============================================================================
 \section{The Composition Tool}\label{sec:tool}
@@ -192,7 +192,7 @@ recorded, not yet in the same places
 \midrule
 \emph{Recordings, half vs.\ half} & \emph{0.27 (0.41)} & \emph{0.034 (0.082)} \\
 \midrule
-This tool, unedited & \textbf{15.4} $[13.8, 17.1]$ & \textbf{2.76} $[2.48, 3.11]$ \\
+This tool, unedited & \textbf{14.1} $[12.6, 15.9]$ & \textbf{2.54} $[2.29, 2.87]$ \\
 ACE-Step 1.5, zero-shot & 43.3 $[41.4, 45.4]$ & 5.15 $[4.82, 5.47]$ \\
 ACE-Step, pansori LoRA & 46.9 $[44.7, 49.0]$ & 3.36 $[3.16, 3.57]$ \\
 \bottomrule
@@ -201,7 +201,7 @@ ACE-Step, pansori LoRA & 46.9 $[44.7, 49.0]$ & 3.36 $[3.16, 3.57]$ \\
 
 For each of 125 passages from the five held-out recordings, the tool takes the passage's
 hybrid text and majority mode and renders, unedited, the first skeleton of each chunk from
-an index without those recordings, \emph{pyeongjo} kept apart, in the voice of
+the index of Section~\ref{sec:tool} without those recordings, in the voice of
 another held-out singer of the same gender, never the original voice; the
 reference is the passage's first 30\,s.
 
@@ -214,12 +214,12 @@ caption, and ACE-Step \citep{gong2025acestep} with the pansori LoRA of
 (weight 2, 23k steps). Both have their vocals separated as the recordings' were.
 
 Both embeddings place the tool's output closer to the recordings than either song model:
-by 27.9 and 31.5 on CLAP (95\% CIs $[25.6, 30.2]$ and $[28.8, 34.0]$, 2,000 paired
+by 29.1 and 32.7 on CLAP (95\% CIs $[26.7, 31.4]$ and $[29.9, 35.3]$, 2,000 paired
 bootstraps), with the same sign on MERT. The embeddings disagree only on how the song
 models order (Table~\ref{tab:kad}), which, as the two also differ in version, would not
 isolate fine-tuning anyway. Our model was trained on other recordings of the five evaluated singers, and
 the LoRA on another singer, so part of the margin may be timbre; and the tool sings faster
-than the singers, so its renders are shorter (median 22.4\,s against 29.5--30.0\,s).
+than the singers, so its renders are shorter (median 22.5\,s against 29.5--30.0\,s).
 
 %==============================================================================
 \section{Conclusion and Future Work}\label{sec:conclusion}
@@ -294,10 +294,14 @@ span (pair cost: jamo dissimilarity; unpaired Whisper syllable 1.1; skipped libr
 syllable 0.6). A differing stretch is rewritten only if it pairs one to one, is at most
 5 syllables long, and is pinned by exact matches on both sides (two on its inner side at an
 utterance edge). This rewrites 20,374 of 91,955 syllables in matched utterances (22.2\%)
-and never changes a syllable count (Fig.~\ref{fig:lyrics}). Models trained on Whisper's
-text and on the hybrid text, each with its own SOFA fine-tune
-(Appendix~\ref{apd:sigimsae}), show no significant difference on held-out utterances: none of nine sign
-tests reached $p{<}0.05$ (60 pairs $\times$ 3 seeds), so we keep the canonical spelling.
+and never changes a syllable count (Fig.~\ref{fig:lyrics}). Acoustic models trained on Whisper's
+text and on the hybrid text, each with its own SOFA fine-tune (Appendix~\ref{apd:sigimsae}),
+resynthesize 60 held-out utterances from their own labels (3 seeds; nine sign tests over
+three metrics and three groups). At the hybrid model's step we use (36k), no test reaches
+$p{<}0.05$. At 16k, tied with it on validation loss, three favour Whisper, one of them in
+the control group whose lyrics are identical, and none survives Holm correction. We chose
+36k after seeing both, so the difference lies within checkpoint-to-checkpoint variation,
+and we keep the canonical spelling.
 
 \section{Alignment Labels and How Much the Voice Moves}\label{apd:sigimsae}
 
@@ -334,9 +338,9 @@ same rule trusts 11,494. Most of the gain comes in round 1, before the lyrics ch
 score with true durations. We compare the model of Section~\ref{sec:pipeline} (SOFA
 labels, hybrid text, median of 5 seeds) with our earlier FastSpeech2-style DiffSinger,
 trained on MFA labels and Whisper's text and rendered once, being deterministic. The ratio
-of synthesized to recorded within-note f0 variation rises from 0.29 to 0.95 (95\% CI of
-the paired difference $[0.35, 0.68]$, Holm $p{=}0.0003$), but its correlation with the
-recorded contour is not significantly higher (0.16 against 0.04, Holm $p{=}0.24$).
+of synthesized to recorded within-note f0 variation rises from 0.29 to 1.01 (95\% CI of
+the paired difference $[0.38, 0.65]$, Holm $p{=}0.0001$), but its correlation with the
+recorded contour is not significantly higher (0.12 against 0.04, Holm $p{=}1.00$).
 Architecture and labels change together between the two models, so the gain is not
 attributed to either alone.
 
